@@ -25,53 +25,152 @@ export function exportarPDF(
   titulo: string,
   nombreComisionista?: string
 ) {
-  const doc = new jsPDF({ orientation: 'landscape' });
-  
-  // Título
-  doc.setFontSize(18);
-  doc.text(titulo, 14, 20);
-  
-  if (nombreComisionista) {
-    doc.setFontSize(12);
-    doc.text(`Comisionista: ${nombreComisionista}`, 14, 28);
-  }
-  
-  doc.setFontSize(10);
-  doc.text(`Fecha: ${new Date().toLocaleDateString('es-ES')}`, 14, 36);
-
+  const doc = new jsPDF({ orientation: 'portrait', format: 'letter' });
   const comisionistaMap = new Map(comisionistas.map(c => [c.id, c]));
+  
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const margin = 14;
+  let yPos = 15;
 
-  const body = items.map(item => {
-    const com = comisionistaMap.get(item.comisionistaId || '');
-    const comision = calcularComision(item, com);
-    return [
-      item.fecha,
-      item.numeroOrden,
-      item.finca,
-      item.producto,
-      `${item.cantidad.toLocaleString('es-ES')} ${item.unidad}`,
-      `$${item.precioUnitario.toFixed(2)}`,
-      `$${item.total.toFixed(2)}`,
-      com ? `${com.nombre} (${com.tipo === 'porcentaje' ? com.valor + '%' : '$' + com.valor + '/kg'})` : '-',
-      `$${comision.toFixed(2)}`,
-    ];
+  const nombresMes = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+
+  // Agrupar items por comisionista, luego por mes
+  const itemsPorComisionista = new Map<string, Map<string, OrdenItem[]>>();
+  items.forEach(item => {
+    const comId = item.comisionistaId || 'sin-asignar';
+    if (!itemsPorComisionista.has(comId)) {
+      itemsPorComisionista.set(comId, new Map());
+    }
+    const fecha = new Date(item.fecha);
+    const mesKey = `${fecha.getFullYear()}-${String(fecha.getMonth() + 1).padStart(2, '0')}`;
+    const mesMap = itemsPorComisionista.get(comId)!;
+    if (!mesMap.has(mesKey)) {
+      mesMap.set(mesKey, []);
+    }
+    mesMap.get(mesKey)!.push(item);
   });
 
-  const totalComision = items.reduce((sum, item) => {
-    const com = comisionistaMap.get(item.comisionistaId || '');
-    return sum + calcularComision(item, com);
-  }, 0);
-
-  autoTable(doc, {
-    startY: nombreComisionista ? 42 : 34,
-    head: [['Fecha', 'Factura/Orden', 'Finca', 'Producto', 'Cantidad', 'Precio Unit.', 'Total', 'Comisionista', 'Comisión']],
-    body,
-    theme: 'striped',
-    headStyles: { fillColor: [31, 41, 55], textColor: [255, 255, 255] },
-    styles: { fontSize: 9 },
-    foot: [['', '', '', '', '', '', '', 'TOTAL', `$${totalComision.toFixed(2)}`]],
-    footStyles: { fillColor: [243, 244, 246], textColor: [0, 0, 0], fontStyle: 'bold' },
+  // Ordenar comisionistas y meses
+  const comisionistaIds = Array.from(itemsPorComisionista.keys()).sort((a, b) => {
+    const comA = comisionistaMap.get(a);
+    const comB = comisionistaMap.get(b);
+    return (comA?.nombre || '').localeCompare(comB?.nombre || '');
   });
+
+  let totalGeneral = 0;
+
+  comisionistaIds.forEach(comId => {
+    const com = comisionistaMap.get(comId);
+    const comNombre = com?.nombre || 'Sin asignar';
+    const mesesMap = itemsPorComisionista.get(comId)!;
+    const meses = Array.from(mesesMap.keys()).sort();
+
+    meses.forEach(mesKey => {
+      const itemsDelGrupo = mesesMap.get(mesKey)!;
+      const [anio, mes] = mesKey.split('-');
+      const nombreMes = nombresMes[parseInt(mes) - 1];
+      const ultimoDia = getUltimoDiaMes(parseInt(mes), parseInt(anio));
+      
+      // Verificar si necesitamos nueva página
+      if (yPos > 230) {
+        doc.addPage();
+        yPos = 15;
+      }
+
+      // Encabezado de empresa para cada grupo
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'bold');
+      doc.text('INDUSTRIAL ACUICOLA OCHOA Y BARCIA DINACUAMAR CIA LTDA', pageWidth / 2, yPos, { align: 'center' });
+      yPos += 5;
+      doc.setFont('helvetica', 'normal');
+      doc.text('Santa Priscila', pageWidth / 2, yPos, { align: 'center' });
+      yPos += 5;
+
+      // Línea de comisionista con período
+      doc.setFontSize(9);
+      doc.text(`Comisionista: ${comNombre} del 1 al ${ultimoDia} de ${nombreMes} ${anio}`, pageWidth / 2, yPos, { align: 'center' });
+      yPos += 6;
+
+      // Preparar body de la tabla
+      const body = itemsDelGrupo.map(item => {
+        const comision = calcularComision(item, com);
+        return [
+          item.fecha,
+          item.numeroOrden,
+          item.producto,
+          `${item.cantidad.toLocaleString('es-ES')}`,
+          `$ ${com?.valor.toFixed(2).replace('.', ',') || '1,00'}`,
+          `$ ${comision.toFixed(2).replace('.', ',')}`,
+          item.estado || 'Cobrado',
+          item.sector || item.finca || 'ASIA',
+        ];
+      });
+
+      const totalComisionGrupo = itemsDelGrupo.reduce((sum, item) => {
+        return sum + calcularComision(item, com);
+      }, 0);
+
+      totalGeneral += totalComisionGrupo;
+
+      // Crear tabla
+      autoTable(doc, {
+        startY: yPos,
+        head: [['Fecha', 'Factura', 'Nombre', 'Cantidad', 'Comisión', 'Valor de Comisión', 'Estado', 'Sector']],
+        body,
+        foot: [['', '', '', '', '', `$ ${totalComisionGrupo.toFixed(2).replace('.', ',')}`, '', '']],
+        theme: 'grid',
+        headStyles: { 
+          fillColor: [255, 255, 255], 
+          textColor: [0, 0, 0],
+          fontStyle: 'bold',
+          fontSize: 8,
+          halign: 'center',
+          cellPadding: 2,
+        },
+        bodyStyles: { 
+          fontSize: 8,
+          cellPadding: 2,
+        },
+        footStyles: { 
+          fillColor: [255, 255, 255], 
+          textColor: [0, 0, 0], 
+          fontStyle: 'bold',
+          fontSize: 8,
+          cellPadding: 2,
+        },
+        columnStyles: {
+          0: { halign: 'center', cellWidth: 22 },
+          1: { cellWidth: 32 },
+          2: { cellWidth: 40 },
+          3: { halign: 'right', cellWidth: 18 },
+          4: { halign: 'right', cellWidth: 20 },
+          5: { halign: 'right', cellWidth: 26 },
+          6: { halign: 'center', cellWidth: 20 },
+          7: { halign: 'center', cellWidth: 18 },
+        },
+        margin: { left: margin, right: margin },
+      });
+
+      yPos = (doc as any).lastAutoTable.finalY + 12;
+    });
+  });
+
+  // Total general
+  if (yPos > 260) {
+    doc.addPage();
+    yPos = 20;
+  }
+
+  // Caja de total general con fondo amarillo
+  const totalWidth = 55;
+  const totalHeight = 7;
+  const totalX = (pageWidth - totalWidth) / 2;
+  doc.setFillColor(255, 255, 0);
+  doc.rect(totalX, yPos, totalWidth, totalHeight, 'F');
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(0, 0, 0);
+  doc.text(`TOTAL ${totalGeneral.toFixed(2).replace('.', ',')}`, pageWidth / 2, yPos + 5, { align: 'center' });
 
   doc.save(`${titulo.replace(/\s+/g, '_')}.pdf`);
 }
@@ -79,51 +178,110 @@ export function exportarPDF(
 export function exportarExcel(
   items: OrdenItem[],
   comisionistas: Comisionista[],
-  titulo: string
+  titulo: string,
+  nombreComisionista?: string
 ) {
   const comisionistaMap = new Map(comisionistas.map(c => [c.id, c]));
-
-  const data = items.map(item => {
-    const com = comisionistaMap.get(item.comisionistaId || '');
-    const comision = calcularComision(item, com);
-    return {
-      Fecha: item.fecha,
-      'Factura/Orden': item.numeroOrden,
-      Finca: item.finca,
-      Producto: item.producto,
-      Cantidad: item.cantidad,
-      Unidad: item.unidad,
-      'Precio Unitario': item.precioUnitario,
-      Total: item.total,
-      Comisionista: com?.nombre || '-',
-      'Tipo Comisión': com ? (com.tipo === 'porcentaje' ? `${com.valor}%` : `$${com.valor}/kg`) : '-',
-      Comisión: comision,
-    };
-  });
-
-  const totalComision = items.reduce((sum, item) => {
-    const com = comisionistaMap.get(item.comisionistaId || '');
-    return sum + calcularComision(item, com);
-  }, 0);
-
-  data.push({
-    Fecha: '',
-    'Factura/Orden': '',
-    Finca: '',
-    Producto: '',
-    Cantidad: '' as any,
-    Unidad: '',
-    'Precio Unitario': '' as any,
-    Total: '' as any,
-    Comisionista: '',
-    'Tipo Comisión': 'TOTAL',
-    Comisión: totalComision,
-  });
-
-  const ws = XLSX.utils.json_to_sheet(data);
   const wb = XLSX.utils.book_new();
+
+  const nombresMes = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+
+  // Agrupar items por comisionista, luego por mes
+  const itemsPorComisionista = new Map<string, Map<string, OrdenItem[]>>();
+  items.forEach(item => {
+    const comId = item.comisionistaId || 'sin-asignar';
+    if (!itemsPorComisionista.has(comId)) {
+      itemsPorComisionista.set(comId, new Map());
+    }
+    const fecha = new Date(item.fecha);
+    const mesKey = `${fecha.getFullYear()}-${String(fecha.getMonth() + 1).padStart(2, '0')}`;
+    const mesMap = itemsPorComisionista.get(comId)!;
+    if (!mesMap.has(mesKey)) {
+      mesMap.set(mesKey, []);
+    }
+    mesMap.get(mesKey)!.push(item);
+  });
+
+  // Ordenar comisionistas y meses
+  const comisionistaIds = Array.from(itemsPorComisionista.keys()).sort((a, b) => {
+    const comA = comisionistaMap.get(a);
+    const comB = comisionistaMap.get(b);
+    return (comA?.nombre || '').localeCompare(comB?.nombre || '');
+  });
+
+  const data: any[] = [];
+  let totalGeneral = 0;
+
+  comisionistaIds.forEach(comId => {
+    const com = comisionistaMap.get(comId);
+    const comNombre = com?.nombre || 'Sin asignar';
+    const mesesMap = itemsPorComisionista.get(comId)!;
+    const meses = Array.from(mesesMap.keys()).sort();
+
+    meses.forEach(mesKey => {
+      const itemsDelGrupo = mesesMap.get(mesKey)!;
+      const [anio, mes] = mesKey.split('-');
+      const nombreMes = nombresMes[parseInt(mes) - 1];
+      const ultimoDia = getUltimoDiaMes(parseInt(mes), parseInt(anio));
+
+      // Encabezado para cada grupo
+      data.push(['INDUSTRIAL ACUICOLA OCHOA Y BARCIA DINACUAMAR CIA LTDA']);
+      data.push(['Santa Priscila']);
+      data.push([`Comisionista: ${comNombre} del 1 al ${ultimoDia} de ${nombreMes} ${anio}`]);
+      data.push([]);
+
+      // Headers de tabla
+      data.push(['Fecha', 'Factura', 'Nombre', 'Cantidad', 'Comisión', 'Valor de Comisión', 'Estado', 'Sector']);
+
+      // Filas de datos
+      let totalGrupo = 0;
+      itemsDelGrupo.forEach(item => {
+        const comision = calcularComision(item, com);
+        totalGrupo += comision;
+        data.push([
+          item.fecha,
+          item.numeroOrden,
+          item.producto,
+          item.cantidad,
+          `$ ${com?.valor.toFixed(2).replace('.', ',') || '1,00'}`,
+          `$ ${comision.toFixed(2).replace('.', ',')}`,
+          item.estado || 'Cobrado',
+          item.sector || item.finca || 'ASIA',
+        ]);
+      });
+
+      // Total del grupo
+      data.push(['', '', '', '', '', `$ ${totalGrupo.toFixed(2).replace('.', ',')}`, '', '']);
+      data.push([]);
+
+      totalGeneral += totalGrupo;
+    });
+  });
+
+  // Total general
+  data.push(['', '', '', '', '', '', '', '']);
+  data.push(['', '', '', '', '', 'TOTAL', `$ ${totalGeneral.toFixed(2).replace('.', ',')}`, '']);
+
+  const ws = XLSX.utils.aoa_to_sheet(data);
+  
+  // Ajustar anchos de columna
+  ws['!cols'] = [
+    { wch: 12 },
+    { wch: 20 },
+    { wch: 25 },
+    { wch: 10 },
+    { wch: 12 },
+    { wch: 16 },
+    { wch: 10 },
+    { wch: 10 },
+  ];
+
   XLSX.utils.book_append_sheet(wb, ws, 'Liquidación');
   XLSX.writeFile(wb, `${titulo.replace(/\s+/g, '_')}.xlsx`);
+}
+
+function getUltimoDiaMes(mes: number, anio: number): number {
+  return new Date(anio, mes, 0).getDate();
 }
 
 export function parseCSV(csvText: string): Partial<OrdenItem>[] {

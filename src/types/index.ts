@@ -16,6 +16,8 @@ export interface OrdenItem {
   precioUnitario: number;
   total: number;
   comisionistaId: string | null;
+  sector?: string;
+  estado?: string;
 }
 
 export interface Liquidacion {

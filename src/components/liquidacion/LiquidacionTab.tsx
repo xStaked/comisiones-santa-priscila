@@ -56,7 +56,8 @@ export function LiquidacionTab() {
       toast.error('No hay datos para exportar');
       return;
     }
-    exportarExcel(filteredItems, comisionistas, 'Liquidacion');
+    const com = filterComisionista ? comisionistaMap.get(filterComisionista) : undefined;
+    exportarExcel(filteredItems, comisionistas, 'Liquidacion', com?.nombre);
     toast.success('Excel generado');
   };
 
