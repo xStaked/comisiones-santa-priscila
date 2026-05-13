@@ -23,7 +23,7 @@ export function LiquidacionTab() {
   const { comisionistas, ordenItems, saveLiquidacion } = useApp();
   const [filterComisionista, setFilterComisionista] = useState('');
   const [nombreLiquidacion, setNombreLiquidacion] = useState('');
-  const [saveOpen, setSaveOpen] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
 
   const comisionistaMap = useMemo(() => 
     new Map(comisionistas.map(c => [c.id, c])), 
@@ -74,8 +74,17 @@ export function LiquidacionTab() {
       return;
     }
     saveLiquidacion(nombreLiquidacion);
-    setSaveOpen(false);
     setNombreLiquidacion('');
+    setPreviewOpen(false);
+  };
+
+  const handlePreviewSave = () => {
+    if (ordenItems.length === 0) {
+      toast.error('No hay órdenes para guardar');
+      return;
+    }
+    setNombreLiquidacion(`Liquidación ${new Date().toLocaleDateString('es-ES')}`);
+    setPreviewOpen(true);
   };
 
   if (ordenItems.length === 0) {
@@ -83,7 +92,7 @@ export function LiquidacionTab() {
       <div className="text-center py-20 bg-white rounded-2xl border border-dashed border-slate-200">
         <Calculator className="h-12 w-12 text-slate-300 mx-auto mb-4" />
         <h3 className="text-lg font-medium text-slate-700">Sin órdenes cargadas</h3>
-        <p className="text-sm text-slate-500 mt-1">Ve a "Cargar Órdenes" para agregar registros</p>
+        <p className="text-sm text-slate-500 mt-1 max-w-sm mx-auto">Ve a "Cargar Órdenes" para agregar registros y generar una liquidación.</p>
       </div>
     );
   }
@@ -117,16 +126,35 @@ export function LiquidacionTab() {
             <FileSpreadsheet className="h-4 w-4 mr-2 text-emerald-600" />
             Exportar Excel
           </Button>
-          <Dialog open={saveOpen} onOpenChange={setSaveOpen}>
-            <Button onClick={() => setSaveOpen(true)} className="btn-primary-dark rounded-xl">
-              <Save className="h-4 w-4 mr-2" />
-              Guardar Liquidación
-            </Button>
-            <DialogContent className="bg-white border-slate-200">
+          <Button onClick={handlePreviewSave} className="btn-primary-dark rounded-xl">
+            <Save className="h-4 w-4 mr-2" />
+            Guardar Liquidación
+          </Button>
+
+          <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+            <DialogContent className="bg-white border-slate-200 sm:max-w-lg">
               <DialogHeader>
-                <DialogTitle>Guardar Liquidación</DialogTitle>
+                <DialogTitle>Confirmar Liquidación</DialogTitle>
               </DialogHeader>
-              <div className="space-y-4 mt-4">
+              <div className="space-y-4 mt-2">
+                <div className="bg-slate-50 rounded-xl p-4 border border-slate-200 space-y-3">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-slate-500">Registros a liquidar</span>
+                    <span className="text-sm font-semibold text-slate-900">{ordenItems.length}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-slate-500">Total de órdenes</span>
+                    <span className="text-sm font-semibold text-slate-900">${totalOrden.toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-slate-500">Cantidad total</span>
+                    <span className="text-sm font-semibold text-slate-900">{totalCantidad.toLocaleString('es-ES')} kg</span>
+                  </div>
+                  <div className="border-t border-slate-200 pt-3 flex justify-between items-center">
+                    <span className="text-sm font-medium text-slate-700">Comisión total</span>
+                    <span className="text-lg font-bold text-emerald-700">${totalComision.toFixed(2)}</span>
+                  </div>
+                </div>
                 <div className="space-y-2">
                   <Label>Nombre de la liquidación</Label>
                   <Input 
@@ -136,9 +164,9 @@ export function LiquidacionTab() {
                     className="bg-white border-slate-200 rounded-xl"
                   />
                 </div>
-                <div className="flex justify-end gap-2">
-                  <Button variant="outline" onClick={() => setSaveOpen(false)} className="rounded-xl border-slate-200">Cancelar</Button>
-                  <Button onClick={handleSave} className="btn-primary-dark rounded-xl">Guardar</Button>
+                <div className="flex justify-end gap-2 pt-2">
+                  <Button variant="outline" onClick={() => setPreviewOpen(false)} className="rounded-xl border-slate-200">Cancelar</Button>
+                  <Button onClick={handleSave} className="btn-primary-dark rounded-xl">Confirmar y Guardar</Button>
                 </div>
               </div>
             </DialogContent>
