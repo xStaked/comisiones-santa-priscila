@@ -80,10 +80,10 @@ export function exportarPDF(
       // Encabezado de empresa para cada grupo
       doc.setFontSize(10);
       doc.setFont('helvetica', 'bold');
-      doc.text('INDUSTRIAL ACUICOLA OCHOA Y BARCIA DINACUAMAR CIA LTDA', pageWidth / 2, yPos, { align: 'center' });
+      doc.text('INDUSTRIAL ACUICOLA OCHOA & BARCIA DINACUAMAR CIA.LTDA.', pageWidth / 2, yPos, { align: 'center' });
       yPos += 5;
       doc.setFont('helvetica', 'normal');
-      doc.text('Santa Priscila', pageWidth / 2, yPos, { align: 'center' });
+      doc.text('Sistema de Liquidación de Comisiones', pageWidth / 2, yPos, { align: 'center' });
       yPos += 5;
 
       // Línea de comisionista con período
@@ -225,8 +225,8 @@ export function exportarExcel(
       const ultimoDia = getUltimoDiaMes(parseInt(mes), parseInt(anio));
 
       // Encabezado para cada grupo
-      data.push(['INDUSTRIAL ACUICOLA OCHOA Y BARCIA DINACUAMAR CIA LTDA']);
-      data.push(['Santa Priscila']);
+      data.push(['INDUSTRIAL ACUICOLA OCHOA & BARCIA DINACUAMAR CIA.LTDA.']);
+      data.push(['Sistema de Liquidación de Comisiones']);
       data.push([`Comisionista: ${comNombre} del 1 al ${ultimoDia} de ${nombreMes} ${anio}`]);
       data.push([]);
 

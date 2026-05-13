@@ -244,7 +244,7 @@ export function OrdenesTab() {
                   >
                     <FileUp className="h-10 w-10 text-slate-400 mx-auto mb-3" />
                     <p className="text-sm font-medium text-slate-700">Haz clic para subir el PDF de la orden de compra</p>
-                    <p className="text-xs text-slate-500 mt-1">Soporta órdenes de compra tipo Industrial Pesquera Santa Priscila</p>
+                    <p className="text-xs text-slate-500 mt-1">Soporta órdenes de compra tipo INDUSTRIAL ACUICOLA OCHOA & BARCIA DINACUAMAR CIA.LTDA.</p>
                   </div>
                   <input
                     ref={fileInputRef}

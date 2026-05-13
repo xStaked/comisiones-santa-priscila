@@ -10,8 +10,8 @@ const ibmPlexSans = IBM_Plex_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "CommissionPro - Sistema de Liquidación",
-  description: "Calcula y gestiona comisiones de vendedores de forma profesional",
+  title: "Dinacuamar - Sistema de Liquidación",
+  description: "Sistema de liquidación de comisiones de INDUSTRIAL ACUICOLA OCHOA & BARCIA DINACUAMAR CIA.LTDA.",
 };
 
 export default function RootLayout({

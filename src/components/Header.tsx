@@ -18,8 +18,8 @@ export function Header({ activeTab, onTabChange }: HeaderProps) {
               <Calculator className="h-5 w-5 text-white" />
             </div>
             <div>
-              <h1 className="text-lg font-bold text-slate-900 leading-tight">CommissionPro</h1>
-              <p className="text-xs text-slate-500">Sistema de liquidación de comisiones</p>
+              <h1 className="text-lg font-bold text-slate-900 leading-tight">Dinacuamar</h1>
+              <p className="text-xs text-slate-500">INDUSTRIAL ACUICOLA OCHOA & BARCIA DINACUAMAR CIA.LTDA.</p>
             </div>
           </div>
           <div className="hidden sm:flex items-center gap-2">

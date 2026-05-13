@@ -14,7 +14,7 @@ interface ParsedRow {
 
 /**
  * Extract order items from a purchase order PDF.
- * Designed for the specific PDF format: "ORDEN DE COMPRA" from Industrial Pesquera Santa Priscila
+ * Designed for the specific PDF format: "ORDEN DE COMPRA" from INDUSTRIAL ACUICOLA OCHOA & BARCIA DINACUAMAR CIA.LTDA.
  */
 export async function extractOrdenFromPDF(file: File): Promise<{
   fecha: string;
