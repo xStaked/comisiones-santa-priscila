@@ -1,6 +1,6 @@
 'use client';
 
-import { Calculator, Users, FileText, Download, History } from 'lucide-react';
+import { LayoutDashboard, Calculator, Users, FileText, Download, History } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 interface HeaderProps {
@@ -29,6 +29,13 @@ export function Header({ activeTab, onTabChange }: HeaderProps) {
         </div>
         <Tabs value={activeTab} onValueChange={onTabChange} className="mt-2">
           <TabsList className="bg-transparent p-0 h-11 gap-1">
+            <TabsTrigger 
+              value="dashboard" 
+              className="data-[state=active]:bg-slate-100 data-[state=active]:text-slate-900 data-[state=active]:border-slate-200 data-[state=active]:shadow-none rounded-lg px-4 py-2.5 text-sm font-medium text-slate-500 hover:text-slate-700 transition-all border border-transparent"
+            >
+              <LayoutDashboard className="h-4 w-4 mr-2" />
+              Resumen
+            </TabsTrigger>
             <TabsTrigger 
               value="comisionistas" 
               className="data-[state=active]:bg-slate-100 data-[state=active]:text-slate-900 data-[state=active]:border-slate-200 data-[state=active]:shadow-none rounded-lg px-4 py-2.5 text-sm font-medium text-slate-500 hover:text-slate-700 transition-all border border-transparent"

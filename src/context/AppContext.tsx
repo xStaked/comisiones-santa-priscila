@@ -1,10 +1,11 @@
 'use client';
 
-import React, { createContext, useContext, useCallback } from 'react';
+import React, { createContext, useContext, useCallback, useEffect } from 'react';
 import { Comisionista, OrdenItem, Liquidacion } from '@/types';
 import { generarId } from '@/lib/id';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
 import { toast } from 'sonner';
+import { demoComisionistas, demoOrdenItems, demoLiquidaciones } from '@/lib/demo-data';
 
 interface AppContextType {
   comisionistas: Comisionista[];
@@ -30,6 +31,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [comisionistas, setComisionistas] = useLocalStorage<Comisionista[]>('comisionistas', []);
   const [ordenItems, setOrdenItems] = useLocalStorage<OrdenItem[]>('ordenItems', []);
   const [liquidaciones, setLiquidaciones] = useLocalStorage<Liquidacion[]>('liquidaciones', []);
+
+  // Precargar datos de demo si no hay nada guardado
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const hasData =
+      window.localStorage.getItem('comisionistas') ||
+      window.localStorage.getItem('ordenItems') ||
+      window.localStorage.getItem('liquidaciones');
+    if (!hasData) {
+      setComisionistas(demoComisionistas);
+      setOrdenItems(demoOrdenItems);
+      setLiquidaciones(demoLiquidaciones);
+    }
+  }, [setComisionistas, setOrdenItems, setLiquidaciones]);
 
   const addComisionista = useCallback((c: Omit<Comisionista, 'id'>) => {
     const newComisionista: Comisionista = { ...c, id: generarId() };
