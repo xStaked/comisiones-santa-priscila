@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
-import { Plus, Upload, Trash2, Pencil, UserCheck, Calculator, FileUp, Check, X } from 'lucide-react';
+import { useState, useRef, useEffect, useMemo } from 'react';
+import { Plus, Upload, Trash2, Pencil, UserCheck, Calculator, FileUp, Check, X, Sparkles, Search } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { OrdenItem } from '@/types';
 import { Button } from '@/components/ui/button';
@@ -55,6 +55,18 @@ export function OrdenesTab() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Partial<OrdenItem>>({});
   const [editOpen, setEditOpen] = useState(false);
+  const [search, setSearch] = useState('');
+
+  const filteredOrdenItems = useMemo(() => {
+    if (!search.trim()) return ordenItems;
+    const q = search.toLowerCase();
+    return ordenItems.filter(item =>
+      item.producto.toLowerCase().includes(q) ||
+      item.numeroOrden.toLowerCase().includes(q) ||
+      item.finca.toLowerCase().includes(q) ||
+      (item.comisionistaId && comisionistas.find(c => c.id === item.comisionistaId)?.nombre.toLowerCase().includes(q))
+    );
+  }, [ordenItems, search, comisionistas]);
 
   const resetForm = () => {
     setForm({
@@ -161,7 +173,7 @@ export function OrdenesTab() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="flex gap-2 mb-4">
+          <div className="flex gap-2 mb-4 flex-wrap">
             <Button 
               variant={activeForm === 'manual' ? 'default' : 'outline'} 
               size="sm"
@@ -262,6 +274,39 @@ export function OrdenesTab() {
                     className="hidden"
                     onChange={handleFileSelect}
                   />
+                  <div className="mt-4 flex justify-center">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={async () => {
+                        setIsProcessingPDF(true);
+                        try {
+                          const res = await fetch('/orden-demo.pdf');
+                          const blob = await res.blob();
+                          const file = new File([blob], 'orden-demo.pdf', { type: 'application/pdf' });
+                          const result = await extractOrdenFromPDF(file);
+                          setPdfPreview({
+                            fileName: file.name,
+                            fecha: result.fecha,
+                            numeroOrden: result.numeroOrden,
+                            proveedor: result.proveedor,
+                            semana: result.semana,
+                            items: result.items,
+                          });
+                          toast.success(`${result.items.length} productos extraídos del PDF de ejemplo`);
+                        } catch (err) {
+                          console.error(err);
+                          toast.error('Error al cargar el PDF de ejemplo');
+                        } finally {
+                          setIsProcessingPDF(false);
+                        }
+                      }}
+                      className="rounded-xl border-slate-200 text-slate-600 hover:text-slate-900 hover:bg-slate-50"
+                    >
+                      <Sparkles className="h-4 w-4 mr-2 text-amber-500" />
+                      Cargar orden de ejemplo
+                    </Button>
+                  </div>
                   {isProcessingPDF && (
                     <div className="text-center py-4">
                       <div className="inline-block h-6 w-6 animate-spin rounded-full border-2 border-solid border-slate-900 border-r-transparent align-[-0.125em] motion-reduce:animate-[spin_1.5s_linear_infinite]" />
@@ -330,7 +375,16 @@ export function OrdenesTab() {
 
       {ordenItems.length > 0 && (
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-          <div className="flex items-center gap-3">
+          <div className="relative w-full sm:w-64">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+            <Input 
+              placeholder="Buscar producto, factura..." 
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              className="pl-9 bg-white border-slate-200 rounded-xl text-sm"
+            />
+          </div>
+          <div className="flex items-center gap-3 flex-1">
             <UserCheck className="h-5 w-5 text-slate-400" />
             <div>
               <Label className="text-xs text-slate-500">Asignar comisionista a todos</Label>
@@ -395,7 +449,7 @@ export function OrdenesTab() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {ordenItems.map(item => (
+                  {filteredOrdenItems.map(item => (
                     <tr key={item.id} className="hover:bg-slate-50/50 transition-colors">
                       <td className="px-4 py-3 text-slate-500">{item.fecha}</td>
                       <td className="px-4 py-3 text-slate-900 font-medium">{item.numeroOrden}</td>
@@ -438,7 +492,17 @@ export function OrdenesTab() {
         <div className="text-center py-16 bg-white rounded-2xl border border-dashed border-slate-200">
           <Calculator className="h-12 w-12 text-slate-300 mx-auto mb-4" />
           <h3 className="text-lg font-medium text-slate-700">Sin órdenes cargadas</h3>
-          <p className="text-sm text-slate-500 mt-1">Carga un PDF o agrega registros manualmente</p>
+          <p className="text-sm text-slate-500 mt-1 max-w-sm mx-auto">Carga un PDF de orden de compra o agrega registros manualmente para comenzar.</p>
+          <div className="mt-6 flex justify-center gap-3">
+            <Button variant="outline" size="sm" onClick={() => setActiveForm('manual')} className="rounded-xl border-slate-200">
+              <Plus className="h-4 w-4 mr-2" />
+              Agregar manual
+            </Button>
+            <Button size="sm" onClick={() => setActiveForm('pdf')} className="btn-primary-dark rounded-xl">
+              <FileUp className="h-4 w-4 mr-2" />
+              Cargar PDF
+            </Button>
+          </div>
         </div>
       )}
 
