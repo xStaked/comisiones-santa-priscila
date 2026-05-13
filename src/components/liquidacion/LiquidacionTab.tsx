@@ -10,6 +10,13 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { toast } from 'sonner';
 
 export function LiquidacionTab() {
@@ -88,16 +95,17 @@ export function LiquidacionTab() {
           <Filter className="h-5 w-5 text-slate-400" />
           <div>
             <Label className="text-xs text-slate-500">Filtrar por comisionista</Label>
-            <select
-              value={filterComisionista}
-              onChange={e => setFilterComisionista(e.target.value)}
-              className="mt-1 h-10 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 w-64"
-            >
-              <option value="">Todos los comisionistas</option>
-              {comisionistas.map(c => (
-                <option key={c.id} value={c.id}>{c.nombre}</option>
-              ))}
-            </select>
+            <Select value={filterComisionista} onValueChange={(value) => setFilterComisionista(value ?? '')}>
+              <SelectTrigger className="mt-1 h-10 rounded-xl border-slate-200 bg-white text-sm text-slate-900 w-64">
+                <SelectValue placeholder="Todos los comisionistas" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">Todos los comisionistas</SelectItem>
+                {comisionistas.map(c => (
+                  <SelectItem key={c.id} value={c.id}>{c.nombre}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         </div>
         <div className="flex gap-2">

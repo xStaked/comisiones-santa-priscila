@@ -10,6 +10,13 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { toast } from 'sonner';
 
 export function ComisionistasTab() {
@@ -94,15 +101,20 @@ export function ComisionistasTab() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="tipo">Tipo de Comisión</Label>
-                <select
-                  id="tipo"
+                <Select
                   value={form.tipo}
-                  onChange={e => setForm({ ...form, tipo: e.target.value as 'porcentaje' | 'fijo_kg' })}
-                  className="flex h-10 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900/20 focus-visible:ring-offset-0"
+                  onValueChange={(value) => {
+                    if (value) setForm({ ...form, tipo: value as 'porcentaje' | 'fijo_kg' });
+                  }}
                 >
-                  <option value="porcentaje">Porcentaje (%)</option>
-                  <option value="fijo_kg">Valor fijo por kg (USD/kg)</option>
-                </select>
+                  <SelectTrigger className="w-full rounded-xl border-slate-200 bg-white h-10 text-sm text-slate-900">
+                    <SelectValue placeholder="Seleccionar tipo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="porcentaje">Porcentaje (%)</SelectItem>
+                    <SelectItem value="fijo_kg">Valor fijo por kg (USD/kg)</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="valor">

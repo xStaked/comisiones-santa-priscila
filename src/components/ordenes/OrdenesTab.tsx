@@ -10,6 +10,13 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { toast } from 'sonner';
 import { extractOrdenFromPDF } from '@/lib/pdf-extractor';
 import { generarId } from '@/lib/id';
@@ -199,16 +206,17 @@ export function OrdenesTab() {
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs text-slate-500">Unidad</Label>
-                <select 
-                  value={form.unidad} 
-                  onChange={e => setForm({...form, unidad: e.target.value})}
-                  className="flex h-10 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900"
-                >
-                  <option value="kg">kg</option>
-                  <option value="libras">libras</option>
-                  <option value="unidades">unidades</option>
-                  <option value="cajas">cajas</option>
-                </select>
+                <Select value={form.unidad} onValueChange={(value) => setForm({...form, unidad: value ?? 'kg'})}>
+                  <SelectTrigger className="w-full rounded-xl border-slate-200 bg-white h-10 text-sm text-slate-900">
+                    <SelectValue placeholder="Seleccionar unidad" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="kg">kg</SelectItem>
+                    <SelectItem value="libras">libras</SelectItem>
+                    <SelectItem value="unidades">unidades</SelectItem>
+                    <SelectItem value="cajas">cajas</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs text-slate-500">Precio Unit. *</Label>
@@ -216,16 +224,17 @@ export function OrdenesTab() {
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs text-slate-500">Comisionista</Label>
-                <select 
-                  value={form.comisionistaId} 
-                  onChange={e => setForm({...form, comisionistaId: e.target.value})}
-                  className="flex h-10 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900"
-                >
-                  <option value="">Sin asignar</option>
-                  {comisionistas.map(c => (
-                    <option key={c.id} value={c.id}>{c.nombre}</option>
-                  ))}
-                </select>
+                <Select value={form.comisionistaId || 'none'} onValueChange={(value) => setForm({...form, comisionistaId: value === 'none' ? '' : (value ?? '')})}>
+                  <SelectTrigger className="w-full rounded-xl border-slate-200 bg-white h-10 text-sm text-slate-900">
+                    <SelectValue placeholder="Sin asignar" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Sin asignar</SelectItem>
+                    {comisionistas.map(c => (
+                      <SelectItem key={c.id} value={c.id}>{c.nombre}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div className="sm:col-span-2 lg:col-span-4 flex justify-end">
                 <Button type="submit" className="btn-primary-dark rounded-xl">
@@ -326,16 +335,17 @@ export function OrdenesTab() {
             <div>
               <Label className="text-xs text-slate-500">Asignar comisionista a todos</Label>
               <div className="flex gap-2 mt-1">
-                <select
-                  value={globalComisionista}
-                  onChange={e => setGlobalComisionista(e.target.value)}
-                  className="h-9 rounded-lg border border-slate-200 bg-white px-3 py-1 text-sm text-slate-900"
-                >
-                  <option value="">Seleccionar...</option>
-                  {comisionistas.map(c => (
-                    <option key={c.id} value={c.id}>{c.nombre}</option>
-                  ))}
-                </select>
+                <Select value={globalComisionista || 'none'} onValueChange={(value) => setGlobalComisionista(value === 'none' ? '' : (value ?? ''))}>
+                  <SelectTrigger className="h-9 rounded-lg border-slate-200 bg-white text-sm text-slate-900 w-48">
+                    <SelectValue placeholder="Seleccionar..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Seleccionar...</SelectItem>
+                    {comisionistas.map(c => (
+                      <SelectItem key={c.id} value={c.id}>{c.nombre}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 <Button 
                   size="sm" 
                   variant="outline"
@@ -461,16 +471,17 @@ export function OrdenesTab() {
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs text-slate-500">Unidad</Label>
-                <select 
-                  value={editForm.unidad || 'kg'} 
-                  onChange={e => setEditForm({...editForm, unidad: e.target.value})}
-                  className="flex h-10 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900"
-                >
-                  <option value="kg">kg</option>
-                  <option value="libras">libras</option>
-                  <option value="unidades">unidades</option>
-                  <option value="cajas">cajas</option>
-                </select>
+                <Select value={editForm.unidad || 'kg'} onValueChange={(value) => setEditForm({...editForm, unidad: value ?? 'kg'})}>
+                  <SelectTrigger className="w-full rounded-xl border-slate-200 bg-white h-10 text-sm text-slate-900">
+                    <SelectValue placeholder="Seleccionar unidad" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="kg">kg</SelectItem>
+                    <SelectItem value="libras">libras</SelectItem>
+                    <SelectItem value="unidades">unidades</SelectItem>
+                    <SelectItem value="cajas">cajas</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs text-slate-500">Precio Unit.</Label>
@@ -478,16 +489,17 @@ export function OrdenesTab() {
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs text-slate-500">Comisionista</Label>
-                <select 
-                  value={editForm.comisionistaId || ''} 
-                  onChange={e => setEditForm({...editForm, comisionistaId: e.target.value || null})}
-                  className="flex h-10 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900"
-                >
-                  <option value="">Sin asignar</option>
-                  {comisionistas.map(c => (
-                    <option key={c.id} value={c.id}>{c.nombre}</option>
-                  ))}
-                </select>
+                <Select value={editForm.comisionistaId || 'none'} onValueChange={(value) => setEditForm({...editForm, comisionistaId: value === 'none' ? null : (value ?? null)})}>
+                  <SelectTrigger className="w-full rounded-xl border-slate-200 bg-white h-10 text-sm text-slate-900">
+                    <SelectValue placeholder="Sin asignar" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Sin asignar</SelectItem>
+                    {comisionistas.map(c => (
+                      <SelectItem key={c.id} value={c.id}>{c.nombre}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
             <div className="flex justify-end gap-2 pt-2">
