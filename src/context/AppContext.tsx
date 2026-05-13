@@ -23,6 +23,8 @@ interface AppContextType {
   liquidaciones: Liquidacion[];
   saveLiquidacion: (nombre: string) => void;
   deleteLiquidacion: (id: string) => void;
+  restoreLiquidacion: (id: string) => void;
+  resetDemoData: () => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -110,6 +112,33 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     toast.success('Liquidación eliminada');
   }, [setLiquidaciones]);
 
+  const restoreLiquidacion = useCallback((id: string) => {
+    const liq = liquidaciones.find(l => l.id === id);
+    if (!liq) {
+      toast.error('Liquidación no encontrada');
+      return;
+    }
+    // Restaurar items con nuevos IDs para evitar conflictos
+    const restoredItems: OrdenItem[] = liq.items.map(item => ({
+      ...item,
+      id: generarId(),
+    }));
+    setOrdenItems(prev => [...prev, ...restoredItems]);
+    setLiquidaciones(prev => prev.filter(l => l.id !== id));
+    toast.success(`${restoredItems.length} órdenes restauradas a activas`);
+  }, [liquidaciones, setOrdenItems, setLiquidaciones]);
+
+  const resetDemoData = useCallback(() => {
+    if (typeof window === 'undefined') return;
+    window.localStorage.removeItem('comisionistas');
+    window.localStorage.removeItem('ordenItems');
+    window.localStorage.removeItem('liquidaciones');
+    setComisionistas(demoComisionistas);
+    setOrdenItems(demoOrdenItems);
+    setLiquidaciones(demoLiquidaciones);
+    toast.success('Datos de demo restaurados');
+  }, [setComisionistas, setOrdenItems, setLiquidaciones]);
+
   return (
     <AppContext.Provider value={{
       comisionistas,
@@ -125,6 +154,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       liquidaciones,
       saveLiquidacion,
       deleteLiquidacion,
+      restoreLiquidacion,
+      resetDemoData,
     }}>
       {children}
     </AppContext.Provider>
