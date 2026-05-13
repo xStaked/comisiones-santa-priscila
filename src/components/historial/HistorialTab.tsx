@@ -1,7 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { Calendar, FileText, FileSpreadsheet, Trash2, ChevronDown, ChevronUp, Search } from 'lucide-react';
+import Link from 'next/link';
+import { Calendar, FileText, FileSpreadsheet, Trash2, ChevronDown, ChevronUp, Search, Eye } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { exportarPDF, exportarExcel, calcularComision } from '@/lib/export-utils';
 import { Button } from '@/components/ui/button';
@@ -129,6 +130,13 @@ export function HistorialTab() {
                     </table>
                   </div>
                   <div className="flex justify-end gap-2">
+                    <Link
+                      href={`/historial/${liq.id}`}
+                      className="inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
+                    >
+                      <Eye className="h-4 w-4 mr-2 text-slate-600" />
+                      Ver detalle
+                    </Link>
                     <Button variant="outline" size="sm" onClick={() => handleExportPDF(liq)} className="rounded-lg border-slate-200">
                       <FileText className="h-4 w-4 mr-2 text-red-500" />
                       PDF

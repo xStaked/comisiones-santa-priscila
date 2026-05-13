@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { IBM_Plex_Sans } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/sonner";
+import { AppProvider } from "@/context/AppContext";
 
 const ibmPlexSans = IBM_Plex_Sans({
   variable: "--font-ibm-plex",
@@ -24,8 +25,10 @@ export default function RootLayout({
       <body
         className={`${ibmPlexSans.variable} font-sans antialiased bg-[#F8F9FB] min-h-screen text-slate-900`}
       >
-        {children}
-        <Toaster position="top-right" richColors />
+        <AppProvider>
+          {children}
+          <Toaster position="top-right" richColors />
+        </AppProvider>
       </body>
     </html>
   );

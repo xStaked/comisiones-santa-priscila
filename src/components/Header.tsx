@@ -1,19 +1,30 @@
 'use client';
 
-import { LayoutDashboard, Calculator, Users, FileText, Download, History } from 'lucide-react';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import Link from 'next/link';
+import { LayoutDashboard, Calculator, Users, FileText, Download, History, RotateCcw } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { useApp } from '@/context/AppContext';
 
 interface HeaderProps {
   activeTab: string;
-  onTabChange: (tab: string) => void;
 }
 
-export function Header({ activeTab, onTabChange }: HeaderProps) {
+const tabs = [
+  { value: 'dashboard', label: 'Resumen', href: '/', icon: LayoutDashboard },
+  { value: 'comisionistas', label: 'Comisionistas', href: '/comisionistas', icon: Users },
+  { value: 'ordenes', label: 'Cargar Órdenes', href: '/ordenes', icon: FileText },
+  { value: 'liquidacion', label: 'Liquidación', href: '/liquidacion', icon: Download },
+  { value: 'historial', label: 'Historial', href: '/historial', icon: History },
+];
+
+export function Header({ activeTab }: HeaderProps) {
+  const { resetDemoData } = useApp();
+
   return (
     <div className="sticky top-0 z-50 bg-white border-b border-slate-200 shadow-sm">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="flex h-16 items-center justify-between">
-          <div className="flex items-center gap-3">
+          <Link href="/" className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-900">
               <Calculator className="h-5 w-5 text-white" />
             </div>
@@ -21,51 +32,49 @@ export function Header({ activeTab, onTabChange }: HeaderProps) {
               <h1 className="text-lg font-bold text-slate-900 leading-tight">Dinacuamar</h1>
               <p className="text-xs text-slate-500">INDUSTRIAL ACUICOLA OCHOA & BARCIA DINACUAMAR CIA.LTDA.</p>
             </div>
-          </div>
-          <div className="hidden sm:flex items-center gap-2">
-            <div className="h-2 w-2 rounded-full bg-emerald-500" />
-            <span className="text-xs text-slate-500">Sistema activo</span>
+          </Link>
+          <div className="hidden sm:flex items-center gap-3">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                if (confirm('¿Restaurar los datos de demostración? Se perderán los cambios no guardados.')) {
+                  resetDemoData();
+                }
+              }}
+              className="text-slate-500 hover:text-slate-900 gap-1.5 h-8 text-xs"
+            >
+              <RotateCcw className="h-3.5 w-3.5" />
+              Restaurar demo
+            </Button>
+            <div className="h-4 w-px bg-slate-200" />
+            <div className="flex items-center gap-2">
+              <div className="h-2 w-2 rounded-full bg-emerald-500" />
+              <span className="text-xs text-slate-500">Sistema activo</span>
+            </div>
           </div>
         </div>
-        <Tabs value={activeTab} onValueChange={onTabChange} className="mt-2">
-          <TabsList className="bg-transparent p-0 h-11 gap-1">
-            <TabsTrigger 
-              value="dashboard" 
-              className="data-[state=active]:bg-slate-100 data-[state=active]:text-slate-900 data-[state=active]:border-slate-200 data-[state=active]:shadow-none rounded-lg px-4 py-2.5 text-sm font-medium text-slate-500 hover:text-slate-700 transition-all border border-transparent"
-            >
-              <LayoutDashboard className="h-4 w-4 mr-2" />
-              Resumen
-            </TabsTrigger>
-            <TabsTrigger 
-              value="comisionistas" 
-              className="data-[state=active]:bg-slate-100 data-[state=active]:text-slate-900 data-[state=active]:border-slate-200 data-[state=active]:shadow-none rounded-lg px-4 py-2.5 text-sm font-medium text-slate-500 hover:text-slate-700 transition-all border border-transparent"
-            >
-              <Users className="h-4 w-4 mr-2" />
-              Comisionistas
-            </TabsTrigger>
-            <TabsTrigger 
-              value="ordenes"
-              className="data-[state=active]:bg-slate-100 data-[state=active]:text-slate-900 data-[state=active]:border-slate-200 data-[state=active]:shadow-none rounded-lg px-4 py-2.5 text-sm font-medium text-slate-500 hover:text-slate-700 transition-all border border-transparent"
-            >
-              <FileText className="h-4 w-4 mr-2" />
-              Cargar Órdenes
-            </TabsTrigger>
-            <TabsTrigger 
-              value="liquidacion"
-              className="data-[state=active]:bg-slate-100 data-[state=active]:text-slate-900 data-[state=active]:border-slate-200 data-[state=active]:shadow-none rounded-lg px-4 py-2.5 text-sm font-medium text-slate-500 hover:text-slate-700 transition-all border border-transparent"
-            >
-              <Download className="h-4 w-4 mr-2" />
-              Liquidación
-            </TabsTrigger>
-            <TabsTrigger 
-              value="historial"
-              className="data-[state=active]:bg-slate-100 data-[state=active]:text-slate-900 data-[state=active]:border-slate-200 data-[state=active]:shadow-none rounded-lg px-4 py-2.5 text-sm font-medium text-slate-500 hover:text-slate-700 transition-all border border-transparent"
-            >
-              <History className="h-4 w-4 mr-2" />
-              Historial
-            </TabsTrigger>
-          </TabsList>
-        </Tabs>
+        <nav className="mt-2 flex gap-1 h-11 items-center">
+          {tabs.map((tab) => {
+            const isActive = activeTab === tab.value;
+            const Icon = tab.icon;
+            return (
+              <Link
+                key={tab.value}
+                href={tab.href}
+                className={
+                  'flex items-center rounded-lg px-4 py-2.5 text-sm font-medium transition-all border ' +
+                  (isActive
+                    ? 'bg-slate-100 text-slate-900 border-slate-200 shadow-none'
+                    : 'text-slate-500 hover:text-slate-700 border-transparent hover:bg-slate-50/50')
+                }
+              >
+                <Icon className="h-4 w-4 mr-2" />
+                {tab.label}
+              </Link>
+            );
+          })}
+        </nav>
       </div>
     </div>
   );
