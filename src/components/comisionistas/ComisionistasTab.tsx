@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Plus, Pencil, Trash2, Percent, Weight, Search, Users } from 'lucide-react';
+import { Plus, Pencil, Trash2, Percent, Weight, Search, Users, TrendingUp, FileText } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { Comisionista } from '@/types';
 import { Button } from '@/components/ui/button';
@@ -20,7 +20,7 @@ import {
 import { toast } from 'sonner';
 
 export function ComisionistasTab() {
-  const { comisionistas, addComisionista, updateComisionista, deleteComisionista } = useApp();
+  const { comisionistas, addComisionista, updateComisionista, deleteComisionista, ordenItems, liquidaciones } = useApp();
   const [search, setSearch] = useState('');
   const [editing, setEditing] = useState<Comisionista | null>(null);
   const [form, setForm] = useState<{ nombre: string; tipo: 'porcentaje' | 'fijo_kg'; valor: string }>({ nombre: '', tipo: 'porcentaje', valor: '' });
@@ -29,6 +29,19 @@ export function ComisionistasTab() {
   const filtered = comisionistas.filter(c => 
     c.nombre.toLowerCase().includes(search.toLowerCase())
   );
+
+  // Calcular stats por comisionista
+  const statsPorComisionista = (c: Comisionista) => {
+    const allItems = [...ordenItems, ...liquidaciones.flatMap(l => l.items)];
+    const items = allItems.filter(i => i.comisionistaId === c.id);
+    const total = items.reduce((s, i) => {
+      if (c.tipo === 'porcentaje') return s + i.total * (c.valor / 100);
+      let kg = i.cantidad;
+      if (i.unidad === 'libras') kg = i.cantidad * 0.453592;
+      return s + kg * c.valor;
+    }, 0);
+    return { ordenes: items.length, total };
+  };
 
   const resetForm = () => {
     setForm({ nombre: '', tipo: 'porcentaje', valor: '' });
@@ -167,7 +180,7 @@ export function ComisionistasTab() {
                   </div>
                 </div>
               </CardHeader>
-              <CardContent className="pt-0">
+              <CardContent className="pt-0 space-y-3">
                 <div className="flex items-center gap-3">
                   <Badge variant="secondary" className="flex items-center gap-1 bg-slate-100 text-slate-700 border-0">
                     {c.tipo === 'porcentaje' ? <Percent className="h-3 w-3" /> : <Weight className="h-3 w-3" />}
@@ -176,6 +189,16 @@ export function ComisionistasTab() {
                   <span className="text-2xl font-bold text-slate-900 tabular-nums">
                     {c.tipo === 'porcentaje' ? `${c.valor}%` : `$${c.valor.toFixed(3)}`}
                   </span>
+                </div>
+                <div className="grid grid-cols-2 gap-2 pt-3 border-t border-slate-100">
+                  <div className="flex items-center gap-1.5 text-xs text-slate-500">
+                    <FileText className="h-3 w-3" />
+                    <span>{statsPorComisionista(c).ordenes} órdenes</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 text-xs text-emerald-600 font-medium">
+                    <TrendingUp className="h-3 w-3" />
+                    <span>${statsPorComisionista(c).total.toFixed(2)}</span>
+                  </div>
                 </div>
               </CardContent>
             </Card>
