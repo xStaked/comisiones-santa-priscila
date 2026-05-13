@@ -221,7 +221,7 @@ export async function extractOrdenFromPDF(file: File): Promise<{
       unidad: inferUnidad(item.descripcion),
       precioUnitario: item.precioUnitario,
       total: item.total,
-      comisionistaId: null,
+      comisionistas: [],
     };
   });
 

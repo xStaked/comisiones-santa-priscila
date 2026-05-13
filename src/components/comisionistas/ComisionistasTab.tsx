@@ -1,9 +1,10 @@
 'use client';
 
 import { useState } from 'react';
-import { Plus, Pencil, Trash2, Percent, Weight, Search, Users, TrendingUp, FileText } from 'lucide-react';
+import { Plus, Pencil, Trash2, Percent, Weight, Search, Users, TrendingUp, FileText, X, PlusCircle } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
-import { Comisionista } from '@/types';
+import { Comisionista, TarifaComision } from '@/types';
+import { calcularComision, calcularComisionTotalItem } from '@/lib/export-utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -23,46 +24,48 @@ export function ComisionistasTab() {
   const { comisionistas, addComisionista, updateComisionista, deleteComisionista, ordenItems, liquidaciones } = useApp();
   const [search, setSearch] = useState('');
   const [editing, setEditing] = useState<Comisionista | null>(null);
-  const [form, setForm] = useState<{ nombre: string; tipo: 'porcentaje' | 'fijo_kg'; valor: string }>({ nombre: '', tipo: 'porcentaje', valor: '' });
+  const [form, setForm] = useState<{ nombre: string; tarifas: { tipo: 'porcentaje' | 'fijo_kg'; valor: string }[] }>({
+    nombre: '',
+    tarifas: [{ tipo: 'porcentaje', valor: '' }],
+  });
   const [open, setOpen] = useState(false);
 
-  const filtered = comisionistas.filter(c => 
+  const filtered = comisionistas.filter(c =>
     c.nombre.toLowerCase().includes(search.toLowerCase())
   );
 
   // Calcular stats por comisionista
   const statsPorComisionista = (c: Comisionista) => {
     const allItems = [...ordenItems, ...liquidaciones.flatMap(l => l.items)];
-    const items = allItems.filter(i => i.comisionistaId === c.id);
-    const total = items.reduce((s, i) => {
-      if (c.tipo === 'porcentaje') return s + i.total * (c.valor / 100);
-      let kg = i.cantidad;
-      if (i.unidad === 'libras') kg = i.cantidad * 0.453592;
-      return s + kg * c.valor;
-    }, 0);
+    const items = allItems.filter(i => i.comisionistas.some(a => a.comisionistaId === c.id));
+    const total = items.reduce((s, i) => s + calcularComision(i, c), 0);
     return { ordenes: items.length, total };
   };
 
   const resetForm = () => {
-    setForm({ nombre: '', tipo: 'porcentaje', valor: '' });
+    setForm({ nombre: '', tarifas: [{ tipo: 'porcentaje', valor: '' }] });
     setEditing(null);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.nombre.trim() || !form.valor) {
-      toast.error('Complete todos los campos');
+    if (!form.nombre.trim()) {
+      toast.error('Ingresa el nombre del comisionista');
       return;
     }
-    const valor = parseFloat(form.valor);
-    if (isNaN(valor) || valor <= 0) {
-      toast.error('El valor debe ser un número positivo');
+    const tarifas: TarifaComision[] = form.tarifas
+      .filter(t => t.valor && parseFloat(t.valor) > 0)
+      .map(t => ({ tipo: t.tipo, valor: parseFloat(t.valor) }));
+
+    if (tarifas.length === 0) {
+      toast.error('Agrega al menos una tarifa válida');
       return;
     }
+
     if (editing) {
-      updateComisionista(editing.id, { nombre: form.nombre, tipo: form.tipo, valor });
+      updateComisionista(editing.id, { nombre: form.nombre, tarifas });
     } else {
-      addComisionista({ nombre: form.nombre, tipo: form.tipo, valor });
+      addComisionista({ nombre: form.nombre, tarifas });
     }
     resetForm();
     setOpen(false);
@@ -70,7 +73,10 @@ export function ComisionistasTab() {
 
   const handleEdit = (c: Comisionista) => {
     setEditing(c);
-    setForm({ nombre: c.nombre, tipo: c.tipo, valor: c.valor.toString() });
+    setForm({
+      nombre: c.nombre,
+      tarifas: c.tarifas.map(t => ({ tipo: t.tipo, valor: t.valor.toString() })),
+    });
     setOpen(true);
   };
 
@@ -80,13 +86,34 @@ export function ComisionistasTab() {
     }
   };
 
+  const addTarifa = () => {
+    setForm(prev => ({
+      ...prev,
+      tarifas: [...prev.tarifas, { tipo: 'porcentaje', valor: '' }],
+    }));
+  };
+
+  const removeTarifa = (idx: number) => {
+    setForm(prev => ({
+      ...prev,
+      tarifas: prev.tarifas.filter((_, i) => i !== idx),
+    }));
+  };
+
+  const updateTarifa = (idx: number, field: 'tipo' | 'valor', value: string) => {
+    setForm(prev => ({
+      ...prev,
+      tarifas: prev.tarifas.map((t, i) => i === idx ? { ...t, [field]: value } : t),
+    }));
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div className="relative w-full sm:w-80">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-          <Input 
-            placeholder="Buscar comisionista..." 
+          <Input
+            placeholder="Buscar comisionista..."
             value={search}
             onChange={e => setSearch(e.target.value)}
             className="pl-9 bg-white border-slate-200 rounded-xl focus:border-slate-900 focus:ring-slate-900/10"
@@ -97,53 +124,60 @@ export function ComisionistasTab() {
           Nuevo Comisionista
         </Button>
         <Dialog open={open} onOpenChange={setOpen}>
-          <DialogContent className="sm:max-w-md bg-white border-slate-200">
+          <DialogContent className="sm:max-w-lg bg-white border-slate-200">
             <DialogHeader>
               <DialogTitle>{editing ? 'Editar Comisionista' : 'Nuevo Comisionista'}</DialogTitle>
             </DialogHeader>
             <form onSubmit={handleSubmit} className="space-y-4 mt-4">
               <div className="space-y-2">
                 <Label htmlFor="nombre">Nombre</Label>
-                <Input 
-                  id="nombre" 
-                  value={form.nombre} 
+                <Input
+                  id="nombre"
+                  value={form.nombre}
                   onChange={e => setForm({ ...form, nombre: e.target.value })}
                   placeholder="Ej: Juan Pérez"
                   className="bg-white border-slate-200 rounded-xl focus:border-slate-900 focus:ring-slate-900/10"
                 />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="tipo">Tipo de Comisión</Label>
-                <Select
-                  value={form.tipo}
-                  onValueChange={(value) => {
-                    if (value) setForm({ ...form, tipo: value as 'porcentaje' | 'fijo_kg' });
-                  }}
-                >
-                  <SelectTrigger className="w-full rounded-xl border-slate-200 bg-white h-10 text-sm text-slate-900">
-                    <SelectValue placeholder="Seleccionar tipo" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="porcentaje">Porcentaje (%)</SelectItem>
-                    <SelectItem value="fijo_kg">Valor fijo por kg (USD/kg)</SelectItem>
-                  </SelectContent>
-                </Select>
+
+              <div className="space-y-3">
+                <Label>Tarifas de Comisión</Label>
+                {form.tarifas.map((tarifa, idx) => (
+                  <div key={idx} className="flex items-center gap-2">
+                    <Select
+                      value={tarifa.tipo}
+                      onValueChange={(value) => updateTarifa(idx, 'tipo', value as 'porcentaje' | 'fijo_kg')}
+                    >
+                      <SelectTrigger className="w-40 rounded-xl border-slate-200 bg-white h-10 text-sm text-slate-900">
+                        <SelectValue placeholder="Tipo" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="porcentaje">Porcentaje (%)</SelectItem>
+                        <SelectItem value="fijo_kg">USD/kg</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={tarifa.valor}
+                      onChange={e => updateTarifa(idx, 'valor', e.target.value)}
+                      placeholder={tarifa.tipo === 'porcentaje' ? 'Ej: 2.5' : 'Ej: 0.05'}
+                      className="bg-white border-slate-200 rounded-xl flex-1"
+                    />
+                    {form.tarifas.length > 1 && (
+                      <Button type="button" variant="ghost" size="icon" className="h-9 w-9 text-slate-400 hover:text-red-600" onClick={() => removeTarifa(idx)}>
+                        <X className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </div>
+                ))}
+                <Button type="button" variant="outline" size="sm" onClick={addTarifa} className="rounded-xl border-slate-200 text-slate-600">
+                  <PlusCircle className="h-4 w-4 mr-2" />
+                  Agregar otra tarifa
+                </Button>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="valor">
-                  {form.tipo === 'porcentaje' ? 'Porcentaje (%)' : 'Valor por kg (USD)'}
-                </Label>
-                <Input 
-                  id="valor" 
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={form.valor} 
-                  onChange={e => setForm({ ...form, valor: e.target.value })}
-                  placeholder={form.tipo === 'porcentaje' ? 'Ej: 2.5' : 'Ej: 0.05'}
-                  className="bg-white border-slate-200 rounded-xl focus:border-slate-900 focus:ring-slate-900/10"
-                />
-              </div>
+
               <div className="flex justify-end gap-2 pt-2">
                 <Button type="button" variant="outline" onClick={() => { resetForm(); setOpen(false); }} className="rounded-xl border-slate-200">
                   Cancelar
@@ -181,14 +215,13 @@ export function ComisionistasTab() {
                 </div>
               </CardHeader>
               <CardContent className="pt-0 space-y-3">
-                <div className="flex items-center gap-3">
-                  <Badge variant="secondary" className="flex items-center gap-1 bg-slate-100 text-slate-700 border-0">
-                    {c.tipo === 'porcentaje' ? <Percent className="h-3 w-3" /> : <Weight className="h-3 w-3" />}
-                    {c.tipo === 'porcentaje' ? 'Porcentaje' : 'USD/kg'}
-                  </Badge>
-                  <span className="text-2xl font-bold text-slate-900 tabular-nums">
-                    {c.tipo === 'porcentaje' ? `${c.valor}%` : `$${c.valor.toFixed(3)}`}
-                  </span>
+                <div className="flex flex-wrap gap-2">
+                  {c.tarifas.map((t, idx) => (
+                    <Badge key={idx} variant="secondary" className="flex items-center gap-1 bg-slate-100 text-slate-700 border-0">
+                      {t.tipo === 'porcentaje' ? <Percent className="h-3 w-3" /> : <Weight className="h-3 w-3" />}
+                      {t.tipo === 'porcentaje' ? `${t.valor}%` : `$${t.valor.toFixed(3)}/kg`}
+                    </Badge>
+                  ))}
                 </div>
                 <div className="grid grid-cols-2 gap-2 pt-3 border-t border-slate-100">
                   <div className="flex items-center gap-1.5 text-xs text-slate-500">

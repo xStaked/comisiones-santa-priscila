@@ -4,7 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { Calendar, FileText, FileSpreadsheet, Trash2, ChevronDown, ChevronUp, Search, Eye } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
-import { exportarPDF, exportarExcel, calcularComision } from '@/lib/export-utils';
+import { exportarPDF, exportarExcel, calcularComisionTotalItem } from '@/lib/export-utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -18,7 +18,7 @@ export function HistorialTab() {
 
   const comisionistaMap = new Map(comisionistas.map(c => [c.id, c]));
 
-  const filtered = liquidaciones.filter(l => 
+  const filtered = liquidaciones.filter(l =>
     l.nombre.toLowerCase().includes(search.toLowerCase()) ||
     l.mes.includes(search)
   );
@@ -47,8 +47,8 @@ export function HistorialTab() {
     <div className="space-y-6">
       <div className="relative w-full sm:w-80">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-        <Input 
-          placeholder="Buscar liquidación..." 
+        <Input
+          placeholder="Buscar liquidación..."
           value={search}
           onChange={e => setSearch(e.target.value)}
           className="pl-9 bg-white border-slate-200 rounded-xl"
@@ -59,8 +59,7 @@ export function HistorialTab() {
         {filtered.map(liq => {
           const isExpanded = expandedId === liq.id;
           const totalComision = liq.items.reduce((s, item) => {
-            const com = item.comisionistaId ? comisionistaMap.get(item.comisionistaId) : undefined;
-            return s + calcularComision(item, com);
+            return s + calcularComisionTotalItem(item, comisionistas);
           }, 0);
           const totalOrden = liq.items.reduce((s, i) => s + i.total, 0);
 
@@ -103,8 +102,7 @@ export function HistorialTab() {
                       </thead>
                       <tbody className="divide-y divide-slate-100">
                         {liq.items.map(item => {
-                          const com = item.comisionistaId ? comisionistaMap.get(item.comisionistaId) : undefined;
-                          const comision = calcularComision(item, com);
+                          const comision = calcularComisionTotalItem(item, comisionistas);
                           return (
                             <tr key={item.id} className="hover:bg-slate-50/50 transition-colors">
                               <td className="px-4 py-2 text-slate-500">{item.fecha}</td>

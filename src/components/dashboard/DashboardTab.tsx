@@ -27,7 +27,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { useApp } from '@/context/AppContext';
-import { calcularComision } from '@/lib/export-utils';
+import { calcularComision, calcularComisionTotalItem } from '@/lib/export-utils';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -45,19 +45,17 @@ export function DashboardTab() {
   const totalLiquidado = useMemo(() => {
     return liquidaciones.reduce((sum, liq) => {
       const comisionLiq = liq.items.reduce((s, item) => {
-        const com = item.comisionistaId ? comisionistaMap.get(item.comisionistaId) : undefined;
-        return s + calcularComision(item, com);
+        return s + calcularComisionTotalItem(item, comisionistas);
       }, 0);
       return sum + comisionLiq;
     }, 0);
-  }, [liquidaciones, comisionistaMap]);
+  }, [liquidaciones, comisionistas]);
 
   const totalComisionActual = useMemo(() => {
     return ordenItems.reduce((s, item) => {
-      const com = item.comisionistaId ? comisionistaMap.get(item.comisionistaId) : undefined;
-      return s + calcularComision(item, com);
+      return s + calcularComisionTotalItem(item, comisionistas);
     }, 0);
-  }, [ordenItems, comisionistaMap]);
+  }, [ordenItems, comisionistas]);
 
   const totalVendido = useMemo(() => {
     const historico = liquidaciones.reduce((sum, liq) => sum + liq.items.reduce((s, i) => s + i.total, 0), 0);
@@ -71,21 +69,20 @@ export function DashboardTab() {
       ...liquidaciones.map(l => l.mes),
       ...(ordenItems.length > 0 ? [new Date().toISOString().slice(0, 7)] : []),
     ])).sort();
-    
+
     const comisionesPorMesArr = meses.map(mes => {
       const liqMes = liquidaciones.filter(l => l.mes === mes);
       const liqTotal = liqMes.reduce((sum, liq) => sum + liq.items.reduce((s, item) => {
-        const com = item.comisionistaId ? comisionistaMap.get(item.comisionistaId) : undefined;
-        return s + calcularComision(item, com);
+        return s + calcularComisionTotalItem(item, comisionistas);
       }, 0), 0);
       return { mes, total: liqTotal };
     });
-    
+
     const actual = comisionesPorMesArr.length > 0 ? comisionesPorMesArr[comisionesPorMesArr.length - 1].total : 0;
     const anterior = comisionesPorMesArr.length > 1 ? comisionesPorMesArr[comisionesPorMesArr.length - 2].total : 0;
     const diff = anterior > 0 ? ((actual - anterior) / anterior) * 100 : 0;
     return { diff: Math.round(diff * 10) / 10, up: diff >= 0 };
-  }, [liquidaciones, comisionistaMap, ordenItems]);
+  }, [liquidaciones, comisionistas, ordenItems]);
 
   // Comisiones por mes (historial + actual)
   const comisionesPorMes = useMemo(() => {
@@ -95,8 +92,7 @@ export function DashboardTab() {
     liquidaciones.forEach((liq) => {
       const mes = liq.mes;
       const comisionLiq = liq.items.reduce((s, item) => {
-        const com = item.comisionistaId ? comisionistaMap.get(item.comisionistaId) : undefined;
-        return s + calcularComision(item, com);
+        return s + calcularComisionTotalItem(item, comisionistas);
       }, 0);
       map.set(mes, (map.get(mes) || 0) + comisionLiq);
     });
@@ -105,8 +101,7 @@ export function DashboardTab() {
     if (ordenItems.length > 0) {
       const ahora = new Date().toISOString().slice(0, 7);
       const comisionActual = ordenItems.reduce((s, item) => {
-        const com = item.comisionistaId ? comisionistaMap.get(item.comisionistaId) : undefined;
-        return s + calcularComision(item, com);
+        return s + calcularComisionTotalItem(item, comisionistas);
       }, 0);
       map.set(ahora, (map.get(ahora) || 0) + comisionActual);
     }
@@ -121,7 +116,7 @@ export function DashboardTab() {
           total: Math.round(total * 100) / 100,
         };
       });
-  }, [liquidaciones, ordenItems, comisionistaMap]);
+  }, [liquidaciones, ordenItems, comisionistas]);
 
   // Top comisionistas (todo: histórico + actual)
   const topComisionistas = useMemo(() => {
@@ -129,16 +124,17 @@ export function DashboardTab() {
 
     const procesarItems = (items: typeof ordenItems) => {
       items.forEach((item) => {
-        if (!item.comisionistaId) return;
-        const com = comisionistaMap.get(item.comisionistaId);
-        if (!com) return;
-        const comision = calcularComision(item, com);
-        const existente = map.get(item.comisionistaId);
-        if (existente) {
-          existente.total += comision;
-        } else {
-          map.set(item.comisionistaId, { nombre: com.nombre, total: comision });
-        }
+        item.comisionistas.forEach((asig) => {
+          const com = comisionistaMap.get(asig.comisionistaId);
+          if (!com) return;
+          const comision = calcularComision(item, com);
+          const existente = map.get(asig.comisionistaId);
+          if (existente) {
+            existente.total += comision;
+          } else {
+            map.set(asig.comisionistaId, { nombre: com.nombre, total: comision });
+          }
+        });
       });
     };
 
@@ -385,7 +381,7 @@ export function DashboardTab() {
                     <th className="text-left px-4 py-3 font-medium text-slate-600">Factura</th>
                     <th className="text-left px-4 py-3 font-medium text-slate-600">Producto</th>
                     <th className="text-right px-4 py-3 font-medium text-slate-600">Total</th>
-                    <th className="text-left px-4 py-3 font-medium text-slate-600">Comisionista</th>
+                    <th className="text-left px-4 py-3 font-medium text-slate-600">Comisionistas</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -397,7 +393,6 @@ export function DashboardTab() {
                     </tr>
                   ) : (
                     ordenesRecientes.map((item) => {
-                      const com = item.comisionistaId ? comisionistaMap.get(item.comisionistaId) : undefined;
                       return (
                         <tr key={item.id} className="hover:bg-slate-50/50 transition-colors">
                           <td className="px-4 py-3 text-slate-900 font-medium">{item.numeroOrden}</td>
@@ -406,10 +401,17 @@ export function DashboardTab() {
                             ${item.total.toFixed(2)}
                           </td>
                           <td className="px-4 py-3">
-                            {com ? (
-                              <Badge variant="secondary" className="bg-slate-100 text-slate-700 border-0 text-xs">
-                                {com.nombre}
-                              </Badge>
+                            {item.comisionistas.length > 0 ? (
+                              <div className="flex flex-wrap gap-1">
+                                {item.comisionistas.map(a => {
+                                  const com = comisionistaMap.get(a.comisionistaId);
+                                  return com ? (
+                                    <Badge key={a.comisionistaId} variant="secondary" className="bg-slate-100 text-slate-700 border-0 text-xs">
+                                      {com.nombre}
+                                    </Badge>
+                                  ) : null;
+                                })}
+                              </div>
                             ) : (
                               <span className="text-xs text-slate-400">Sin asignar</span>
                             )}
@@ -456,8 +458,7 @@ export function DashboardTab() {
                   ) : (
                     ultimasLiquidaciones.map((liq) => {
                       const totalComision = liq.items.reduce((s, item) => {
-                        const com = item.comisionistaId ? comisionistaMap.get(item.comisionistaId) : undefined;
-                        return s + calcularComision(item, com);
+                        return s + calcularComisionTotalItem(item, comisionistas);
                       }, 0);
                       return (
                         <tr key={liq.id} className="hover:bg-slate-50/50 transition-colors">

@@ -27,7 +27,7 @@ import {
   Cell,
 } from 'recharts';
 import { useApp } from '@/context/AppContext';
-import { calcularComision, exportarPDF, exportarExcel } from '@/lib/export-utils';
+import { calcularComision, calcularComisionTotalItem, exportarPDF, exportarExcel } from '@/lib/export-utils';
 import { Shell } from '@/components/Shell';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -55,8 +55,7 @@ export default function LiquidacionDetallePage() {
     const map = new Map<string, { nombre: string; ordenes: number; cantidad: number; total: number; comision: number }>();
     liquidacion.items.forEach(item => {
       const finca = item.finca || 'Sin finca';
-      const com = item.comisionistaId ? comisionistaMap.get(item.comisionistaId) : undefined;
-      const comision = calcularComision(item, com);
+      const comision = calcularComisionTotalItem(item, comisionistas);
       const existente = map.get(finca);
       if (existente) {
         existente.ordenes += 1;
@@ -74,7 +73,7 @@ export default function LiquidacionDetallePage() {
       }
     });
     return Array.from(map.values()).sort((a, b) => b.total - a.total);
-  }, [liquidacion, comisionistaMap]);
+  }, [liquidacion, comisionistas]);
 
   const resumenPorComisionista = useMemo(() => {
     if (!liquidacion) return [];
@@ -82,37 +81,32 @@ export default function LiquidacionDetallePage() {
       string,
       {
         nombre: string;
-        tipo: string;
-        valor: number;
+        tarifas: string;
         ordenes: number;
         totalComision: number;
         totalOrden: number;
       }
     >();
     liquidacion.items.forEach((item) => {
-      const com = item.comisionistaId
-        ? comisionistaMap.get(item.comisionistaId)
-        : undefined;
-      if (!com) return;
-      const existente = map.get(com.id);
-      const comision = calcularComision(item, com);
-      if (existente) {
-        existente.ordenes += 1;
-        existente.totalComision += comision;
-        existente.totalOrden += item.total;
-      } else {
-        map.set(com.id, {
-          nombre: com.nombre,
-          tipo:
-            com.tipo === 'porcentaje'
-              ? `${com.valor}%`
-              : `$${com.valor.toFixed(3)}/kg`,
-          valor: com.valor,
-          ordenes: 1,
-          totalComision: comision,
-          totalOrden: item.total,
-        });
-      }
+      item.comisionistas.forEach((asig) => {
+        const com = comisionistaMap.get(asig.comisionistaId);
+        if (!com) return;
+        const existente = map.get(com.id);
+        const comision = calcularComision(item, com);
+        if (existente) {
+          existente.ordenes += 1;
+          existente.totalComision += comision;
+          existente.totalOrden += item.total;
+        } else {
+          map.set(com.id, {
+            nombre: com.nombre,
+            tarifas: com.tarifas.map(t => t.tipo === 'porcentaje' ? `${t.valor}%` : `$${t.valor.toFixed(3)}/kg`).join(' + '),
+            ordenes: 1,
+            totalComision: comision,
+            totalOrden: item.total,
+          });
+        }
+      });
     });
     return Array.from(map.values()).sort(
       (a, b) => b.totalComision - a.totalComision
@@ -144,14 +138,11 @@ export default function LiquidacionDetallePage() {
 
   const totalOrden = liquidacion.items.reduce((s, i) => s + i.total, 0);
   const totalComision = liquidacion.items.reduce((s, item) => {
-    const com = item.comisionistaId
-      ? comisionistaMap.get(item.comisionistaId)
-      : undefined;
-    return s + calcularComision(item, com);
+    return s + calcularComisionTotalItem(item, comisionistas);
   }, 0);
   const totalCantidad = liquidacion.items.reduce((s, i) => s + i.cantidad, 0);
   const comisionistasInvolucrados = new Set(
-    liquidacion.items.map((i) => i.comisionistaId).filter(Boolean)
+    liquidacion.items.flatMap((i) => i.comisionistas.map(a => a.comisionistaId)).filter(Boolean)
   ).size;
 
   const handleExportPDF = () => {
@@ -419,7 +410,7 @@ export default function LiquidacionDetallePage() {
                       Comisionista
                     </th>
                     <th className="text-left px-4 py-3 font-medium text-slate-600">
-                      Tipo
+                      Tarifas
                     </th>
                     <th className="text-right px-4 py-3 font-medium text-slate-600">
                       Órdenes
@@ -454,7 +445,7 @@ export default function LiquidacionDetallePage() {
                         <td className="px-4 py-3 text-slate-900 font-medium">
                           {r.nombre}
                         </td>
-                        <td className="px-4 py-3 text-slate-500">{r.tipo}</td>
+                        <td className="px-4 py-3 text-slate-500">{r.tarifas}</td>
                         <td className="px-4 py-3 text-right text-slate-700">
                           {r.ordenes}
                         </td>
@@ -532,7 +523,7 @@ export default function LiquidacionDetallePage() {
                       Total
                     </th>
                     <th className="text-left px-4 py-3 font-medium text-slate-600">
-                      Comisionista
+                      Comisionistas
                     </th>
                     <th className="text-right px-4 py-3 font-medium text-slate-600">
                       Comisión
@@ -541,10 +532,7 @@ export default function LiquidacionDetallePage() {
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {liquidacion.items.map((item) => {
-                    const com = item.comisionistaId
-                      ? comisionistaMap.get(item.comisionistaId)
-                      : undefined;
-                    const comision = calcularComision(item, com);
+                    const comision = calcularComisionTotalItem(item, comisionistas);
                     return (
                       <tr
                         key={item.id}
@@ -570,13 +558,17 @@ export default function LiquidacionDetallePage() {
                           ${item.total.toFixed(2)}
                         </td>
                         <td className="px-4 py-3">
-                          {com ? (
-                            <Badge
-                              variant="secondary"
-                              className="bg-slate-100 text-slate-700 border-0 text-xs"
-                            >
-                              {com.nombre}
-                            </Badge>
+                          {item.comisionistas.length > 0 ? (
+                            <div className="flex flex-wrap gap-1">
+                              {item.comisionistas.map(a => {
+                                const com = comisionistaMap.get(a.comisionistaId);
+                                return com ? (
+                                  <Badge key={a.comisionistaId} variant="secondary" className="bg-slate-100 text-slate-700 border-0 text-xs">
+                                    {com.nombre}
+                                  </Badge>
+                                ) : null;
+                              })}
+                            </div>
                           ) : (
                             <span className="text-xs text-slate-400">-</span>
                           )}

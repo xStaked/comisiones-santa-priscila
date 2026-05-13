@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { LayoutDashboard, Calculator, Users, FileText, Download, History, RotateCcw } from 'lucide-react';
+import { LayoutDashboard, Calculator, Users, FileText, Download, History, RotateCcw, BarChart3 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useApp } from '@/context/AppContext';
 
@@ -15,6 +15,7 @@ const tabs = [
   { value: 'ordenes', label: 'Cargar Órdenes', href: '/ordenes', icon: FileText },
   { value: 'liquidacion', label: 'Liquidación', href: '/liquidacion', icon: Download },
   { value: 'historial', label: 'Historial', href: '/historial', icon: History },
+  { value: 'reportes', label: 'Reportes', href: '/reportes', icon: BarChart3 },
 ];
 
 export function Header({ activeTab }: HeaderProps) {
@@ -54,7 +55,7 @@ export function Header({ activeTab }: HeaderProps) {
             </div>
           </div>
         </div>
-        <nav className="mt-2 flex gap-1 h-11 items-center">
+        <nav className="mt-2 flex gap-1 h-11 items-center overflow-x-auto">
           {tabs.map((tab) => {
             const isActive = activeTab === tab.value;
             const Icon = tab.icon;
@@ -63,7 +64,7 @@ export function Header({ activeTab }: HeaderProps) {
                 key={tab.value}
                 href={tab.href}
                 className={
-                  'flex items-center rounded-lg px-4 py-2.5 text-sm font-medium transition-all border ' +
+                  'flex items-center rounded-lg px-4 py-2.5 text-sm font-medium transition-all border whitespace-nowrap ' +
                   (isActive
                     ? 'bg-slate-100 text-slate-900 border-slate-200 shadow-none'
                     : 'text-slate-500 hover:text-slate-700 border-transparent hover:bg-slate-50/50')

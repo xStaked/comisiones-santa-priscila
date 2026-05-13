@@ -3,7 +3,7 @@
 import { useState, useMemo } from 'react';
 import { FileText, FileSpreadsheet, Save, Calculator, Filter } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
-import { exportarPDF, exportarExcel, calcularComision } from '@/lib/export-utils';
+import { exportarPDF, exportarExcel, calcularComision, calcularComisionTotalItem, getTarifasLabel } from '@/lib/export-utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -25,26 +25,27 @@ export function LiquidacionTab() {
   const [nombreLiquidacion, setNombreLiquidacion] = useState('');
   const [previewOpen, setPreviewOpen] = useState(false);
 
-  const comisionistaMap = useMemo(() => 
-    new Map(comisionistas.map(c => [c.id, c])), 
+  const comisionistaMap = useMemo(() =>
+    new Map(comisionistas.map(c => [c.id, c])),
     [comisionistas]
   );
 
   const filteredItems = useMemo(() => {
     if (!filterComisionista) return ordenItems;
-    return ordenItems.filter(i => i.comisionistaId === filterComisionista);
+    return ordenItems.filter(i => i.comisionistas.some(a => a.comisionistaId === filterComisionista));
   }, [ordenItems, filterComisionista]);
 
   const itemsConComision = useMemo(() => {
     return filteredItems.map(item => {
-      const com = item.comisionistaId ? comisionistaMap.get(item.comisionistaId) : undefined;
-      const comision = calcularComision(item, com);
-      const comUnitaria = item.cantidad > 0 ? comision / item.cantidad : 0;
-      return { ...item, comision, comUnitaria, comisionista: com };
+      const comisionTotal = calcularComisionTotalItem(item, comisionistas);
+      const comisionistasAsignados = item.comisionistas
+        .map(a => comisionistaMap.get(a.comisionistaId))
+        .filter(Boolean);
+      return { ...item, comisionTotal, comisionistasAsignados };
     });
-  }, [filteredItems, comisionistaMap]);
+  }, [filteredItems, comisionistas, comisionistaMap]);
 
-  const totalComision = itemsConComision.reduce((s, i) => s + i.comision, 0);
+  const totalComision = itemsConComision.reduce((s, i) => s + i.comisionTotal, 0);
   const totalCantidad = itemsConComision.reduce((s, i) => s + i.cantidad, 0);
   const totalOrden = itemsConComision.reduce((s, i) => s + i.total, 0);
 
@@ -157,7 +158,7 @@ export function LiquidacionTab() {
                 </div>
                 <div className="space-y-2">
                   <Label>Nombre de la liquidación</Label>
-                  <Input 
+                  <Input
                     placeholder="Ej: Liquidación Enero 2024"
                     value={nombreLiquidacion}
                     onChange={e => setNombreLiquidacion(e.target.value)}
@@ -189,15 +190,14 @@ export function LiquidacionTab() {
                   <th className="text-left px-4 py-3 font-medium">Producto</th>
                   <th className="text-right px-4 py-3 font-medium">Cantidad</th>
                   <th className="text-right px-4 py-3 font-medium">Total</th>
-                  <th className="text-left px-4 py-3 font-medium">Comisionista</th>
-                  <th className="text-right px-4 py-3 font-medium">Comisión Unit.</th>
-                  <th className="text-right px-4 py-3 font-medium">Valor Comisión</th>
+                  <th className="text-left px-4 py-3 font-medium">Comisionistas</th>
+                  <th className="text-right px-4 py-3 font-medium">Comisión Total</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {itemsConComision.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="px-4 py-8 text-center text-slate-500">
+                    <td colSpan={8} className="px-4 py-8 text-center text-slate-500">
                       No hay registros con el filtro seleccionado
                     </td>
                   </tr>
@@ -213,19 +213,20 @@ export function LiquidacionTab() {
                       </td>
                       <td className="px-4 py-3 text-right text-slate-500">${item.total.toFixed(2)}</td>
                       <td className="px-4 py-3">
-                        {item.comisionista ? (
-                          <Badge variant="outline" className="text-xs bg-white text-slate-700 border-slate-200">
-                            {item.comisionista.nombre}
-                          </Badge>
+                        {item.comisionistasAsignados.length > 0 ? (
+                          <div className="flex flex-wrap gap-1">
+                            {item.comisionistasAsignados.map(com => (
+                              <Badge key={com!.id} variant="outline" className="text-xs bg-white text-slate-700 border-slate-200">
+                                {com!.nombre}
+                              </Badge>
+                            ))}
+                          </div>
                         ) : (
                           <span className="text-xs text-slate-400">-</span>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-right text-slate-500">
-                        ${item.comUnitaria.toFixed(4)}
-                      </td>
                       <td className="px-4 py-3 text-right font-semibold text-slate-900">
-                        ${item.comision.toFixed(2)}
+                        ${item.comisionTotal.toFixed(2)}
                       </td>
                     </tr>
                   ))
@@ -240,7 +241,7 @@ export function LiquidacionTab() {
                   <td className="px-4 py-3 text-right font-bold text-slate-900 tabular-nums">
                     ${totalOrden.toFixed(2)}
                   </td>
-                  <td colSpan={2} className="px-4 py-3 text-right font-medium text-slate-700">
+                  <td className="px-4 py-3 text-right font-medium text-slate-700">
                     Total Comisión:
                   </td>
                   <td className="px-4 py-3 text-right">

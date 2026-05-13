@@ -11,6 +11,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
     pathname.startsWith('/comisionistas') ? 'comisionistas' :
     pathname.startsWith('/ordenes') ? 'ordenes' :
     pathname.startsWith('/liquidacion') ? 'liquidacion' :
+    pathname.startsWith('/reportes') ? 'reportes' :
     'dashboard';
 
   return (

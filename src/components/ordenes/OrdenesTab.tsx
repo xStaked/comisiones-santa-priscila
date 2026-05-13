@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect, useMemo } from 'react';
-import { Plus, Upload, Trash2, Pencil, UserCheck, Calculator, FileUp, Check, X, Sparkles, Search } from 'lucide-react';
+import { Plus, Upload, Trash2, Pencil, UserCheck, Calculator, FileUp, Check, X, Sparkles, Search, ChevronDown } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { OrdenItem } from '@/types';
 import { Button } from '@/components/ui/button';
@@ -21,12 +21,83 @@ import { toast } from 'sonner';
 import { extractOrdenFromPDF } from '@/lib/pdf-extractor';
 import { generarId } from '@/lib/id';
 
+function MultiSelectComisionistas({
+  comisionistas,
+  selectedIds,
+  onChange,
+  placeholder = 'Seleccionar comisionistas...',
+}: {
+  comisionistas: { id: string; nombre: string }[];
+  selectedIds: string[];
+  onChange: (ids: string[]) => void;
+  placeholder?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const toggle = (id: string) => {
+    if (selectedIds.includes(id)) {
+      onChange(selectedIds.filter(sid => sid !== id));
+    } else {
+      onChange([...selectedIds, id]);
+    }
+  };
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="flex items-center justify-between w-full h-10 px-3 rounded-xl border border-slate-200 bg-white text-sm text-slate-900 hover:border-slate-300 transition-colors"
+      >
+        <span className={selectedIds.length === 0 ? 'text-slate-400' : ''}>
+          {selectedIds.length === 0
+            ? placeholder
+            : `${selectedIds.length} seleccionado${selectedIds.length > 1 ? 's' : ''}`}
+        </span>
+        <ChevronDown className="h-4 w-4 text-slate-400" />
+      </button>
+      {open && (
+        <div className="absolute z-50 mt-1 w-full bg-white border border-slate-200 rounded-xl shadow-lg max-h-60 overflow-auto">
+          {comisionistas.map(c => (
+            <label
+              key={c.id}
+              className="flex items-center gap-2 px-3 py-2 hover:bg-slate-50 cursor-pointer text-sm"
+            >
+              <input
+                type="checkbox"
+                checked={selectedIds.includes(c.id)}
+                onChange={() => toggle(c.id)}
+                className="h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-900"
+              />
+              <span className="text-slate-700">{c.nombre}</span>
+            </label>
+          ))}
+          {comisionistas.length === 0 && (
+            <div className="px-3 py-2 text-sm text-slate-400">No hay comisionistas</div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function OrdenesTab() {
-  const { comisionistas, ordenItems, addOrdenItems, updateOrdenItem, deleteOrdenItem, clearOrdenItems, assignComisionistaGlobal } = useApp();
+  const { comisionistas, ordenItems, addOrdenItems, updateOrdenItem, deleteOrdenItem, clearOrdenItems, assignComisionistasGlobal } = useApp();
   const [activeForm, setActiveForm] = useState<'manual' | 'pdf'>('manual');
-  const [globalComisionista, setGlobalComisionista] = useState('');
+  const [globalComisionistaIds, setGlobalComisionistaIds] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  
+
   const [pdfPreview, setPdfPreview] = useState<{
     fileName: string;
     fecha: string;
@@ -36,7 +107,7 @@ export function OrdenesTab() {
     items: OrdenItem[];
   } | null>(null);
   const [isProcessingPDF, setIsProcessingPDF] = useState(false);
-  
+
   const [form, setForm] = useState({
     fecha: '',
     numeroOrden: '',
@@ -45,7 +116,7 @@ export function OrdenesTab() {
     cantidad: '',
     unidad: 'kg',
     precioUnitario: '',
-    comisionistaId: '',
+    comisionistaIds: [] as string[],
   });
 
   useEffect(() => {
@@ -64,7 +135,7 @@ export function OrdenesTab() {
       item.producto.toLowerCase().includes(q) ||
       item.numeroOrden.toLowerCase().includes(q) ||
       item.finca.toLowerCase().includes(q) ||
-      (item.comisionistaId && comisionistas.find(c => c.id === item.comisionistaId)?.nombre.toLowerCase().includes(q))
+      item.comisionistas.some(a => comisionistas.find(c => c.id === a.comisionistaId)?.nombre.toLowerCase().includes(q))
     );
   }, [ordenItems, search, comisionistas]);
 
@@ -77,7 +148,7 @@ export function OrdenesTab() {
       cantidad: '',
       unidad: 'kg',
       precioUnitario: '',
-      comisionistaId: '',
+      comisionistaIds: [],
     });
   };
 
@@ -100,7 +171,7 @@ export function OrdenesTab() {
       unidad: form.unidad,
       precioUnitario: precio,
       total,
-      comisionistaId: form.comisionistaId || null,
+      comisionistas: form.comisionistaIds.map(id => ({ comisionistaId: id })),
     };
     addOrdenItems([item]);
     resetForm();
@@ -174,8 +245,8 @@ export function OrdenesTab() {
         </CardHeader>
         <CardContent>
           <div className="flex gap-2 mb-4 flex-wrap">
-            <Button 
-              variant={activeForm === 'manual' ? 'default' : 'outline'} 
+            <Button
+              variant={activeForm === 'manual' ? 'default' : 'outline'}
               size="sm"
               onClick={() => setActiveForm('manual')}
               className={activeForm === 'manual' ? 'btn-primary-dark rounded-lg' : 'border-slate-200 text-slate-600 hover:bg-slate-50 rounded-lg'}
@@ -183,8 +254,8 @@ export function OrdenesTab() {
               <Plus className="h-4 w-4 mr-1" />
               Manual
             </Button>
-            <Button 
-              variant={activeForm === 'pdf' ? 'default' : 'outline'} 
+            <Button
+              variant={activeForm === 'pdf' ? 'default' : 'outline'}
               size="sm"
               onClick={() => setActiveForm('pdf')}
               className={activeForm === 'pdf' ? 'btn-primary-dark rounded-lg' : 'border-slate-200 text-slate-600 hover:bg-slate-50 rounded-lg'}
@@ -235,18 +306,12 @@ export function OrdenesTab() {
                 <Input type="number" step="0.01" placeholder="0.00" value={form.precioUnitario} onChange={e => setForm({...form, precioUnitario: e.target.value})} className="bg-white border-slate-200 rounded-xl" />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs text-slate-500">Comisionista</Label>
-                <Select value={form.comisionistaId || 'none'} onValueChange={(value) => setForm({...form, comisionistaId: value === 'none' ? '' : (value ?? '')})}>
-                  <SelectTrigger className="w-full rounded-xl border-slate-200 bg-white h-10 text-sm text-slate-900">
-                    <SelectValue placeholder="Sin asignar" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Sin asignar</SelectItem>
-                    {comisionistas.map(c => (
-                      <SelectItem key={c.id} value={c.id}>{c.nombre}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Label className="text-xs text-slate-500">Comisionistas</Label>
+                <MultiSelectComisionistas
+                  comisionistas={comisionistas}
+                  selectedIds={form.comisionistaIds}
+                  onChange={ids => setForm({...form, comisionistaIds: ids})}
+                />
               </div>
               <div className="sm:col-span-2 lg:col-span-4 flex justify-end">
                 <Button type="submit" className="btn-primary-dark rounded-xl">
@@ -259,7 +324,7 @@ export function OrdenesTab() {
             <div className="space-y-4">
               {!pdfPreview ? (
                 <>
-                  <div 
+                  <div
                     className="border-2 border-dashed border-slate-200 rounded-2xl p-8 text-center hover:border-slate-400 hover:bg-slate-50 transition-all cursor-pointer"
                     onClick={() => fileInputRef.current?.click()}
                   >
@@ -377,8 +442,8 @@ export function OrdenesTab() {
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
           <div className="relative w-full sm:w-64">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-            <Input 
-              placeholder="Buscar producto, factura..." 
+            <Input
+              placeholder="Buscar producto, factura..."
               value={search}
               onChange={e => setSearch(e.target.value)}
               className="pl-9 bg-white border-slate-200 rounded-xl text-sm"
@@ -386,31 +451,26 @@ export function OrdenesTab() {
           </div>
           <div className="flex items-center gap-3 flex-1">
             <UserCheck className="h-5 w-5 text-slate-400" />
-            <div>
-              <Label className="text-xs text-slate-500">Asignar comisionista a todos</Label>
+            <div className="flex-1 min-w-0">
+              <Label className="text-xs text-slate-500">Asignar comisionistas a todos</Label>
               <div className="flex gap-2 mt-1">
-                <Select value={globalComisionista || 'none'} onValueChange={(value) => setGlobalComisionista(value === 'none' ? '' : (value ?? ''))}>
-                  <SelectTrigger className="h-9 rounded-lg border-slate-200 bg-white text-sm text-slate-900 w-48">
-                    <SelectValue placeholder="Seleccionar..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Seleccionar...</SelectItem>
-                    {comisionistas.map(c => (
-                      <SelectItem key={c.id} value={c.id}>{c.nombre}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Button 
-                  size="sm" 
+                <MultiSelectComisionistas
+                  comisionistas={comisionistas}
+                  selectedIds={globalComisionistaIds}
+                  onChange={setGlobalComisionistaIds}
+                  placeholder="Seleccionar..."
+                />
+                <Button
+                  size="sm"
                   variant="outline"
                   onClick={() => {
-                    if (!globalComisionista) {
-                      toast.error('Selecciona un comisionista');
+                    if (globalComisionistaIds.length === 0) {
+                      toast.error('Selecciona al menos un comisionista');
                       return;
                     }
-                    assignComisionistaGlobal(globalComisionista);
+                    assignComisionistasGlobal(globalComisionistaIds);
                   }}
-                  className="border-slate-200 rounded-lg"
+                  className="border-slate-200 rounded-lg shrink-0"
                 >
                   Asignar
                 </Button>
@@ -444,7 +504,7 @@ export function OrdenesTab() {
                     <th className="text-right px-4 py-3 font-medium text-slate-600">Cantidad</th>
                     <th className="text-right px-4 py-3 font-medium text-slate-600">Precio</th>
                     <th className="text-right px-4 py-3 font-medium text-slate-600">Total</th>
-                    <th className="text-left px-4 py-3 font-medium text-slate-600">Comisionista</th>
+                    <th className="text-left px-4 py-3 font-medium text-slate-600">Comisionistas</th>
                     <th className="text-center px-4 py-3 font-medium text-slate-600 w-20">Acción</th>
                   </tr>
                 </thead>
@@ -461,10 +521,17 @@ export function OrdenesTab() {
                       <td className="px-4 py-3 text-right text-slate-500">${item.precioUnitario.toFixed(2)}</td>
                       <td className="px-4 py-3 text-right font-medium text-slate-900">${item.total.toFixed(2)}</td>
                       <td className="px-4 py-3">
-                        {item.comisionistaId ? (
-                          <Badge variant="secondary" className="text-xs bg-slate-100 text-slate-700 border-0">
-                            {comisionistas.find(c => c.id === item.comisionistaId)?.nombre || '?'}
-                          </Badge>
+                        {item.comisionistas.length > 0 ? (
+                          <div className="flex flex-wrap gap-1">
+                            {item.comisionistas.map(a => {
+                              const com = comisionistas.find(c => c.id === a.comisionistaId);
+                              return com ? (
+                                <Badge key={a.comisionistaId} variant="secondary" className="text-xs bg-slate-100 text-slate-700 border-0">
+                                  {com.nombre}
+                                </Badge>
+                              ) : null;
+                            })}
+                          </div>
                         ) : (
                           <span className="text-xs text-slate-400">Sin asignar</span>
                         )}
@@ -551,19 +618,16 @@ export function OrdenesTab() {
                 <Label className="text-xs text-slate-500">Precio Unit.</Label>
                 <Input type="number" step="0.01" value={editForm.precioUnitario || ''} onChange={e => setEditForm({...editForm, precioUnitario: parseFloat(e.target.value) || 0})} className="bg-white border-slate-200 rounded-xl" />
               </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs text-slate-500">Comisionista</Label>
-                <Select value={editForm.comisionistaId || 'none'} onValueChange={(value) => setEditForm({...editForm, comisionistaId: value === 'none' ? null : (value ?? null)})}>
-                  <SelectTrigger className="w-full rounded-xl border-slate-200 bg-white h-10 text-sm text-slate-900">
-                    <SelectValue placeholder="Sin asignar" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Sin asignar</SelectItem>
-                    {comisionistas.map(c => (
-                      <SelectItem key={c.id} value={c.id}>{c.nombre}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+              <div className="space-y-1.5 sm:col-span-2">
+                <Label className="text-xs text-slate-500">Comisionistas</Label>
+                <MultiSelectComisionistas
+                  comisionistas={comisionistas}
+                  selectedIds={(editForm.comisionistas || []).map(a => a.comisionistaId)}
+                  onChange={ids => setEditForm({
+                    ...editForm,
+                    comisionistas: ids.map(id => ({ comisionistaId: id })),
+                  })}
+                />
               </div>
             </div>
             <div className="flex justify-end gap-2 pt-2">
