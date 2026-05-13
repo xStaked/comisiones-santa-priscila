@@ -99,10 +99,10 @@ export function exportarPDF(
           item.numeroOrden,
           item.producto,
           `${item.cantidad.toLocaleString('es-ES')}`,
-          `$ ${com?.valor.toFixed(2).replace('.', ',') || '1,00'}`,
+          `${com ? (com.tipo === 'porcentaje' ? com.valor + '%' : '$' + com.valor.toFixed(3)) : '-'}`,
           `$ ${comision.toFixed(2).replace('.', ',')}`,
           item.estado || 'Cobrado',
-          item.sector || item.finca || 'ASIA',
+          item.sector || item.finca || '-',
         ];
       });
 
@@ -115,7 +115,7 @@ export function exportarPDF(
       // Crear tabla
       autoTable(doc, {
         startY: yPos,
-        head: [['Fecha', 'Factura', 'Nombre', 'Cantidad', 'Comisión', 'Valor de Comisión', 'Estado', 'Sector']],
+        head: [['Fecha', 'Factura', 'Nombre', 'Cantidad', 'Tipo Comisión', 'Valor de Comisión', 'Estado', 'Sector']],
         body,
         foot: [['', '', '', '', '', `$ ${totalComisionGrupo.toFixed(2).replace('.', ',')}`, '', '']],
         theme: 'grid',
@@ -231,7 +231,7 @@ export function exportarExcel(
       data.push([]);
 
       // Headers de tabla
-      data.push(['Fecha', 'Factura', 'Nombre', 'Cantidad', 'Comisión', 'Valor de Comisión', 'Estado', 'Sector']);
+      data.push(['Fecha', 'Factura', 'Nombre', 'Cantidad', 'Tipo Comisión', 'Valor de Comisión', 'Estado', 'Sector']);
 
       // Filas de datos
       let totalGrupo = 0;
@@ -243,10 +243,10 @@ export function exportarExcel(
           item.numeroOrden,
           item.producto,
           item.cantidad,
-          `$ ${com?.valor.toFixed(2).replace('.', ',') || '1,00'}`,
+          `${com ? (com.tipo === 'porcentaje' ? com.valor + '%' : '$' + com.valor.toFixed(3)) : '-'}`,
           `$ ${comision.toFixed(2).replace('.', ',')}`,
           item.estado || 'Cobrado',
-          item.sector || item.finca || 'ASIA',
+          item.sector || item.finca || '-',
         ]);
       });
 
