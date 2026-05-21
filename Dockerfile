@@ -4,12 +4,12 @@ ENV NEXT_TELEMETRY_DISABLED=1
 WORKDIR /app
 
 FROM base AS deps
-RUN corepack enable
+RUN npm install -g pnpm@11.2.2
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile
 
 FROM base AS builder
-RUN corepack enable
+RUN npm install -g pnpm@11.2.2
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN pnpm run build
