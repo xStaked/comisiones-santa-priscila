@@ -1,9 +1,10 @@
 'use client';
 
 import Link from 'next/link';
-import { LayoutDashboard, Calculator, Users, FileText, Download, History, RotateCcw, BarChart3 } from 'lucide-react';
+import { LayoutDashboard, Calculator, Users, FileText, Download, History, RotateCcw, BarChart3, LogOut, UserCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useApp } from '@/context/AppContext';
+import { useAuth } from '@/context/AuthContext';
 
 interface HeaderProps {
   activeTab: string;
@@ -20,6 +21,7 @@ const tabs = [
 
 export function Header({ activeTab }: HeaderProps) {
   const { resetDemoData } = useApp();
+  const { user, logout } = useAuth();
 
   return (
     <div className="sticky top-0 z-50 bg-white border-b border-slate-200 shadow-sm">
@@ -49,10 +51,27 @@ export function Header({ activeTab }: HeaderProps) {
               Restaurar demo
             </Button>
             <div className="h-4 w-px bg-slate-200" />
-            <div className="flex items-center gap-2">
-              <div className="h-2 w-2 rounded-full bg-emerald-500" />
-              <span className="text-xs text-slate-500">Sistema activo</span>
-            </div>
+            {user && (
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-1.5">
+                  <UserCircle className="h-4 w-4 text-slate-500" />
+                  <span className="text-xs text-slate-600 font-medium">{user.username}</span>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    if (confirm('¿Cerrar sesión?')) {
+                      logout();
+                    }
+                  }}
+                  className="text-slate-500 hover:text-red-600 gap-1.5 h-8 text-xs"
+                >
+                  <LogOut className="h-3.5 w-3.5" />
+                  Salir
+                </Button>
+              </div>
+            )}
           </div>
         </div>
         <nav className="mt-2 flex gap-1 h-11 items-center overflow-x-auto">
