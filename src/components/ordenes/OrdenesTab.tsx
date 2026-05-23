@@ -18,7 +18,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { toast } from 'sonner';
-import { extractOrdenFromPDF } from '@/lib/pdf-extractor';
+import { uploadPDF, uploadImage } from '@/lib/api';
 import { generarId } from '@/lib/id';
 
 function MultiSelectComisionistas({
@@ -107,6 +107,7 @@ export function OrdenesTab() {
     items: OrdenItem[];
   } | null>(null);
   const [isProcessingPDF, setIsProcessingPDF] = useState(false);
+  const [uploadType, setUploadType] = useState<'pdf' | 'imagen'>('pdf');
 
   const [form, setForm] = useState({
     fecha: '',
@@ -180,14 +181,18 @@ export function OrdenesTab() {
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (!file.name.toLowerCase().endsWith('.pdf')) {
-      toast.error('Solo se permiten archivos PDF');
+    const lowerName = file.name.toLowerCase();
+    const isPdf = lowerName.endsWith('.pdf');
+    const isImage = lowerName.endsWith('.jpg') || lowerName.endsWith('.jpeg') || lowerName.endsWith('.png');
+    if (!isPdf && !isImage) {
+      toast.error('Solo se permiten archivos PDF o imágenes (JPG, PNG)');
       return;
     }
 
+    setUploadType(isPdf ? 'pdf' : 'imagen');
     setIsProcessingPDF(true);
     try {
-      const result = await extractOrdenFromPDF(file);
+      const result = isPdf ? await uploadPDF(file) : await uploadImage(file);
       setPdfPreview({
         fileName: file.name,
         fecha: result.fecha,
@@ -196,10 +201,10 @@ export function OrdenesTab() {
         semana: result.semana,
         items: result.items,
       });
-      toast.success(`${result.items.length} productos extraídos del PDF`);
+      toast.success(`${result.items.length} productos extraídos del ${isPdf ? 'PDF' : 'imagen'}`);
     } catch (err) {
       console.error(err);
-      toast.error('Error al procesar el PDF. Verifica que sea una orden de compra válida.');
+      toast.error(`Error al procesar el ${isPdf ? 'PDF' : 'imagen'}. Verifica que sea una orden de compra válida.`);
     } finally {
       setIsProcessingPDF(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -261,7 +266,7 @@ export function OrdenesTab() {
               className={activeForm === 'pdf' ? 'btn-primary-dark rounded-lg' : 'border-slate-200 text-slate-600 hover:bg-slate-50 rounded-lg'}
             >
               <FileUp className="h-4 w-4 mr-1" />
-              Cargar PDF
+              Cargar archivo
             </Button>
           </div>
 
@@ -329,13 +334,13 @@ export function OrdenesTab() {
                     onClick={() => fileInputRef.current?.click()}
                   >
                     <FileUp className="h-10 w-10 text-slate-400 mx-auto mb-3" />
-                    <p className="text-sm font-medium text-slate-700">Haz clic para subir el PDF de la orden de compra</p>
+                    <p className="text-sm font-medium text-slate-700">Haz clic para subir el PDF o imagen de la orden de compra</p>
                     <p className="text-xs text-slate-500 mt-1">Soporta órdenes de compra tipo INDUSTRIAL ACUICOLA OCHOA & BARCIA DINACUAMAR CIA.LTDA.</p>
                   </div>
                   <input
                     ref={fileInputRef}
                     type="file"
-                    accept=".pdf"
+                    accept=".pdf,.jpg,.jpeg,.png"
                     className="hidden"
                     onChange={handleFileSelect}
                   />
@@ -344,12 +349,13 @@ export function OrdenesTab() {
                       variant="outline"
                       size="sm"
                       onClick={async () => {
+                        setUploadType('pdf');
                         setIsProcessingPDF(true);
                         try {
                           const res = await fetch('/orden-demo.pdf');
                           const blob = await res.blob();
                           const file = new File([blob], 'orden-demo.pdf', { type: 'application/pdf' });
-                          const result = await extractOrdenFromPDF(file);
+                          const result = await uploadPDF(file);
                           setPdfPreview({
                             fileName: file.name,
                             fecha: result.fecha,
@@ -375,7 +381,7 @@ export function OrdenesTab() {
                   {isProcessingPDF && (
                     <div className="text-center py-4">
                       <div className="inline-block h-6 w-6 animate-spin rounded-full border-2 border-solid border-slate-900 border-r-transparent align-[-0.125em] motion-reduce:animate-[spin_1.5s_linear_infinite]" />
-                      <p className="text-sm text-slate-500 mt-2">Procesando PDF...</p>
+                      <p className="text-sm text-slate-500 mt-2">{uploadType === 'pdf' ? 'Procesando PDF...' : 'Procesando imagen...'}</p>
                     </div>
                   )}
                 </>
@@ -567,7 +573,7 @@ export function OrdenesTab() {
             </Button>
             <Button size="sm" onClick={() => setActiveForm('pdf')} className="btn-primary-dark rounded-xl">
               <FileUp className="h-4 w-4 mr-2" />
-              Cargar PDF
+              Cargar archivo
             </Button>
           </div>
         </div>
