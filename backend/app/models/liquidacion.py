@@ -1,6 +1,5 @@
-from sqlalchemy import Column, String, Numeric, Date, DateTime, ForeignKey
+from sqlalchemy import Column, String, Numeric, Date, DateTime, ForeignKey, Uuid
 from sqlalchemy.orm import relationship
-from sqlalchemy.dialects.postgresql import UUID
 from app.models.base import BaseModel
 
 
@@ -20,12 +19,12 @@ class LiquidacionItem(BaseModel):
     __tablename__ = "liquidacion_items"
 
     liquidacion_id = Column(
-        UUID(as_uuid=True),
+        Uuid,
         ForeignKey("liquidaciones.id", ondelete="CASCADE"),
         nullable=False,
     )
     orden_item_id = Column(
-        UUID(as_uuid=True),
+        Uuid,
         ForeignKey("orden_items.id", ondelete="SET NULL"),
         nullable=True,
     )
@@ -55,12 +54,12 @@ class LiquidacionItemTarifa(BaseModel):
     __tablename__ = "liquidacion_item_tarifas"
 
     liquidacion_item_id = Column(
-        UUID(as_uuid=True),
+        Uuid,
         ForeignKey("liquidacion_items.id", ondelete="CASCADE"),
         nullable=False,
     )
     comisionista_id = Column(
-        UUID(as_uuid=True),
+        Uuid,
         ForeignKey("comisionistas.id", ondelete="CASCADE"),
         nullable=False,
     )

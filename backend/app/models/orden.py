@@ -7,9 +7,9 @@ from sqlalchemy import (
     ForeignKey,
     UniqueConstraint,
     Enum as SAEnum,
+    Uuid,
 )
 from sqlalchemy.orm import relationship
-from sqlalchemy.dialects.postgresql import UUID
 from app.models.base import BaseModel
 
 
@@ -28,12 +28,12 @@ class Asignacion(BaseModel):
     )
 
     orden_item_id = Column(
-        UUID(as_uuid=True),
+        Uuid,
         ForeignKey("orden_items.id", ondelete="CASCADE"),
         nullable=False,
     )
     comisionista_id = Column(
-        UUID(as_uuid=True),
+        Uuid,
         ForeignKey("comisionistas.id", ondelete="CASCADE"),
         nullable=False,
     )
@@ -66,3 +66,7 @@ class OrdenItem(BaseModel):
     liquidacion_items = relationship(
         "LiquidacionItem", back_populates="orden_item"
     )
+
+    @property
+    def comisionistas(self):
+        return self.asignaciones

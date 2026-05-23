@@ -1,7 +1,6 @@
 import enum
-from sqlalchemy import Column, String, Numeric, ForeignKey, Enum as SAEnum
+from sqlalchemy import Column, String, Numeric, ForeignKey, Enum as SAEnum, Uuid
 from sqlalchemy.orm import relationship
-from sqlalchemy.dialects.postgresql import UUID
 from app.models.base import BaseModel
 
 
@@ -27,7 +26,7 @@ class Tarifa(BaseModel):
     __tablename__ = "tarifas"
 
     comisionista_id = Column(
-        UUID(as_uuid=True),
+        Uuid,
         ForeignKey("comisionistas.id", ondelete="CASCADE"),
         nullable=False,
     )
