@@ -7,8 +7,6 @@ from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, status, Response, Request
 from sqlalchemy.orm import Session
-from slowapi import Limiter
-from slowapi.util import get_remote_address
 
 from app.database import get_db
 from app.config import settings
@@ -17,9 +15,9 @@ from app.models.refresh_token import RefreshToken
 from app.schemas.auth import LoginRequest, LoginResponse, RefreshResponse, RegisterRequest, UserResponse
 from app.security import verify_password, get_password_hash, create_access_token
 from app.dependencies import get_current_user, get_current_superuser
+from app.rate_limit import rate_limit
 
 router = APIRouter()
-limiter = Limiter(key_func=get_remote_address)
 
 REFRESH_COOKIE_NAME = "refresh_token"
 
@@ -38,14 +36,17 @@ def _create_refresh_cookie(response: Response, db: Session, user_id: uuid.UUID) 
     db.commit()
 
     max_age = int(timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS).total_seconds())
-    is_prod = settings.ENV == "production"
+    secure = settings.ENV == "production"
+    samesite = "strict" if settings.ENV == "production" else "lax"
+
     response.set_cookie(
         key=REFRESH_COOKIE_NAME,
         value=raw_token,
         httponly=True,
-        secure=is_prod,
-        samesite="strict" if is_prod else "lax",
+        secure=secure,
+        samesite=samesite,
         max_age=max_age,
+        # Common path for /refresh and /logout (both under /api/v1/auth)
         path="/api/v1/auth",
     )
     return raw_token
@@ -56,12 +57,12 @@ def _clear_refresh_cookie(response: Response) -> None:
 
 
 @router.post("/login", response_model=LoginResponse)
-@limiter.limit("5/minute")
 def login(
     request: Request,
     response: Response,
     data: LoginRequest,
     db: Session = Depends(get_db),
+    _rate: None = Depends(rate_limit),
 ):
     user = db.query(User).filter(User.username == data.username).first()
     if not user or not verify_password(data.password, user.hashed_password):
@@ -79,11 +80,11 @@ def login(
 
 
 @router.post("/refresh", response_model=RefreshResponse)
-@limiter.limit("10/minute")
 def refresh(
     request: Request,
     response: Response,
     db: Session = Depends(get_db),
+    _rate: None = Depends(rate_limit),
 ):
     raw_token = request.cookies.get(REFRESH_COOKIE_NAME)
     if not raw_token:
@@ -125,6 +126,7 @@ def logout(
     request: Request,
     response: Response,
     db: Session = Depends(get_db),
+    _rate: None = Depends(rate_limit),
 ):
     raw_token = request.cookies.get(REFRESH_COOKIE_NAME)
     if raw_token:
@@ -137,12 +139,11 @@ def logout(
 
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
-@limiter.limit("3/minute")
 def register(
-    request: Request,
     data: RegisterRequest,
     db: Session = Depends(get_db),
     _current_user: User = Depends(get_current_superuser),
+    _rate: None = Depends(rate_limit),
 ):
     existing = db.query(User).filter(
         (User.username == data.username) | (User.email == data.email)

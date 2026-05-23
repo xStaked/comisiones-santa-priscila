@@ -1,9 +1,7 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
-from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
-from slowapi.errors import RateLimitExceeded
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
 
 from app.database import Base, engine
 from app.config import settings
@@ -13,44 +11,42 @@ from app.models import user, refresh_token, comisionista, orden, liquidacion
 
 from app.routers import admin, auth, comisionistas, liquidaciones, ordenes, reportes, upload
 
-limiter = Limiter(key_func=get_remote_address)
 app = FastAPI(
     title="Dinacuamar — Sistema de Liquidación de Comisiones",
 )
-app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 
 @app.on_event("startup")
 async def startup_event():
+    if settings.ENV == "production":
+        origins = [o.strip() for o in settings.CORS_ORIGINS.split(",")]
+        if any("*" in o for o in origins):
+            raise RuntimeError("Orígenes wildcard no están permitidos en producción")
     Base.metadata.create_all(bind=engine)
 
 
 # Security headers middleware
-@app.middleware("http")
-async def security_headers(request: Request, call_next):
-    response = await call_next(request)
-    response.headers["X-Content-Type-Options"] = "nosniff"
-    response.headers["X-Frame-Options"] = "DENY"
-    response.headers["X-XSS-Protection"] = "1; mode=block"
-    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-    response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
-    return response
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
+        return response
 
+
+app.add_middleware(SecurityHeadersMiddleware)
 
 # CORS middleware
 origins = [origin.strip() for origin in settings.CORS_ORIGINS.split(",")]
-if settings.ENV == "production":
-    for origin in origins:
-        if origin == "*":
-            raise ValueError("CORS_ORIGINS no puede contener '*' en producción")
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type"],
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # Routers
