@@ -3,6 +3,7 @@
 import { useMemo } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
+import { useQuery } from '@tanstack/react-query';
 import {
   ArrowLeft,
   Calendar,
@@ -28,26 +29,83 @@ import {
 } from 'recharts';
 import { useApp } from '@/context/AppContext';
 import { calcularComision, calcularComisionTotalItem, exportarPDF, exportarExcel } from '@/lib/export-utils';
+import { fetchLiquidacion } from '@/lib/api';
+import { Comisionista, OrdenItem } from '@/types';
 import { Shell } from '@/components/Shell';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { toast } from 'sonner';
 
+function snapshotItemToOrdenItem(item: any): OrdenItem {
+  return {
+    id: item.id,
+    fecha: item.fechaSnapshot,
+    numeroOrden: item.numeroOrdenSnapshot,
+    finca: item.fincaSnapshot,
+    producto: item.productoSnapshot,
+    cantidad: item.cantidadSnapshot,
+    unidad: item.unidadSnapshot,
+    precioUnitario: item.precioUnitarioSnapshot,
+    total: item.totalSnapshot,
+    sector: item.sectorSnapshot,
+    estado: item.estadoSnapshot,
+    comisionistas: (item.tarifas || []).map((t: any) => ({ comisionistaId: t.comisionistaId })),
+  };
+}
+
+function buildComisionistasFromSnapshot(items: any[]): Comisionista[] {
+  const map = new Map<string, Comisionista>();
+  for (const item of items) {
+    for (const t of item.tarifas || []) {
+      if (!map.has(t.comisionistaId)) {
+        map.set(t.comisionistaId, {
+          id: t.comisionistaId,
+          nombre: t.comisionistaNombreSnapshot,
+          tarifas: [],
+        });
+      }
+      const com = map.get(t.comisionistaId)!;
+      if (!com.tarifas.some((ta) => ta.tipo === t.tipoSnapshot && ta.valor === t.valorSnapshot)) {
+        com.tarifas.push({ tipo: t.tipoSnapshot, valor: t.valorSnapshot });
+      }
+    }
+  }
+  return Array.from(map.values());
+}
+
 export default function LiquidacionDetallePage() {
   const params = useParams();
   const id = params.id as string;
   const router = useRouter();
-  const { comisionistas, liquidaciones, deleteLiquidacion, restoreLiquidacion } = useApp();
+  const { deleteLiquidacion, restoreLiquidacion } = useApp();
+
+  const { data: rawLiquidacion } = useQuery({
+    queryKey: ['liquidacion', id],
+    queryFn: () => fetchLiquidacion(id),
+    enabled: !!id,
+  });
+
+  const liquidacion = useMemo(() => {
+    if (!rawLiquidacion) return null;
+    const items: OrdenItem[] = (rawLiquidacion.items || []).map(snapshotItemToOrdenItem);
+    return {
+      id: rawLiquidacion.id as string,
+      nombre: rawLiquidacion.nombre as string,
+      mes: rawLiquidacion.mes as string,
+      fechaCreacion: rawLiquidacion.fechaCreacion as string,
+      items,
+    };
+  }, [rawLiquidacion]);
+
+  const comisionistas = useMemo<Comisionista[]>(() => {
+    if (!rawLiquidacion) return [];
+    return buildComisionistasFromSnapshot(rawLiquidacion.items || []);
+  }, [rawLiquidacion]);
 
   const comisionistaMap = useMemo(
     () => new Map(comisionistas.map((c) => [c.id, c])),
     [comisionistas]
-  );
-
-  const liquidacion = useMemo(
-    () => liquidaciones.find((l) => l.id === id) || null,
-    [liquidaciones, id]
   );
 
   const resumenPorFinca = useMemo(() => {

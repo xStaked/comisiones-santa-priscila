@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session, selectinload
 
 from app.database import get_db
+from app.models.user import User
 from app.models.comisionista import Comisionista, Tarifa, TipoTarifa
 from app.models.orden import Asignacion
 from app.schemas.comisionista import (
@@ -13,12 +14,13 @@ from app.schemas.comisionista import (
     ComisionistaResponse,
     ComisionistaUpdate,
 )
+from app.dependencies import get_current_user
 
 router = APIRouter()
 
 
 @router.get("/", response_model=list[ComisionistaResponse])
-def listar_comisionistas(db: Session = Depends(get_db)):
+def listar_comisionistas(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     return (
         db.query(Comisionista)
         .options(selectinload(Comisionista.tarifas))
@@ -29,7 +31,7 @@ def listar_comisionistas(db: Session = Depends(get_db)):
 @router.post(
     "/", response_model=ComisionistaResponse, status_code=status.HTTP_201_CREATED
 )
-def crear_comisionista(data: ComisionistaCreate, db: Session = Depends(get_db)):
+def crear_comisionista(data: ComisionistaCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     comisionista = Comisionista(nombre=data.nombre)
     db.add(comisionista)
     db.flush()
@@ -56,7 +58,7 @@ def crear_comisionista(data: ComisionistaCreate, db: Session = Depends(get_db)):
 
 @router.put("/{id}", response_model=ComisionistaResponse)
 def actualizar_comisionista(
-    id: uuid.UUID, data: ComisionistaUpdate, db: Session = Depends(get_db)
+    id: uuid.UUID, data: ComisionistaUpdate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)
 ):
     comisionista = (
         db.query(Comisionista).filter(Comisionista.id == id).first()
@@ -94,7 +96,7 @@ def actualizar_comisionista(
 
 
 @router.delete("/{id}", status_code=status.HTTP_204_NO_CONTENT)
-def eliminar_comisionista(id: uuid.UUID, db: Session = Depends(get_db)):
+def eliminar_comisionista(id: uuid.UUID, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     comisionista = (
         db.query(Comisionista).filter(Comisionista.id == id).first()
     )

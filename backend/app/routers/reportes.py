@@ -8,9 +8,12 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.models.user import User
 from app.models.comisionista import Comisionista, Tarifa, TipoTarifa
-from app.models.liquidacion import Liquidacion
+from app.models.liquidacion import Liquidacion, LiquidacionItem, LiquidacionItemTarifa
 from app.models.orden import Asignacion, EstadoOrden, OrdenItem
+from app.dependencies import get_current_user
+from sqlalchemy.orm import selectinload
 
 router = APIRouter()
 
@@ -30,7 +33,7 @@ def _calcular_comision(oi: OrdenItem, tarifa: Tarifa) -> Decimal:
 
 
 @router.get("/resumen")
-def resumen(db: Session = Depends(get_db)):
+def resumen(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     total_ordenes = (
         db.query(OrdenItem)
         .filter(OrdenItem.estado == EstadoOrden.activo)
@@ -59,7 +62,7 @@ def resumen(db: Session = Depends(get_db)):
 
 
 @router.get("/por-finca")
-def por_finca(db: Session = Depends(get_db)):
+def por_finca(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     ordenes = (
         db.query(OrdenItem)
         .filter(OrdenItem.estado == EstadoOrden.activo)
@@ -97,7 +100,7 @@ def por_finca(db: Session = Depends(get_db)):
 
 
 @router.get("/por-producto")
-def por_producto(db: Session = Depends(get_db)):
+def por_producto(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     ordenes = (
         db.query(OrdenItem)
         .filter(OrdenItem.estado == EstadoOrden.activo)
@@ -135,7 +138,7 @@ def por_producto(db: Session = Depends(get_db)):
 
 
 @router.get("/por-comisionista")
-def por_comisionista(db: Session = Depends(get_db)):
+def por_comisionista(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     comisionistas = db.query(Comisionista).all()
     resultados = []
 
@@ -172,3 +175,101 @@ def por_comisionista(db: Session = Depends(get_db)):
         )
 
     return resultados
+
+
+@router.get("/global")
+def global_stats(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    total_ordenes_activas = db.query(OrdenItem).filter(OrdenItem.estado == EstadoOrden.activo).count()
+    total_liquidaciones = db.query(Liquidacion).count()
+
+    # Total comisionado histórico (todas las liquidaciones)
+    total_comisionado_historico = Decimal("0")
+    total_vendido_historico = Decimal("0")
+    liquidaciones = (
+        db.query(Liquidacion)
+        .options(selectinload(Liquidacion.items).selectinload(LiquidacionItem.tarifas))
+        .all()
+    )
+    for l in liquidaciones:
+        for li in l.items:
+            total_vendido_historico += li.total_snapshot
+            for t in li.tarifas:
+                total_comisionado_historico += t.comision_calculada
+
+    # Mes actual
+    mes_actual = datetime.now().strftime("%Y-%m")
+    liquidaciones_mes = db.query(Liquidacion).filter(Liquidacion.mes == mes_actual).all()
+    total_comisionado_mes = Decimal("0")
+    for l in liquidaciones_mes:
+        for li in l.items:
+            for t in li.tarifas:
+                total_comisionado_mes += t.comision_calculada
+
+    # Órdenes activas
+    ordenes_activas = (
+        db.query(OrdenItem)
+        .filter(OrdenItem.estado == EstadoOrden.activo)
+        .options(selectinload(OrdenItem.asignaciones).selectinload(Asignacion.comisionista).selectinload(Comisionista.tarifas))
+        .all()
+    )
+    total_comision_activas = Decimal("0")
+    total_vendido_activas = Decimal("0")
+    for oi in ordenes_activas:
+        total_vendido_activas += oi.total
+        for asig in oi.asignaciones:
+            for tarifa in asig.comisionista.tarifas:
+                total_comision_activas += _calcular_comision(oi, tarifa)
+
+    return {
+        "total_ordenes_activas": total_ordenes_activas,
+        "total_liquidaciones": total_liquidaciones,
+        "total_comisionado_este_mes": float(total_comisionado_mes),
+        "total_comisionado_historico": float(total_comisionado_historico),
+        "total_comision_activas": float(total_comision_activas),
+        "total_vendido_historico": float(total_vendido_historico),
+        "total_vendido_activas": float(total_vendido_activas),
+    }
+
+
+@router.get("/tendencias")
+def tendencias(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    meses: dict[str, dict[str, any]] = {}
+
+    # Liquidaciones
+    liquidaciones = (
+        db.query(Liquidacion)
+        .options(selectinload(Liquidacion.items).selectinload(LiquidacionItem.tarifas))
+        .all()
+    )
+    for l in liquidaciones:
+        mes = l.mes
+        if mes not in meses:
+            meses[mes] = {"comision": Decimal("0"), "ventas": Decimal("0"), "ordenes": 0}
+        for li in l.items:
+            meses[mes]["ventas"] += li.total_snapshot
+            meses[mes]["ordenes"] += 1
+            for t in li.tarifas:
+                meses[mes]["comision"] += t.comision_calculada
+
+    # Órdenes activas en mes actual
+    mes_actual = datetime.now().strftime("%Y-%m")
+    ordenes_activas = (
+        db.query(OrdenItem)
+        .filter(OrdenItem.estado == EstadoOrden.activo)
+        .options(selectinload(OrdenItem.asignaciones).selectinload(Asignacion.comisionista).selectinload(Comisionista.tarifas))
+        .all()
+    )
+    if ordenes_activas:
+        if mes_actual not in meses:
+            meses[mes_actual] = {"comision": Decimal("0"), "ventas": Decimal("0"), "ordenes": 0}
+        for oi in ordenes_activas:
+            meses[mes_actual]["ventas"] += oi.total
+            meses[mes_actual]["ordenes"] += 1
+            for asig in oi.asignaciones:
+                for tarifa in asig.comisionista.tarifas:
+                    meses[mes_actual]["comision"] += _calcular_comision(oi, tarifa)
+
+    return [
+        {"mes": mes, "comision": float(v["comision"]), "ventas": float(v["ventas"]), "ordenes": v["ordenes"]}
+        for mes, v in sorted(meses.items())
+    ]

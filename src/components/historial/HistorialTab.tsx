@@ -2,35 +2,82 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { Calendar, FileText, FileSpreadsheet, Trash2, ChevronDown, ChevronUp, Search, Eye } from 'lucide-react';
+import { Calendar, FileText, FileSpreadsheet, Trash2, Search, Eye, Loader2 } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
-import { exportarPDF, exportarExcel, calcularComisionTotalItem } from '@/lib/export-utils';
+import { exportarPDF, exportarExcel } from '@/lib/export-utils';
+import { fetchLiquidacion } from '@/lib/api';
+import { OrdenItem, Comisionista } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 
-export function HistorialTab() {
-  const { comisionistas, liquidaciones, deleteLiquidacion } = useApp();
-  const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [search, setSearch] = useState('');
+function snapshotItemToOrdenItem(item: any): OrdenItem {
+  return {
+    id: item.id,
+    fecha: item.fechaSnapshot,
+    numeroOrden: item.numeroOrdenSnapshot,
+    finca: item.fincaSnapshot,
+    producto: item.productoSnapshot,
+    cantidad: item.cantidadSnapshot,
+    unidad: item.unidadSnapshot,
+    precioUnitario: item.precioUnitarioSnapshot,
+    total: item.totalSnapshot,
+    sector: item.sectorSnapshot,
+    estado: item.estadoSnapshot,
+    comisionistas: (item.tarifas || []).map((t: any) => ({ comisionistaId: t.comisionistaId })),
+  };
+}
 
-  const comisionistaMap = new Map(comisionistas.map(c => [c.id, c]));
+function buildComisionistasFromSnapshot(items: any[]): Comisionista[] {
+  const map = new Map<string, Comisionista>();
+  for (const item of items) {
+    for (const t of item.tarifas || []) {
+      if (!map.has(t.comisionistaId)) {
+        map.set(t.comisionistaId, {
+          id: t.comisionistaId,
+          nombre: t.comisionistaNombreSnapshot,
+          tarifas: [],
+        });
+      }
+      const com = map.get(t.comisionistaId)!;
+      if (!com.tarifas.some((ta) => ta.tipo === t.tipoSnapshot && ta.valor === t.valorSnapshot)) {
+        com.tarifas.push({ tipo: t.tipoSnapshot, valor: t.valorSnapshot });
+      }
+    }
+  }
+  return Array.from(map.values());
+}
+
+export function HistorialTab() {
+  const { liquidaciones, deleteLiquidacion } = useApp();
+  const [search, setSearch] = useState('');
+  const [exportingId, setExportingId] = useState<string | null>(null);
 
   const filtered = liquidaciones.filter(l =>
     l.nombre.toLowerCase().includes(search.toLowerCase()) ||
     l.mes.includes(search)
   );
 
-  const handleExportPDF = (liq: typeof liquidaciones[0]) => {
-    exportarPDF(liq.items, comisionistas, liq.nombre);
-    toast.success('PDF generado');
-  };
-
-  const handleExportExcel = (liq: typeof liquidaciones[0]) => {
-    exportarExcel(liq.items, comisionistas, liq.nombre);
-    toast.success('Excel generado');
+  const handleExport = async (liq: typeof liquidaciones[0], type: 'pdf' | 'excel') => {
+    setExportingId(liq.id);
+    try {
+      const detail = await fetchLiquidacion(liq.id);
+      const items: OrdenItem[] = (detail.items || []).map(snapshotItemToOrdenItem);
+      const comisionistas = buildComisionistasFromSnapshot(detail.items || []);
+      if (type === 'pdf') {
+        exportarPDF(items, comisionistas, liq.nombre);
+        toast.success('PDF generado');
+      } else {
+        exportarExcel(items, comisionistas, liq.nombre);
+        toast.success('Excel generado');
+      }
+    } catch (err: any) {
+      toast.error(err?.response?.data?.detail || 'Error al cargar detalle');
+    } finally {
+      setExportingId(null);
+    }
   };
 
   if (liquidaciones.length === 0) {
@@ -57,77 +104,22 @@ export function HistorialTab() {
 
       <div className="space-y-4">
         {filtered.map(liq => {
-          const isExpanded = expandedId === liq.id;
-          const totalComision = liq.items.reduce((s, item) => {
-            return s + calcularComisionTotalItem(item, comisionistas);
-          }, 0);
-          const totalOrden = liq.items.reduce((s, i) => s + i.total, 0);
+          const isExporting = exportingId === liq.id;
 
           return (
             <Card key={liq.id} className="card-elevated rounded-2xl overflow-hidden">
-              <CardHeader className="pb-3 cursor-pointer" onClick={() => setExpandedId(isExpanded ? null : liq.id)}>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    {isExpanded ? <ChevronUp className="h-4 w-4 text-slate-400" /> : <ChevronDown className="h-4 w-4 text-slate-400" />}
-                    <div>
-                      <CardTitle className="text-base text-slate-900">{liq.nombre}</CardTitle>
-                      <div className="flex items-center gap-2 mt-1">
-                        <Badge variant="secondary" className="text-xs bg-slate-100 text-slate-700 border-0">{liq.mes}</Badge>
-                        <span className="text-xs text-slate-500">
-                          {liq.items.length} registro{liq.items.length !== 1 ? 's' : ''}
-                        </span>
-                      </div>
+              <CardContent className="py-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div>
+                    <CardTitle className="text-base text-slate-900">{liq.nombre}</CardTitle>
+                    <div className="flex items-center gap-2 mt-1">
+                      <Badge variant="secondary" className="text-xs bg-slate-100 text-slate-700 border-0">{liq.mes}</Badge>
+                      <span className="text-xs text-slate-500">
+                        {new Date(liq.fechaCreacion).toLocaleDateString('es-ES')}
+                      </span>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <p className="text-sm font-semibold text-slate-900 tabular-nums">${totalComision.toFixed(2)}</p>
-                    <p className="text-xs text-slate-500">comisión total</p>
-                  </div>
-                </div>
-              </CardHeader>
-              {isExpanded && (
-                <CardContent className="pt-0">
-                  <div className="overflow-x-auto border border-slate-200 rounded-xl mb-4">
-                    <table className="w-full text-sm">
-                      <thead className="bg-slate-50 border-b border-slate-200">
-                        <tr>
-                          <th className="text-left px-4 py-2 font-medium text-slate-600">Fecha</th>
-                          <th className="text-left px-4 py-2 font-medium text-slate-600">Factura</th>
-                          <th className="text-left px-4 py-2 font-medium text-slate-600">Finca</th>
-                          <th className="text-left px-4 py-2 font-medium text-slate-600">Producto</th>
-                          <th className="text-right px-4 py-2 font-medium text-slate-600">Cantidad</th>
-                          <th className="text-right px-4 py-2 font-medium text-slate-600">Total</th>
-                          <th className="text-right px-4 py-2 font-medium text-slate-600">Comisión</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100">
-                        {liq.items.map(item => {
-                          const comision = calcularComisionTotalItem(item, comisionistas);
-                          return (
-                            <tr key={item.id} className="hover:bg-slate-50/50 transition-colors">
-                              <td className="px-4 py-2 text-slate-500">{item.fecha}</td>
-                              <td className="px-4 py-2 text-slate-900 font-medium">{item.numeroOrden}</td>
-                              <td className="px-4 py-2 text-slate-500">{item.finca}</td>
-                              <td className="px-4 py-2 text-slate-700">{item.producto}</td>
-                              <td className="px-4 py-2 text-right text-slate-700">
-                                {item.cantidad.toLocaleString('es-ES')} {item.unidad}
-                              </td>
-                              <td className="px-4 py-2 text-right text-slate-500">${item.total.toFixed(2)}</td>
-                              <td className="px-4 py-2 text-right font-medium text-slate-900 tabular-nums">${comision.toFixed(2)}</td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                      <tfoot className="bg-slate-50 border-t border-slate-200">
-                        <tr>
-                          <td colSpan={5} className="px-4 py-2 font-medium text-slate-700">Totales</td>
-                          <td className="px-4 py-2 text-right font-bold text-slate-900 tabular-nums">${totalOrden.toFixed(2)}</td>
-                          <td className="px-4 py-2 text-right font-bold text-slate-900 tabular-nums">${totalComision.toFixed(2)}</td>
-                        </tr>
-                      </tfoot>
-                    </table>
-                  </div>
-                  <div className="flex justify-end gap-2">
+                  <div className="flex items-center gap-2">
                     <Link
                       href={`/historial/${liq.id}`}
                       className="inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
@@ -135,23 +127,40 @@ export function HistorialTab() {
                       <Eye className="h-4 w-4 mr-2 text-slate-600" />
                       Ver detalle
                     </Link>
-                    <Button variant="outline" size="sm" onClick={() => handleExportPDF(liq)} className="rounded-lg border-slate-200">
-                      <FileText className="h-4 w-4 mr-2 text-red-500" />
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={isExporting}
+                      onClick={() => handleExport(liq, 'pdf')}
+                      className="rounded-lg border-slate-200"
+                    >
+                      {isExporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4 mr-2 text-red-500" />}
                       PDF
                     </Button>
-                    <Button variant="outline" size="sm" onClick={() => handleExportExcel(liq)} className="rounded-lg border-slate-200">
-                      <FileSpreadsheet className="h-4 w-4 mr-2 text-emerald-600" />
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={isExporting}
+                      onClick={() => handleExport(liq, 'excel')}
+                      className="rounded-lg border-slate-200"
+                    >
+                      {isExporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileSpreadsheet className="h-4 w-4 mr-2 text-emerald-600" />}
                       Excel
                     </Button>
-                    <Button variant="outline" size="sm" className="text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg border-slate-200" onClick={() => {
-                      if (confirm('¿Eliminar esta liquidación?')) deleteLiquidacion(liq.id);
-                    }}>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg border-slate-200"
+                      onClick={() => {
+                        if (confirm('¿Eliminar esta liquidación?')) deleteLiquidacion(liq.id);
+                      }}
+                    >
                       <Trash2 className="h-4 w-4 mr-2" />
                       Eliminar
                     </Button>
                   </div>
-                </CardContent>
-              )}
+                </div>
+              </CardContent>
             </Card>
           );
         })}

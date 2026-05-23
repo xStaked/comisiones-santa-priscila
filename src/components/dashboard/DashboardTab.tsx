@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import {
   BarChart,
   Bar,
@@ -27,11 +28,13 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { useApp } from '@/context/AppContext';
-import { calcularComision, calcularComisionTotalItem } from '@/lib/export-utils';
+import { calcularComisionTotalItem } from '@/lib/export-utils';
+import { fetchGlobalStats, fetchTendencias, fetchPorComisionista } from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 
+const COLORS = ['#0f172a', '#10b981', '#3b82f6', '#f59e0b', '#ef4444'];
 
 export function DashboardTab() {
   const { comisionistas, ordenItems, liquidaciones } = useApp();
@@ -41,123 +44,62 @@ export function DashboardTab() {
     [comisionistas]
   );
 
-  // KPIs
-  const totalLiquidado = useMemo(() => {
-    return liquidaciones.reduce((sum, liq) => {
-      const comisionLiq = liq.items.reduce((s, item) => {
-        return s + calcularComisionTotalItem(item, comisionistas);
-      }, 0);
-      return sum + comisionLiq;
-    }, 0);
-  }, [liquidaciones, comisionistas]);
+  const { data: globalStats } = useQuery({
+    queryKey: ['reportes', 'global'],
+    queryFn: fetchGlobalStats,
+  });
 
-  const totalComisionActual = useMemo(() => {
-    return ordenItems.reduce((s, item) => {
-      return s + calcularComisionTotalItem(item, comisionistas);
-    }, 0);
-  }, [ordenItems, comisionistas]);
+  const { data: tendenciasData } = useQuery({
+    queryKey: ['reportes', 'tendencias'],
+    queryFn: fetchTendencias,
+  });
 
-  const totalVendido = useMemo(() => {
-    const historico = liquidaciones.reduce((sum, liq) => sum + liq.items.reduce((s, i) => s + i.total, 0), 0);
-    const actual = ordenItems.reduce((s, i) => s + i.total, 0);
-    return historico + actual;
-  }, [liquidaciones, ordenItems]);
+  const { data: porComisionista } = useQuery({
+    queryKey: ['reportes', 'por-comisionista'],
+    queryFn: fetchPorComisionista,
+  });
 
-  // Tendencias (comparar mes actual vs anterior)
+  const totalLiquidado = globalStats?.totalComisionadoHistorico ?? 0;
+  const totalComisionActual = globalStats?.totalComisionActivas ?? 0;
+  const totalVendido = (globalStats?.totalVendidoHistorico ?? 0) + (globalStats?.totalVendidoActivas ?? 0);
+
   const tendencias = useMemo(() => {
-    const meses = Array.from(new Set([
-      ...liquidaciones.map(l => l.mes),
-      ...(ordenItems.length > 0 ? [new Date().toISOString().slice(0, 7)] : []),
-    ])).sort();
-
-    const comisionesPorMesArr = meses.map(mes => {
-      const liqMes = liquidaciones.filter(l => l.mes === mes);
-      const liqTotal = liqMes.reduce((sum, liq) => sum + liq.items.reduce((s, item) => {
-        return s + calcularComisionTotalItem(item, comisionistas);
-      }, 0), 0);
-      return { mes, total: liqTotal };
-    });
-
-    const actual = comisionesPorMesArr.length > 0 ? comisionesPorMesArr[comisionesPorMesArr.length - 1].total : 0;
-    const anterior = comisionesPorMesArr.length > 1 ? comisionesPorMesArr[comisionesPorMesArr.length - 2].total : 0;
+    if (!tendenciasData || tendenciasData.length === 0) return { diff: 0, up: true };
+    const actual = tendenciasData[tendenciasData.length - 1].comision;
+    const anterior = tendenciasData.length > 1 ? tendenciasData[tendenciasData.length - 2].comision : 0;
     const diff = anterior > 0 ? ((actual - anterior) / anterior) * 100 : 0;
     return { diff: Math.round(diff * 10) / 10, up: diff >= 0 };
-  }, [liquidaciones, comisionistas, ordenItems]);
+  }, [tendenciasData]);
 
-  // Comisiones por mes (historial + actual)
   const comisionesPorMes = useMemo(() => {
-    const map = new Map<string, number>();
-
-    // Liquidaciones históricas
-    liquidaciones.forEach((liq) => {
-      const mes = liq.mes;
-      const comisionLiq = liq.items.reduce((s, item) => {
-        return s + calcularComisionTotalItem(item, comisionistas);
-      }, 0);
-      map.set(mes, (map.get(mes) || 0) + comisionLiq);
+    if (!tendenciasData) return [];
+    const nombresMes = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+    return tendenciasData.map((d: any) => {
+      const [anio, mesNum] = d.mes.split('-');
+      return {
+        mes: `${nombresMes[parseInt(mesNum) - 1]} ${anio}`,
+        total: Math.round(d.comision * 100) / 100,
+      };
     });
+  }, [tendenciasData]);
 
-    // Órdenes actuales
-    if (ordenItems.length > 0) {
-      const ahora = new Date().toISOString().slice(0, 7);
-      const comisionActual = ordenItems.reduce((s, item) => {
-        return s + calcularComisionTotalItem(item, comisionistas);
-      }, 0);
-      map.set(ahora, (map.get(ahora) || 0) + comisionActual);
-    }
-
-    return Array.from(map.entries())
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([mes, total]) => {
-        const [anio, mesNum] = mes.split('-');
-        const nombresMes = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
-        return {
-          mes: `${nombresMes[parseInt(mesNum) - 1]} ${anio}`,
-          total: Math.round(total * 100) / 100,
-        };
-      });
-  }, [liquidaciones, ordenItems, comisionistas]);
-
-  // Top comisionistas (todo: histórico + actual)
   const topComisionistas = useMemo(() => {
-    const map = new Map<string, { nombre: string; total: number }>();
-
-    const procesarItems = (items: typeof ordenItems) => {
-      items.forEach((item) => {
-        item.comisionistas.forEach((asig) => {
-          const com = comisionistaMap.get(asig.comisionistaId);
-          if (!com) return;
-          const comision = calcularComision(item, com);
-          const existente = map.get(asig.comisionistaId);
-          if (existente) {
-            existente.total += comision;
-          } else {
-            map.set(asig.comisionistaId, { nombre: com.nombre, total: comision });
-          }
-        });
-      });
-    };
-
-    liquidaciones.forEach((liq) => procesarItems(liq.items));
-    procesarItems(ordenItems);
-
-    const COLORS = ['#0f172a', '#10b981', '#3b82f6', '#f59e0b', '#ef4444'];
-
-    return Array.from(map.values())
-      .sort((a, b) => b.total - a.total)
+    if (!porComisionista) return [];
+    return porComisionista
+      .sort((a: any, b: any) => b.totalComision - a.totalComision)
       .slice(0, 5)
-      .map((c, idx) => {
-        const shortName = c.nombre.length > 16 ? c.nombre.slice(0, 16) + '…' : c.nombre;
+      .map((c: any, idx: number) => {
+        const shortName = c.comisionistaNombre.length > 16 ? c.comisionistaNombre.slice(0, 16) + '…' : c.comisionistaNombre;
         return {
           name: shortName,
-          fullName: c.nombre,
-          value: Math.round(c.total * 100) / 100,
+          fullName: c.comisionistaNombre,
+          value: Math.round(c.totalComision * 100) / 100,
           color: COLORS[idx % COLORS.length],
         };
       });
-  }, [liquidaciones, ordenItems, comisionistaMap]);
+  }, [porComisionista]);
 
-  const totalComisionTop = topComisionistas.reduce((s, c) => s + c.value, 0);
+  const totalComisionTop = topComisionistas.reduce((s: number, c: any) => s + c.value, 0);
 
 
   const ultimasLiquidaciones = useMemo(() => {
@@ -321,7 +263,7 @@ export function DashboardTab() {
                       paddingAngle={3}
                       dataKey="value"
                     >
-                      {topComisionistas.map((entry, index) => (
+                      {topComisionistas.map((entry: any, index: number) => (
                         <Cell key={`cell-${index}`} fill={entry.color} />
                       ))}
                     </Pie>

@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session, selectinload
 
 from app.database import get_db
+from app.models.user import User
 from app.models.liquidacion import Liquidacion, LiquidacionItem, LiquidacionItemTarifa
 from app.schemas.liquidacion import LiquidacionCreate
 from app.services.liquidacion import (
@@ -13,12 +14,13 @@ from app.services.liquidacion import (
     eliminar_liquidacion,
     restaurar_liquidacion,
 )
+from app.dependencies import get_current_user
 
 router = APIRouter()
 
 
 @router.get("/")
-def listar_liquidaciones(db: Session = Depends(get_db)):
+def listar_liquidaciones(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     liquidaciones = db.query(Liquidacion).all()
     return [
         {
@@ -32,7 +34,7 @@ def listar_liquidaciones(db: Session = Depends(get_db)):
 
 
 @router.post("/", status_code=status.HTTP_201_CREATED)
-def crear(data: LiquidacionCreate, db: Session = Depends(get_db)):
+def crear(data: LiquidacionCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     try:
         liquidacion = crear_liquidacion(
             db, data.nombre, data.orden_item_ids
@@ -57,7 +59,7 @@ def crear(data: LiquidacionCreate, db: Session = Depends(get_db)):
 
 
 @router.get("/{id}")
-def detalle(id: UUID, db: Session = Depends(get_db)):
+def detalle(id: UUID, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     liquidacion = (
         db.query(Liquidacion)
         .options(
@@ -115,7 +117,7 @@ def detalle(id: UUID, db: Session = Depends(get_db)):
 
 
 @router.delete("/{id}", status_code=status.HTTP_204_NO_CONTENT)
-def eliminar(id: UUID, db: Session = Depends(get_db)):
+def eliminar(id: UUID, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     try:
         eliminar_liquidacion(db, id)
     except ValueError as exc:
@@ -131,7 +133,7 @@ def eliminar(id: UUID, db: Session = Depends(get_db)):
 
 
 @router.post("/{id}/restaurar")
-def restaurar(id: UUID, db: Session = Depends(get_db)):
+def restaurar(id: UUID, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     try:
         nuevos_ids = restaurar_liquidacion(db, id)
         return {"nuevos_orden_item_ids": nuevos_ids}

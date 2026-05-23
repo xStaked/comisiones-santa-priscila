@@ -1,11 +1,28 @@
 'use client';
 
-import React, { createContext, useContext, useCallback, useEffect } from 'react';
-import { Comisionista, OrdenItem, Liquidacion, LegacyComisionista, LegacyOrdenItem } from '@/types';
-import { generarId } from '@/lib/id';
-import { useLocalStorage } from '@/hooks/useLocalStorage';
+import React, { createContext, useContext, useCallback } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Comisionista, OrdenItem, Liquidacion } from '@/types';
 import { toast } from 'sonner';
-import { demoComisionistas, demoOrdenItems, demoLiquidaciones } from '@/lib/demo-data';
+import {
+  fetchComisionistas,
+  createComisionista,
+  updateComisionista as apiUpdateComisionista,
+  deleteComisionista as apiDeleteComisionista,
+  fetchOrdenes,
+  createOrdenes,
+  updateOrden as apiUpdateOrden,
+  deleteOrden as apiDeleteOrden,
+  asignarComisionista as apiAsignarComisionista,
+  desasignarComisionista as apiDesasignarComisionista,
+  asignarGlobal as apiAsignarGlobal,
+  limpiarOrdenes as apiLimpiarOrdenes,
+  fetchLiquidaciones,
+  createLiquidacion,
+  deleteLiquidacion as apiDeleteLiquidacion,
+  restaurarLiquidacion as apiRestaurarLiquidacion,
+  seedDemo,
+} from '@/lib/api';
 
 interface AppContextType {
   comisionistas: Comisionista[];
@@ -31,25 +48,8 @@ interface AppContextType {
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
-function esLegacyComisionista(c: any): c is LegacyComisionista {
-  return c && typeof c.tipo === 'string' && typeof c.valor === 'number' && !Array.isArray(c.tarifas);
-}
-
-function esLegacyOrdenItem(item: any): item is LegacyOrdenItem {
-  return item && (typeof item.comisionistaId === 'string' || item.comisionistaId === null) && !Array.isArray(item.comisionistas);
-}
-
-function migrarComisionista(c: LegacyComisionista): Comisionista {
+function ordenItemToCreatePayload(item: OrdenItem) {
   return {
-    id: c.id,
-    nombre: c.nombre,
-    tarifas: [{ tipo: c.tipo, valor: c.valor }],
-  };
-}
-
-function migrarOrdenItem(item: LegacyOrdenItem): OrdenItem {
-  return {
-    id: item.id,
     fecha: item.fecha,
     numeroOrden: item.numeroOrden,
     finca: item.finca,
@@ -58,221 +58,319 @@ function migrarOrdenItem(item: LegacyOrdenItem): OrdenItem {
     unidad: item.unidad,
     precioUnitario: item.precioUnitario,
     total: item.total,
-    comisionistas: item.comisionistaId ? [{ comisionistaId: item.comisionistaId }] : [],
     sector: item.sector,
     estado: item.estado,
-  };
-}
-
-function migrarLiquidacion(liq: any): Liquidacion {
-  return {
-    id: liq.id,
-    mes: liq.mes,
-    nombre: liq.nombre,
-    fechaCreacion: liq.fechaCreacion,
-    items: Array.isArray(liq.items) ? liq.items.map((item: any) =>
-      esLegacyOrdenItem(item) ? migrarOrdenItem(item) : item
-    ) : [],
+    comisionistaIds: item.comisionistas.map((c) => c.comisionistaId),
   };
 }
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
-  const [comisionistas, setComisionistas] = useLocalStorage<Comisionista[]>('comisionistas', []);
-  const [ordenItems, setOrdenItems] = useLocalStorage<OrdenItem[]>('ordenItems', []);
-  const [liquidaciones, setLiquidaciones] = useLocalStorage<Liquidacion[]>('liquidaciones', []);
-  const [dataMigrated, setDataMigrated] = useLocalStorage<boolean>('dataMigrated_v2', false);
+  const queryClient = useQueryClient();
 
-  // Precargar datos de demo si no hay nada guardado + migración automática
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
+  // Queries
+  const comisionistasQuery = useQuery({
+    queryKey: ['comisionistas'],
+    queryFn: fetchComisionistas,
+  });
 
-    // Migración de datos legacy (solo una vez)
-    if (!dataMigrated) {
-      try {
-        const rawComisionistas = window.localStorage.getItem('comisionistas');
-        const rawOrdenes = window.localStorage.getItem('ordenItems');
-        const rawLiquidaciones = window.localStorage.getItem('liquidaciones');
+  const ordenesQuery = useQuery({
+    queryKey: ['ordenes'],
+    queryFn: () => fetchOrdenes(),
+  });
 
-        let migratedComisionistas: Comisionista[] | null = null;
-        let migratedOrdenes: OrdenItem[] | null = null;
-        let migratedLiquidaciones: Liquidacion[] | null = null;
+  const liquidacionesQuery = useQuery({
+    queryKey: ['liquidaciones'],
+    queryFn: fetchLiquidaciones,
+  });
 
-        if (rawComisionistas) {
-          const parsed = JSON.parse(rawComisionistas);
-          if (Array.isArray(parsed) && parsed.length > 0 && esLegacyComisionista(parsed[0])) {
-            migratedComisionistas = parsed.map(migrarComisionista);
-          }
-        }
+  const comisionistas: Comisionista[] = comisionistasQuery.data ?? [];
+  const ordenItems: OrdenItem[] = ordenesQuery.data ?? [];
+  const liquidaciones: Liquidacion[] = liquidacionesQuery.data ?? [];
 
-        if (rawOrdenes) {
-          const parsed = JSON.parse(rawOrdenes);
-          if (Array.isArray(parsed) && parsed.length > 0 && esLegacyOrdenItem(parsed[0])) {
-            migratedOrdenes = parsed.map(migrarOrdenItem);
-          }
-        }
+  // Mutations: Comisionistas
+  const createComisionistaMutation = useMutation({
+    mutationFn: createComisionista,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['comisionistas'] });
+      toast.success('Comisionista creado');
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.detail || 'Error al crear comisionista');
+    },
+  });
 
-        if (rawLiquidaciones) {
-          const parsed = JSON.parse(rawLiquidaciones);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            migratedLiquidaciones = parsed.map(migrarLiquidacion);
-          }
-        }
+  const updateComisionistaMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Partial<Comisionista> }) => apiUpdateComisionista(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['comisionistas'] });
+      toast.success('Comisionista actualizado');
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.detail || 'Error al actualizar comisionista');
+    },
+  });
 
-        if (migratedComisionistas) setComisionistas(migratedComisionistas);
-        if (migratedOrdenes) setOrdenItems(migratedOrdenes);
-        if (migratedLiquidaciones) setLiquidaciones(migratedLiquidaciones);
+  const deleteComisionistaMutation = useMutation({
+    mutationFn: apiDeleteComisionista,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['comisionistas'] });
+      queryClient.invalidateQueries({ queryKey: ['ordenes'] });
+      toast.success('Comisionista eliminado');
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.detail || 'Error al eliminar comisionista');
+    },
+  });
 
-        setDataMigrated(true);
-      } catch (e) {
-        console.error('Error en migración de datos:', e);
-      }
-    }
+  // Mutations: Ordenes
+  const createOrdenesMutation = useMutation({
+    mutationFn: (items: OrdenItem[]) => createOrdenes(items.map(ordenItemToCreatePayload)),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['ordenes'] });
+      toast.success('Órdenes agregadas');
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.detail || 'Error al agregar órdenes');
+    },
+  });
 
-    // Precargar demo si no hay datos
-    const hasData =
-      window.localStorage.getItem('comisionistas') ||
-      window.localStorage.getItem('ordenItems') ||
-      window.localStorage.getItem('liquidaciones');
-    if (!hasData) {
-      setComisionistas(demoComisionistas);
-      setOrdenItems(demoOrdenItems);
-      setLiquidaciones(demoLiquidaciones);
-    }
-  }, [setComisionistas, setOrdenItems, setLiquidaciones, dataMigrated, setDataMigrated]);
+  const updateOrdenMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Partial<OrdenItem> }) => apiUpdateOrden(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['ordenes'] });
+      toast.success('Orden actualizada');
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.detail || 'Error al actualizar orden');
+    },
+  });
 
-  const addComisionista = useCallback((c: Omit<Comisionista, 'id'>) => {
-    const newComisionista: Comisionista = { ...c, id: generarId() };
-    setComisionistas(prev => [...prev, newComisionista]);
-    toast.success('Comisionista creado');
-  }, [setComisionistas]);
+  const deleteOrdenMutation = useMutation({
+    mutationFn: apiDeleteOrden,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['ordenes'] });
+      toast.success('Orden eliminada');
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.detail || 'Error al eliminar orden');
+    },
+  });
 
-  const updateComisionista = useCallback((id: string, c: Partial<Comisionista>) => {
-    setComisionistas(prev => prev.map(item => item.id === id ? { ...item, ...c } : item));
-    toast.success('Comisionista actualizado');
-  }, [setComisionistas]);
+  const limpiarOrdenesMutation = useMutation({
+    mutationFn: apiLimpiarOrdenes,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['ordenes'] });
+      toast.success('Órdenes limpiadas');
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.detail || 'Error al limpiar órdenes');
+    },
+  });
 
-  const deleteComisionista = useCallback((id: string) => {
-    setComisionistas(prev => prev.filter(item => item.id !== id));
-    setOrdenItems(prev => prev.map(item => ({
-      ...item,
-      comisionistas: item.comisionistas.filter(a => a.comisionistaId !== id),
-    })));
-    toast.success('Comisionista eliminado');
-  }, [setComisionistas, setOrdenItems]);
+  const asignarGlobalMutation = useMutation({
+    mutationFn: ({ ordenIds, comisionistaIds }: { ordenIds: string[]; comisionistaIds: string[] }) =>
+      apiAsignarGlobal(ordenIds, comisionistaIds),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['ordenes'] });
+      toast.success('Comisionistas asignados globalmente');
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.detail || 'Error al asignar comisionistas');
+    },
+  });
 
-  const addOrdenItems = useCallback((items: OrdenItem[]) => {
-    setOrdenItems(prev => [...prev, ...items]);
-    toast.success(`${items.length} registro(s) agregado(s)`);
-  }, [setOrdenItems]);
+  const asignarComisionistaMutation = useMutation({
+    mutationFn: ({ itemId, comisionistaId }: { itemId: string; comisionistaId: string }) =>
+      apiAsignarComisionista(itemId, comisionistaId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['ordenes'] });
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.detail || 'Error al asignar comisionista');
+    },
+  });
 
-  const updateOrdenItem = useCallback((id: string, item: Partial<OrdenItem>) => {
-    setOrdenItems(prev => prev.map(i => i.id === id ? { ...i, ...item } : i));
-  }, [setOrdenItems]);
+  const desasignarComisionistaMutation = useMutation({
+    mutationFn: ({ itemId, comisionistaId }: { itemId: string; comisionistaId: string }) =>
+      apiDesasignarComisionista(itemId, comisionistaId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['ordenes'] });
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.detail || 'Error al desasignar comisionista');
+    },
+  });
 
-  const deleteOrdenItem = useCallback((id: string) => {
-    setOrdenItems(prev => prev.filter(i => i.id !== id));
-    toast.success('Registro eliminado');
-  }, [setOrdenItems]);
+  // Mutations: Liquidaciones
+  const createLiquidacionMutation = useMutation({
+    mutationFn: ({ nombre, ordenItemIds }: { nombre: string; ordenItemIds: string[] }) =>
+      createLiquidacion({ nombre, ordenItemIds }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['ordenes'] });
+      queryClient.invalidateQueries({ queryKey: ['liquidaciones'] });
+      toast.success('Liquidación guardada');
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.detail || 'Error al guardar liquidación');
+    },
+  });
+
+  const deleteLiquidacionMutation = useMutation({
+    mutationFn: apiDeleteLiquidacion,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['ordenes'] });
+      queryClient.invalidateQueries({ queryKey: ['liquidaciones'] });
+      toast.success('Liquidación eliminada');
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.detail || 'Error al eliminar liquidación');
+    },
+  });
+
+  const restaurarLiquidacionMutation = useMutation({
+    mutationFn: apiRestaurarLiquidacion,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['ordenes'] });
+      queryClient.invalidateQueries({ queryKey: ['liquidaciones'] });
+      toast.success('Liquidación restaurada');
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.detail || 'Error al restaurar liquidación');
+    },
+  });
+
+  const seedDemoMutation = useMutation({
+    mutationFn: seedDemo,
+    onSuccess: () => {
+      queryClient.invalidateQueries();
+      toast.success('Datos de demo restaurados');
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.detail || 'Error al restaurar datos de demo');
+    },
+  });
+
+  // Callbacks expuestos a los tabs
+  const addComisionista = useCallback(
+    (c: Omit<Comisionista, 'id'>) => {
+      createComisionistaMutation.mutate(c);
+    },
+    [createComisionistaMutation]
+  );
+
+  const updateComisionista = useCallback(
+    (id: string, c: Partial<Comisionista>) => {
+      updateComisionistaMutation.mutate({ id, data: c });
+    },
+    [updateComisionistaMutation]
+  );
+
+  const deleteComisionista = useCallback(
+    (id: string) => {
+      deleteComisionistaMutation.mutate(id);
+    },
+    [deleteComisionistaMutation]
+  );
+
+  const addOrdenItems = useCallback(
+    (items: OrdenItem[]) => {
+      createOrdenesMutation.mutate(items);
+    },
+    [createOrdenesMutation]
+  );
+
+  const updateOrdenItem = useCallback(
+    (id: string, item: Partial<OrdenItem>) => {
+      updateOrdenMutation.mutate({ id, data: item });
+    },
+    [updateOrdenMutation]
+  );
+
+  const deleteOrdenItem = useCallback(
+    (id: string) => {
+      deleteOrdenMutation.mutate(id);
+    },
+    [deleteOrdenMutation]
+  );
 
   const clearOrdenItems = useCallback(() => {
-    setOrdenItems([]);
-    toast.success('Órdenes limpiadas');
-  }, [setOrdenItems]);
+    limpiarOrdenesMutation.mutate();
+  }, [limpiarOrdenesMutation]);
 
-  const assignComisionistasGlobal = useCallback((comisionistaIds: string[]) => {
-    setOrdenItems(prev => prev.map(item => ({
-      ...item,
-      comisionistas: comisionistaIds.map(id => ({ comisionistaId: id })),
-    })));
-    toast.success('Comisionistas asignados globalmente');
-  }, [setOrdenItems]);
+  const assignComisionistasGlobal = useCallback(
+    (comisionistaIds: string[]) => {
+      const ordenIds = ordenItems.map((o) => o.id);
+      asignarGlobalMutation.mutate({ ordenIds, comisionistaIds });
+    },
+    [asignarGlobalMutation, ordenItems]
+  );
 
-  const addComisionistaToItem = useCallback((itemId: string, comisionistaId: string) => {
-    setOrdenItems(prev => prev.map(item => {
-      if (item.id !== itemId) return item;
-      if (item.comisionistas.some(a => a.comisionistaId === comisionistaId)) return item;
-      return { ...item, comisionistas: [...item.comisionistas, { comisionistaId }] };
-    }));
-  }, [setOrdenItems]);
+  const addComisionistaToItem = useCallback(
+    (itemId: string, comisionistaId: string) => {
+      asignarComisionistaMutation.mutate({ itemId, comisionistaId });
+    },
+    [asignarComisionistaMutation]
+  );
 
-  const removeComisionistaFromItem = useCallback((itemId: string, comisionistaId: string) => {
-    setOrdenItems(prev => prev.map(item => {
-      if (item.id !== itemId) return item;
-      return { ...item, comisionistas: item.comisionistas.filter(a => a.comisionistaId !== comisionistaId) };
-    }));
-  }, [setOrdenItems]);
+  const removeComisionistaFromItem = useCallback(
+    (itemId: string, comisionistaId: string) => {
+      desasignarComisionistaMutation.mutate({ itemId, comisionistaId });
+    },
+    [desasignarComisionistaMutation]
+  );
 
-  const saveLiquidacion = useCallback((nombre: string) => {
-    if (ordenItems.length === 0) {
-      toast.error('No hay órdenes para guardar');
-      return;
-    }
-    const now = new Date();
-    const newLiquidacion: Liquidacion = {
-      id: generarId(),
-      mes: now.toISOString().slice(0, 7),
-      items: [...ordenItems],
-      fechaCreacion: now.toISOString(),
-      nombre: nombre || `Liquidación ${now.toLocaleDateString('es-ES')}`,
-    };
-    setLiquidaciones(prev => [newLiquidacion, ...prev]);
-    setOrdenItems([]);
-    toast.success('Liquidación guardada');
-  }, [ordenItems, setLiquidaciones, setOrdenItems]);
+  const saveLiquidacion = useCallback(
+    (nombre: string) => {
+      if (ordenItems.length === 0) {
+        toast.error('No hay órdenes para guardar');
+        return;
+      }
+      const ids = ordenItems.map((o) => o.id);
+      createLiquidacionMutation.mutate({ nombre, ordenItemIds: ids });
+    },
+    [createLiquidacionMutation, ordenItems]
+  );
 
-  const deleteLiquidacion = useCallback((id: string) => {
-    setLiquidaciones(prev => prev.filter(l => l.id !== id));
-    toast.success('Liquidación eliminada');
-  }, [setLiquidaciones]);
+  const deleteLiquidacion = useCallback(
+    (id: string) => {
+      deleteLiquidacionMutation.mutate(id);
+    },
+    [deleteLiquidacionMutation]
+  );
 
-  const restoreLiquidacion = useCallback((id: string) => {
-    const liq = liquidaciones.find(l => l.id === id);
-    if (!liq) {
-      toast.error('Liquidación no encontrada');
-      return;
-    }
-    // Restaurar items con nuevos IDs para evitar conflictos
-    const restoredItems: OrdenItem[] = liq.items.map(item => ({
-      ...item,
-      id: generarId(),
-    }));
-    setOrdenItems(prev => [...prev, ...restoredItems]);
-    setLiquidaciones(prev => prev.filter(l => l.id !== id));
-    toast.success(`${restoredItems.length} órdenes restauradas a activas`);
-  }, [liquidaciones, setOrdenItems, setLiquidaciones]);
+  const restoreLiquidacion = useCallback(
+    (id: string) => {
+      restaurarLiquidacionMutation.mutate(id);
+    },
+    [restaurarLiquidacionMutation]
+  );
 
   const resetDemoData = useCallback(() => {
-    if (typeof window === 'undefined') return;
-    window.localStorage.removeItem('comisionistas');
-    window.localStorage.removeItem('ordenItems');
-    window.localStorage.removeItem('liquidaciones');
-    window.localStorage.removeItem('dataMigrated_v2');
-    setComisionistas(demoComisionistas);
-    setOrdenItems(demoOrdenItems);
-    setLiquidaciones(demoLiquidaciones);
-    toast.success('Datos de demo restaurados');
-  }, [setComisionistas, setOrdenItems, setLiquidaciones]);
+    seedDemoMutation.mutate();
+  }, [seedDemoMutation]);
 
   return (
-    <AppContext.Provider value={{
-      comisionistas,
-      addComisionista,
-      updateComisionista,
-      deleteComisionista,
-      ordenItems,
-      addOrdenItems,
-      updateOrdenItem,
-      deleteOrdenItem,
-      clearOrdenItems,
-      assignComisionistasGlobal,
-      addComisionistaToItem,
-      removeComisionistaFromItem,
-      liquidaciones,
-      saveLiquidacion,
-      deleteLiquidacion,
-      restoreLiquidacion,
-      resetDemoData,
-    }}>
+    <AppContext.Provider
+      value={{
+        comisionistas,
+        addComisionista,
+        updateComisionista,
+        deleteComisionista,
+        ordenItems,
+        addOrdenItems,
+        updateOrdenItem,
+        deleteOrdenItem,
+        clearOrdenItems,
+        assignComisionistasGlobal,
+        addComisionistaToItem,
+        removeComisionistaFromItem,
+        liquidaciones,
+        saveLiquidacion,
+        deleteLiquidacion,
+        restoreLiquidacion,
+        resetDemoData,
+      }}
+    >
       {children}
     </AppContext.Provider>
   );

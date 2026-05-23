@@ -9,9 +9,11 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session, selectinload
 
 from app.database import get_db
+from app.models.user import User
 from app.models.comisionista import Comisionista
 from app.models.orden import Asignacion, EstadoOrden, OrdenItem
 from app.schemas.orden import OrdenItemCreate, OrdenItemResponse, OrdenItemUpdate
+from app.dependencies import get_current_user
 
 router = APIRouter()
 
@@ -32,6 +34,7 @@ def listar_ordenes(
     fecha_desde: date | None = None,
     fecha_hasta: date | None = None,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     query = (
         db.query(OrdenItem)
@@ -54,7 +57,7 @@ def listar_ordenes(
 @router.post(
     "/", response_model=list[OrdenItemResponse], status_code=status.HTTP_201_CREATED
 )
-def crear_ordenes(items: List[OrdenItemCreate], db: Session = Depends(get_db)):
+def crear_ordenes(items: List[OrdenItemCreate], db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     resultados: list[OrdenItem] = []
 
     try:
@@ -90,9 +93,26 @@ def crear_ordenes(items: List[OrdenItemCreate], db: Session = Depends(get_db)):
         ) from exc
 
 
+@router.post("/limpiar")
+def limpiar_ordenes(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    try:
+        count = (
+            db.query(OrdenItem)
+            .filter(OrdenItem.estado == EstadoOrden.activo)
+            .update({OrdenItem.estado: EstadoOrden.anulado}, synchronize_session=False)
+        )
+        db.commit()
+        return {"message": f"{count} orden(es) anulada(s)"}
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
+        ) from exc
+
+
 @router.put("/{id}", response_model=OrdenItemResponse)
 def actualizar_orden(
-    id: UUID, data: OrdenItemUpdate, db: Session = Depends(get_db)
+    id: UUID, data: OrdenItemUpdate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)
 ):
     oi = db.query(OrdenItem).filter(OrdenItem.id == id).first()
     if not oi:
@@ -119,7 +139,7 @@ def actualizar_orden(
 
 
 @router.delete("/{id}", status_code=status.HTTP_204_NO_CONTENT)
-def eliminar_orden(id: UUID, db: Session = Depends(get_db)):
+def eliminar_orden(id: UUID, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     oi = db.query(OrdenItem).filter(OrdenItem.id == id).first()
     if not oi:
         raise HTTPException(
@@ -141,6 +161,7 @@ def agregar_comisionista(
     id: UUID,
     body: ComisionistaAsignacionBody,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     oi = db.query(OrdenItem).filter(OrdenItem.id == id).first()
     if not oi:
@@ -179,7 +200,7 @@ def agregar_comisionista(
     "/{id}/comisionistas/{comisionista_id}", status_code=status.HTTP_204_NO_CONTENT
 )
 def quitar_comisionista(
-    id: UUID, comisionista_id: UUID, db: Session = Depends(get_db)
+    id: UUID, comisionista_id: UUID, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)
 ):
     asignacion = (
         db.query(Asignacion)
@@ -206,7 +227,7 @@ def quitar_comisionista(
 
 
 @router.post("/asignar-global")
-def asignar_global(body: AsignarGlobalBody, db: Session = Depends(get_db)):
+def asignar_global(body: AsignarGlobalBody, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     ordenes = (
         db.query(OrdenItem)
         .filter(OrdenItem.id.in_(body.orden_ids))

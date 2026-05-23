@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import {
   BarChart,
   Bar,
@@ -25,7 +26,8 @@ import {
   UserCheck,
 } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
-import { OrdenItem, Comisionista } from '@/types';
+import { OrdenItem } from '@/types';
+import { fetchOrdenes } from '@/lib/api';
 import {
   filtrarItems,
   agruparPorFinca,
@@ -94,11 +96,7 @@ function MultiSelectFilter({
 }
 
 export function ReportesTab() {
-  const { comisionistas, ordenItems, liquidaciones } = useApp();
-
-  const allItems = useMemo(() => {
-    return [...liquidaciones.flatMap(l => l.items), ...ordenItems];
-  }, [liquidaciones, ordenItems]);
+  const { comisionistas } = useApp();
 
   const trimestre = useMemo(() => getTrimestreActual(), []);
 
@@ -108,14 +106,26 @@ export function ReportesTab() {
   const [productosSel, setProductosSel] = useState<string[]>([]);
   const [comisionistasSel, setComisionistasSel] = useState<string[]>([]);
 
+  const { data: ordenesData } = useQuery({
+    queryKey: ['ordenes', 'reportes', fechaDesde, fechaHasta, fincasSel[0], productosSel[0]],
+    queryFn: () => fetchOrdenes({
+      fechaDesde: fechaDesde || undefined,
+      fechaHasta: fechaHasta || undefined,
+      finca: fincasSel[0] || undefined,
+      producto: productosSel[0] || undefined,
+    }),
+  });
+
+  const ordenItems: OrdenItem[] = ordenesData ?? [];
+
   const fincasUnicas = useMemo(() =>
-    Array.from(new Set(allItems.map(i => i.finca).filter(Boolean))).sort(),
-    [allItems]
+    Array.from(new Set(ordenItems.map(i => i.finca).filter(Boolean))).sort(),
+    [ordenItems]
   );
 
   const productosUnicos = useMemo(() =>
-    Array.from(new Set(allItems.map(i => i.producto).filter(Boolean))).sort(),
-    [allItems]
+    Array.from(new Set(ordenItems.map(i => i.producto).filter(Boolean))).sort(),
+    [ordenItems]
   );
 
   const comisionistaNombreAId = (nombre: string) => comisionistas.find(c => c.nombre === nombre)?.id || '';
@@ -130,8 +140,8 @@ export function ReportesTab() {
   }), [fechaDesde, fechaHasta, fincasSel, productosSel, comisionistasSel, comisionistas]);
 
   const itemsFiltrados = useMemo(() =>
-    filtrarItems(allItems, filtros),
-    [allItems, filtros]
+    filtrarItems(ordenItems, filtros),
+    [ordenItems, filtros]
   );
 
   const resumenFincas = useMemo(() => agruparPorFinca(itemsFiltrados, comisionistas), [itemsFiltrados, comisionistas]);
