@@ -1,7 +1,7 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 import { toCamelCase, toSnakeCase } from './transform';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+const API_BASE_URL = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000').replace(/\/+$/, '');
 
 export const api = axios.create({
   baseURL: API_BASE_URL,
@@ -119,12 +119,12 @@ export async function fetchMe() {
 
 // Comisionistas
 export async function fetchComisionistas() {
-  const res = await api.get('/api/v1/comisionistas');
+  const res = await api.get('/api/v1/comisionistas/');
   return toCamelCase(res.data);
 }
 
 export async function createComisionista(data: any) {
-  const res = await api.post('/api/v1/comisionistas', toSnakeCase(data));
+  const res = await api.post('/api/v1/comisionistas/', toSnakeCase(data));
   return toCamelCase(res.data);
 }
 
@@ -139,12 +139,12 @@ export async function deleteComisionista(id: string) {
 
 // Ordenes
 export async function fetchOrdenes(params?: { finca?: string; producto?: string; fechaDesde?: string; fechaHasta?: string; clienteId?: string }) {
-  const res = await api.get('/api/v1/ordenes', { params: toSnakeCase(params) });
+  const res = await api.get('/api/v1/ordenes/', { params: toSnakeCase(params) });
   return toCamelCase(res.data);
 }
 
 export async function createOrdenes(items: any[]) {
-  const res = await api.post('/api/v1/ordenes', toSnakeCase(items));
+  const res = await api.post('/api/v1/ordenes/', toSnakeCase(items));
   return toCamelCase(res.data);
 }
 
@@ -180,7 +180,7 @@ export async function limpiarOrdenes() {
 
 // Liquidaciones
 export async function fetchLiquidaciones() {
-  const res = await api.get('/api/v1/liquidaciones');
+  const res = await api.get('/api/v1/liquidaciones/');
   return toCamelCase(res.data);
 }
 
@@ -190,7 +190,7 @@ export async function fetchLiquidacion(id: string) {
 }
 
 export async function createLiquidacion(data: any) {
-  const res = await api.post('/api/v1/liquidaciones', toSnakeCase(data));
+  const res = await api.post('/api/v1/liquidaciones/', toSnakeCase(data));
   return toCamelCase(res.data);
 }
 
@@ -255,12 +255,12 @@ export async function uploadImage(file: File) {
 
 // Clientes
 export async function fetchClientes() {
-  const res = await api.get('/api/v1/clientes');
+  const res = await api.get('/api/v1/clientes/');
   return toCamelCase(res.data);
 }
 
 export async function createCliente(data: any) {
-  const res = await api.post('/api/v1/clientes', toSnakeCase(data));
+  const res = await api.post('/api/v1/clientes/', toSnakeCase(data));
   return toCamelCase(res.data);
 }
 
@@ -275,12 +275,12 @@ export async function deleteCliente(id: string) {
 
 // Fincas
 export async function fetchFincas(clienteId: string) {
-  const res = await api.get(`/api/v1/clientes/${clienteId}/fincas`);
+  const res = await api.get(`/api/v1/clientes/${clienteId}/fincas/`);
   return toCamelCase(res.data);
 }
 
 export async function createFinca(clienteId: string, data: any) {
-  const res = await api.post(`/api/v1/clientes/${clienteId}/fincas`, toSnakeCase(data));
+  const res = await api.post(`/api/v1/clientes/${clienteId}/fincas/`, toSnakeCase(data));
   return toCamelCase(res.data);
 }
 
@@ -295,12 +295,12 @@ export async function deleteFinca(clienteId: string, id: string) {
 
 // Productos
 export async function fetchProductos() {
-  const res = await api.get('/api/v1/productos');
+  const res = await api.get('/api/v1/productos/');
   return toCamelCase(res.data);
 }
 
 export async function createProducto(data: any) {
-  const res = await api.post('/api/v1/productos', toSnakeCase(data));
+  const res = await api.post('/api/v1/productos/', toSnakeCase(data));
   return toCamelCase(res.data);
 }
 
@@ -315,12 +315,12 @@ export async function deleteProducto(id: string) {
 
 // Tarifas Cliente Producto
 export async function fetchTarifasClienteProducto(params?: { comisionistaId?: string; clienteId?: string; productoId?: string }) {
-  const res = await api.get('/api/v1/tarifas-cliente-producto', { params: toSnakeCase(params) });
+  const res = await api.get('/api/v1/tarifas-cliente-producto/', { params: toSnakeCase(params) });
   return toCamelCase(res.data);
 }
 
 export async function createTarifaClienteProducto(data: any) {
-  const res = await api.post('/api/v1/tarifas-cliente-producto', toSnakeCase(data));
+  const res = await api.post('/api/v1/tarifas-cliente-producto/', toSnakeCase(data));
   return toCamelCase(res.data);
 }
 
