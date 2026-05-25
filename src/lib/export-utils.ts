@@ -1,7 +1,7 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
-import { OrdenItem, Comisionista } from '@/types';
+import { OrdenItem, Comisionista, TarifaClienteProducto } from '@/types';
 
 export function calcularComisionPorTarifa(item: OrdenItem, tarifa: { tipo: 'porcentaje' | 'fijo_kg'; valor: number }): number {
   if (tarifa.tipo === 'porcentaje') {
@@ -15,6 +15,55 @@ export function calcularComisionPorTarifa(item: OrdenItem, tarifa: { tipo: 'porc
     cantidadKg = item.cantidad;
   }
   return cantidadKg * tarifa.valor;
+}
+
+export function calcularComisionPorTarifaEspecifica(
+  item: OrdenItem,
+  tarifa: TarifaClienteProducto
+): number {
+  if (tarifa.tipo === 'porcentaje') {
+    const retencion = item.cliente?.retencionPorcentaje ?? 1.75;
+    const base = item.total * (1 - retencion / 100);
+    return base * (tarifa.valor / 100);
+  } else if (tarifa.tipo === 'fijo_kg') {
+    const producto = item.productoRel;
+    let cantidad = item.cantidad;
+    if (item.unidad === 'libras') {
+      cantidad = item.cantidad * 0.453592;
+    }
+    if (producto?.unidadComision === 'tacho') {
+      cantidad = item.cantidad * (producto.tachoKilos || 15);
+    }
+    // litro: asume que cantidad ya está en litros
+    return cantidad * tarifa.valor;
+  }
+  return 0;
+}
+
+export function encontrarTarifaEspecifica(
+  item: OrdenItem,
+  comisionistaId: string,
+  tarifas: TarifaClienteProducto[]
+): TarifaClienteProducto | undefined {
+  // 1. Buscar con finca
+  let t = tarifas.find(
+    (ta) =>
+      ta.comisionistaId === comisionistaId &&
+      ta.clienteId === item.clienteId &&
+      ta.productoId === item.productoId &&
+      ta.fincaId === item.fincaId
+  );
+  // 2. Buscar sin finca
+  if (!t && item.fincaId) {
+    t = tarifas.find(
+      (ta) =>
+        ta.comisionistaId === comisionistaId &&
+        ta.clienteId === item.clienteId &&
+        ta.productoId === item.productoId &&
+        !ta.fincaId
+    );
+  }
+  return t;
 }
 
 export function calcularComision(item: OrdenItem, comisionista: Comisionista | undefined): number {
@@ -36,8 +85,9 @@ export function getNombresComisionistas(item: OrdenItem, comisionistas: Comision
     .join(', ');
 }
 
-export function getTarifaLabel(tarifa: { tipo: 'porcentaje' | 'fijo_kg'; valor: number }): string {
-  return tarifa.tipo === 'porcentaje' ? `${tarifa.valor}%` : `$${tarifa.valor.toFixed(3)}/kg`;
+export function getTarifaLabel(tarifa: { tipo: 'porcentaje' | 'fijo_kg'; valor: number | string }): string {
+  const valor = typeof tarifa.valor === 'string' ? parseFloat(tarifa.valor) : tarifa.valor;
+  return tarifa.tipo === 'porcentaje' ? `${valor}%` : `$${valor.toFixed(3)}/kg`;
 }
 
 export function getTarifasLabel(comisionista: Comisionista): string {
@@ -377,17 +427,19 @@ export interface FiltroReporte {
   fincas: string[];
   productos: string[];
   comisionistas: string[];
+  clientes: string[];
 }
 
 export function filtrarItems(items: OrdenItem[], filtros: FiltroReporte): OrdenItem[] {
   return items.filter(item => {
     const fechaOk = (!filtros.fechaDesde || item.fecha >= filtros.fechaDesde) &&
                     (!filtros.fechaHasta || item.fecha <= filtros.fechaHasta);
-    const fincaOk = filtros.fincas.length === 0 || filtros.fincas.includes(item.finca);
-    const productoOk = filtros.productos.length === 0 || filtros.productos.includes(item.producto);
+    const fincaOk = filtros.fincas.length === 0 || filtros.fincas.includes(item.finca) || (item.fincaRel?.nombre ? filtros.fincas.includes(item.fincaRel.nombre) : false);
+    const productoOk = filtros.productos.length === 0 || filtros.productos.includes(item.producto) || (item.productoRel?.nombre ? filtros.productos.includes(item.productoRel.nombre) : false);
     const comisionistaOk = filtros.comisionistas.length === 0 ||
       item.comisionistas.some(a => filtros.comisionistas.includes(a.comisionistaId));
-    return fechaOk && fincaOk && productoOk && comisionistaOk;
+    const clienteOk = filtros.clientes.length === 0 || (item.cliente?.nombre ? filtros.clientes.includes(item.cliente.nombre) : false) || filtros.clientes.includes(item.finca);
+    return fechaOk && fincaOk && productoOk && comisionistaOk && clienteOk;
   });
 }
 
@@ -477,6 +529,32 @@ export function agruparPorComisionista(items: OrdenItem[], comisionistas: Comisi
     });
   });
   return Array.from(map.values()).sort((a, b) => b.totalComision - a.totalComision);
+}
+
+export interface ResumenPorCliente {
+  nombre: string;
+  ordenes: number;
+  cantidad: number;
+  total: number;
+  comision: number;
+}
+
+export function agruparPorCliente(items: OrdenItem[], comisionistas: Comisionista[]): ResumenPorCliente[] {
+  const map = new Map<string, ResumenPorCliente>();
+  items.forEach(item => {
+    const cliente = item.cliente?.nombre || item.finca || 'Sin cliente';
+    const comision = calcularComisionTotalItem(item, comisionistas);
+    const existente = map.get(cliente);
+    if (existente) {
+      existente.ordenes += 1;
+      existente.cantidad += item.cantidad;
+      existente.total += item.total;
+      existente.comision += comision;
+    } else {
+      map.set(cliente, { nombre: cliente, ordenes: 1, cantidad: item.cantidad, total: item.total, comision });
+    }
+  });
+  return Array.from(map.values()).sort((a, b) => b.total - a.total);
 }
 
 export function getTrimestreActual(): { inicio: string; fin: string } {

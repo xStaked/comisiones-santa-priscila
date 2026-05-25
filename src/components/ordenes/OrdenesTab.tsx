@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { Plus, Upload, Trash2, Pencil, UserCheck, Calculator, FileUp, Check, X, Sparkles, Search, ChevronDown } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
-import { OrdenItem } from '@/types';
+import { OrdenItem, TarifaClienteProducto } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -18,8 +18,10 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { toast } from 'sonner';
-import { uploadPDF, uploadImage } from '@/lib/api';
+import { uploadPDF, uploadImage, fetchFincas } from '@/lib/api';
 import { generarId } from '@/lib/id';
+import { useQuery } from '@tanstack/react-query';
+import { encontrarTarifaEspecifica } from '@/lib/export-utils';
 
 function MultiSelectComisionistas({
   comisionistas,
@@ -92,8 +94,32 @@ function MultiSelectComisionistas({
   );
 }
 
+function EditFincaSelect({ clienteId, value, onChange }: { clienteId: string; value: string; onChange: (id: string, nombre: string) => void }) {
+  const { data: fincas } = useQuery({
+    queryKey: ['fincas', clienteId],
+    queryFn: () => fetchFincas(clienteId),
+    enabled: !!clienteId,
+  });
+  return (
+    <Select value={value} onValueChange={(v) => {
+      const id = v ?? '';
+      const f = (fincas || []).find((x: { id: string; nombre: string }) => x.id === id);
+      onChange(id, f?.nombre || '');
+    }}>
+      <SelectTrigger className="w-full rounded-xl border-slate-200 bg-white h-10 text-sm text-slate-900">
+        <SelectValue placeholder="Seleccionar finca" />
+      </SelectTrigger>
+      <SelectContent>
+        {(fincas || []).map((f: { id: string; nombre: string }) => (
+          <SelectItem key={f.id} value={f.id}>{f.nombre}</SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
 export function OrdenesTab() {
-  const { comisionistas, ordenItems, addOrdenItems, updateOrdenItem, deleteOrdenItem, clearOrdenItems, assignComisionistasGlobal } = useApp();
+  const { comisionistas, ordenItems, addOrdenItems, updateOrdenItem, deleteOrdenItem, clearOrdenItems, assignComisionistasGlobal, clientes, productos, tarifasClienteProducto } = useApp();
   const [activeForm, setActiveForm] = useState<'manual' | 'pdf'>('manual');
   const [globalComisionistaIds, setGlobalComisionistaIds] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -118,6 +144,16 @@ export function OrdenesTab() {
     unidad: 'kg',
     precioUnitario: '',
     comisionistaIds: [] as string[],
+    clienteId: '',
+    fincaId: '',
+    productoId: '',
+  });
+
+  const selectedCliente = clientes.find(c => c.id === form.clienteId);
+  const { data: fincasCliente } = useQuery({
+    queryKey: ['fincas', form.clienteId],
+    queryFn: () => fetchFincas(form.clienteId),
+    enabled: !!form.clienteId && selectedCliente?.tipo === 'grupo',
   });
 
   useEffect(() => {
@@ -134,8 +170,11 @@ export function OrdenesTab() {
     const q = search.toLowerCase();
     return ordenItems.filter(item =>
       item.producto.toLowerCase().includes(q) ||
+      item.productoRel?.nombre.toLowerCase().includes(q) ||
       item.numeroOrden.toLowerCase().includes(q) ||
       item.finca.toLowerCase().includes(q) ||
+      item.fincaRel?.nombre.toLowerCase().includes(q) ||
+      item.cliente?.nombre.toLowerCase().includes(q) ||
       item.comisionistas.some(a => comisionistas.find(c => c.id === a.comisionistaId)?.nombre.toLowerCase().includes(q))
     );
   }, [ordenItems, search, comisionistas]);
@@ -150,6 +189,9 @@ export function OrdenesTab() {
       unidad: 'kg',
       precioUnitario: '',
       comisionistaIds: [],
+      clienteId: '',
+      fincaId: '',
+      productoId: '',
     });
   };
 
@@ -173,10 +215,21 @@ export function OrdenesTab() {
       precioUnitario: precio,
       total,
       comisionistas: form.comisionistaIds.map(id => ({ comisionistaId: id })),
+      clienteId: form.clienteId || undefined,
+      productoId: form.productoId || undefined,
+      fincaId: form.fincaId || undefined,
     };
     addOrdenItems([item]);
     resetForm();
   };
+
+  function getNombreProducto(productoId: string) {
+    return productos.find(p => p.id === productoId)?.nombre || '';
+  }
+
+  function getNombreFinca(fincaId: string) {
+    return fincasCliente?.find((f: { id: string; nombre: string }) => f.id === fincaId)?.nombre || '';
+  }
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -281,11 +334,70 @@ export function OrdenesTab() {
                 <Input placeholder="#001" value={form.numeroOrden} onChange={e => setForm({...form, numeroOrden: e.target.value})} className="bg-white border-slate-200 rounded-xl" />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs text-slate-500">Finca / Sector</Label>
-                <Input placeholder="Finca A" value={form.finca} onChange={e => setForm({...form, finca: e.target.value})} className="bg-white border-slate-200 rounded-xl" />
+                <Label className="text-xs text-slate-500">Cliente</Label>
+                <Select value={form.clienteId} onValueChange={(value) => {
+                  const cliente = clientes.find(c => c.id === value);
+                  setForm({
+                    ...form,
+                    clienteId: value || '',
+                    fincaId: '',
+                    finca: cliente?.tipo === 'individual' ? cliente.nombre : form.finca,
+                  });
+                }}>
+                  <SelectTrigger className="w-full rounded-xl border-slate-200 bg-white h-10 text-sm text-slate-900">
+                    <SelectValue placeholder="Seleccionar cliente" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {clientes.map(c => (
+                      <SelectItem key={c.id} value={c.id}>{c.nombre}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
+              {selectedCliente?.tipo === 'grupo' && (
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-slate-500">Finca</Label>
+                  <Select value={form.fincaId} onValueChange={(value) => {
+                    const v = value ?? '';
+                    const nombre = getNombreFinca(v);
+                    setForm({ ...form, fincaId: v, finca: nombre || form.finca });
+                  }}>
+                    <SelectTrigger className="w-full rounded-xl border-slate-200 bg-white h-10 text-sm text-slate-900">
+                      <SelectValue placeholder="Seleccionar finca" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(fincasCliente || []).map((f: { id: string; nombre: string }) => (
+                        <SelectItem key={f.id} value={f.id}>{f.nombre}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+              {selectedCliente?.tipo !== 'grupo' && (
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-slate-500">Finca / Sector</Label>
+                  <Input placeholder="Finca A" value={form.finca} onChange={e => setForm({...form, finca: e.target.value})} className="bg-white border-slate-200 rounded-xl" />
+                </div>
+              )}
               <div className="space-y-1.5">
                 <Label className="text-xs text-slate-500">Producto *</Label>
+                <Select value={form.productoId} onValueChange={(value) => {
+                  const v = value ?? '';
+                  const nombre = getNombreProducto(v);
+                  setForm({ ...form, productoId: v, producto: nombre || form.producto });
+                }}>
+                  <SelectTrigger className="w-full rounded-xl border-slate-200 bg-white h-10 text-sm text-slate-900">
+                    <SelectValue placeholder="Seleccionar producto" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {productos.map(p => (
+                      <SelectItem key={p.id} value={p.id}>{p.nombre}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs text-slate-500">Producto (texto libre)</Label>
                 <Input placeholder="Producto" value={form.producto} onChange={e => setForm({...form, producto: e.target.value})} className="bg-white border-slate-200 rounded-xl" />
               </div>
               <div className="space-y-1.5">
@@ -475,6 +587,19 @@ export function OrdenesTab() {
                       return;
                     }
                     assignComisionistasGlobal(globalComisionistaIds);
+                    // Validar tarifas específicas y mostrar warning si faltan
+                    const sinTarifa: string[] = [];
+                    ordenItems.forEach(item => {
+                      globalComisionistaIds.forEach(comId => {
+                        if (item.clienteId && item.productoId && !encontrarTarifaEspecifica(item, comId, tarifasClienteProducto)) {
+                          const com = comisionistas.find(c => c.id === comId);
+                          sinTarifa.push(`${com?.nombre || comId} → ${item.productoRel?.nombre || item.producto}`);
+                        }
+                      });
+                    });
+                    if (sinTarifa.length > 0) {
+                      toast.warning(`Algunas asignaciones carecen de tarifa específica: ${sinTarifa.slice(0, 3).join(', ')}${sinTarifa.length > 3 ? '...' : ''}`);
+                    }
                   }}
                   className="border-slate-200 rounded-lg shrink-0"
                 >
@@ -505,6 +630,7 @@ export function OrdenesTab() {
                   <tr>
                     <th className="text-left px-4 py-3 font-medium text-slate-600">Fecha</th>
                     <th className="text-left px-4 py-3 font-medium text-slate-600">Factura</th>
+                    <th className="text-left px-4 py-3 font-medium text-slate-600">Cliente</th>
                     <th className="text-left px-4 py-3 font-medium text-slate-600">Finca</th>
                     <th className="text-left px-4 py-3 font-medium text-slate-600">Producto</th>
                     <th className="text-right px-4 py-3 font-medium text-slate-600">Cantidad</th>
@@ -519,8 +645,9 @@ export function OrdenesTab() {
                     <tr key={item.id} className="hover:bg-slate-50/50 transition-colors">
                       <td className="px-4 py-3 text-slate-500">{item.fecha}</td>
                       <td className="px-4 py-3 text-slate-900 font-medium">{item.numeroOrden}</td>
-                      <td className="px-4 py-3 text-slate-500">{item.finca}</td>
-                      <td className="px-4 py-3 text-slate-700">{item.producto}</td>
+                      <td className="px-4 py-3 text-slate-500">{item.cliente?.nombre || '-'}</td>
+                      <td className="px-4 py-3 text-slate-500">{item.fincaRel?.nombre || item.finca}</td>
+                      <td className="px-4 py-3 text-slate-700">{item.productoRel?.nombre || item.producto}</td>
                       <td className="px-4 py-3 text-right text-slate-700">
                         {item.cantidad.toLocaleString('es-ES')} <span className="text-xs text-slate-400">{item.unidad}</span>
                       </td>
@@ -531,8 +658,9 @@ export function OrdenesTab() {
                           <div className="flex flex-wrap gap-1">
                             {item.comisionistas.map(a => {
                               const com = comisionistas.find(c => c.id === a.comisionistaId);
+                              const tieneTarifa = item.clienteId && item.productoId && encontrarTarifaEspecifica(item, a.comisionistaId, tarifasClienteProducto);
                               return com ? (
-                                <Badge key={a.comisionistaId} variant="secondary" className="text-xs bg-slate-100 text-slate-700 border-0">
+                                <Badge key={a.comisionistaId} variant="secondary" className={`text-xs border-0 ${tieneTarifa ? 'bg-slate-100 text-slate-700' : 'bg-amber-100 text-amber-700'}`} title={tieneTarifa ? '' : 'Sin tarifa específica configurada'}>
                                   {com.nombre}
                                 </Badge>
                               ) : null;
@@ -580,7 +708,7 @@ export function OrdenesTab() {
       )}
 
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent className="sm:max-w-md bg-white border-slate-200">
+        <DialogContent className="sm:max-w-lg bg-white border-slate-200">
           <DialogHeader>
             <DialogTitle>Editar Registro</DialogTitle>
           </DialogHeader>
@@ -595,11 +723,60 @@ export function OrdenesTab() {
                 <Input value={editForm.numeroOrden || ''} onChange={e => setEditForm({...editForm, numeroOrden: e.target.value})} className="bg-white border-slate-200 rounded-xl" />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs text-slate-500">Finca</Label>
-                <Input value={editForm.finca || ''} onChange={e => setEditForm({...editForm, finca: e.target.value})} className="bg-white border-slate-200 rounded-xl" />
+                <Label className="text-xs text-slate-500">Cliente</Label>
+                <Select value={editForm.clienteId || ''} onValueChange={(value) => {
+                  const cliente = clientes.find(c => c.id === value);
+                  setEditForm({
+                    ...editForm,
+                    clienteId: value || undefined,
+                    fincaId: undefined,
+                    finca: cliente?.tipo === 'individual' ? cliente.nombre : editForm.finca,
+                  });
+                }}>
+                  <SelectTrigger className="w-full rounded-xl border-slate-200 bg-white h-10 text-sm text-slate-900">
+                    <SelectValue placeholder="Seleccionar cliente" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {clientes.map(c => (
+                      <SelectItem key={c.id} value={c.id}>{c.nombre}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
+              {(clientes.find(c => c.id === editForm.clienteId)?.tipo === 'grupo') && (
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-slate-500">Finca</Label>
+                  <EditFincaSelect
+                    clienteId={editForm.clienteId || ''}
+                    value={editForm.fincaId || ''}
+                    onChange={(value, nombre) => setEditForm({ ...editForm, fincaId: value || undefined, finca: nombre || editForm.finca })}
+                  />
+                </div>
+              )}
+              {!(clientes.find(c => c.id === editForm.clienteId)?.tipo === 'grupo') && (
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-slate-500">Finca / Sector</Label>
+                  <Input value={editForm.finca || ''} onChange={e => setEditForm({...editForm, finca: e.target.value})} className="bg-white border-slate-200 rounded-xl" />
+                </div>
+              )}
               <div className="space-y-1.5">
                 <Label className="text-xs text-slate-500">Producto</Label>
+                <Select value={editForm.productoId || ''} onValueChange={(value) => {
+                  const nombre = productos.find(p => p.id === value)?.nombre;
+                  setEditForm({ ...editForm, productoId: value || undefined, producto: nombre || editForm.producto });
+                }}>
+                  <SelectTrigger className="w-full rounded-xl border-slate-200 bg-white h-10 text-sm text-slate-900">
+                    <SelectValue placeholder="Seleccionar producto" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {productos.map(p => (
+                      <SelectItem key={p.id} value={p.id}>{p.nombre}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs text-slate-500">Producto (texto libre)</Label>
                 <Input value={editForm.producto || ''} onChange={e => setEditForm({...editForm, producto: e.target.value})} className="bg-white border-slate-200 rounded-xl" />
               </div>
               <div className="space-y-1.5">

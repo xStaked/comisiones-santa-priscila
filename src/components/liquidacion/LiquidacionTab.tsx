@@ -3,7 +3,7 @@
 import { useState, useMemo } from 'react';
 import { FileText, FileSpreadsheet, Save, Calculator, Filter } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
-import { exportarPDF, exportarExcel, calcularComision, calcularComisionTotalItem, getTarifasLabel } from '@/lib/export-utils';
+import { exportarPDF, exportarExcel, calcularComision, calcularComisionTotalItem, getTarifasLabel, calcularComisionPorTarifaEspecifica, encontrarTarifaEspecifica } from '@/lib/export-utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -20,7 +20,7 @@ import {
 import { toast } from 'sonner';
 
 export function LiquidacionTab() {
-  const { comisionistas, ordenItems, saveLiquidacion } = useApp();
+  const { comisionistas, ordenItems, saveLiquidacion, tarifasClienteProducto } = useApp();
   const [filterComisionista, setFilterComisionista] = useState('');
   const [nombreLiquidacion, setNombreLiquidacion] = useState('');
   const [previewOpen, setPreviewOpen] = useState(false);
@@ -37,13 +37,24 @@ export function LiquidacionTab() {
 
   const itemsConComision = useMemo(() => {
     return filteredItems.map(item => {
-      const comisionTotal = calcularComisionTotalItem(item, comisionistas);
       const comisionistasAsignados = item.comisionistas
         .map(a => comisionistaMap.get(a.comisionistaId))
         .filter(Boolean);
+      // Usar tarifa específica si existe, fallback a tarifa global
+      let comisionTotal = 0;
+      item.comisionistas.forEach(a => {
+        const com = comisionistaMap.get(a.comisionistaId);
+        if (!com) return;
+        const tarifaEspecifica = encontrarTarifaEspecifica(item, a.comisionistaId, tarifasClienteProducto);
+        if (tarifaEspecifica) {
+          comisionTotal += calcularComisionPorTarifaEspecifica(item, tarifaEspecifica);
+        } else {
+          comisionTotal += calcularComision(item, com);
+        }
+      });
       return { ...item, comisionTotal, comisionistasAsignados };
     });
-  }, [filteredItems, comisionistas, comisionistaMap]);
+  }, [filteredItems, comisionistas, comisionistaMap, tarifasClienteProducto]);
 
   const totalComision = itemsConComision.reduce((s, i) => s + i.comisionTotal, 0);
   const totalCantidad = itemsConComision.reduce((s, i) => s + i.cantidad, 0);
@@ -186,6 +197,7 @@ export function LiquidacionTab() {
                 <tr>
                   <th className="text-left px-4 py-3 font-medium">Fecha</th>
                   <th className="text-left px-4 py-3 font-medium">Factura</th>
+                  <th className="text-left px-4 py-3 font-medium">Cliente</th>
                   <th className="text-left px-4 py-3 font-medium">Finca</th>
                   <th className="text-left px-4 py-3 font-medium">Producto</th>
                   <th className="text-right px-4 py-3 font-medium">Cantidad</th>
@@ -197,7 +209,7 @@ export function LiquidacionTab() {
               <tbody className="divide-y divide-slate-100">
                 {itemsConComision.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="px-4 py-8 text-center text-slate-500">
+                    <td colSpan={9} className="px-4 py-8 text-center text-slate-500">
                       No hay registros con el filtro seleccionado
                     </td>
                   </tr>
@@ -206,8 +218,9 @@ export function LiquidacionTab() {
                     <tr key={item.id} className="hover:bg-slate-50/50 transition-colors">
                       <td className="px-4 py-3 text-slate-500">{item.fecha}</td>
                       <td className="px-4 py-3 text-slate-900 font-medium">{item.numeroOrden}</td>
-                      <td className="px-4 py-3 text-slate-500">{item.finca}</td>
-                      <td className="px-4 py-3 text-slate-700">{item.producto}</td>
+                      <td className="px-4 py-3 text-slate-500">{item.cliente?.nombre || '-'}</td>
+                      <td className="px-4 py-3 text-slate-500">{item.fincaRel?.nombre || item.finca}</td>
+                      <td className="px-4 py-3 text-slate-700">{item.productoRel?.nombre || item.producto}</td>
                       <td className="px-4 py-3 text-right text-slate-700">
                         {item.cantidad.toLocaleString('es-ES')} <span className="text-xs text-slate-400">{item.unidad}</span>
                       </td>
@@ -234,7 +247,7 @@ export function LiquidacionTab() {
               </tbody>
               <tfoot className="bg-slate-50 border-t-2 border-slate-200">
                 <tr>
-                  <td colSpan={4} className="px-4 py-3 font-medium text-slate-700">Totales</td>
+                  <td colSpan={5} className="px-4 py-3 font-medium text-slate-700">Totales</td>
                   <td className="px-4 py-3 text-right font-bold text-slate-900 tabular-nums">
                     {totalCantidad.toLocaleString('es-ES')}
                   </td>

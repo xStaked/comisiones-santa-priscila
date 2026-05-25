@@ -158,7 +158,10 @@ export default function LiquidacionDetallePage() {
         } else {
           map.set(com.id, {
             nombre: com.nombre,
-            tarifas: com.tarifas.map(t => t.tipo === 'porcentaje' ? `${t.valor}%` : `$${t.valor.toFixed(3)}/kg`).join(' + '),
+            tarifas: com.tarifas.map(t => {
+              const valor = typeof t.valor === 'string' ? parseFloat(t.valor) : t.valor;
+              return t.tipo === 'porcentaje' ? `${valor}%` : `$${valor.toFixed(3)}/kg`;
+            }).join(' + '),
             ordenes: 1,
             totalComision: comision,
             totalOrden: item.total,

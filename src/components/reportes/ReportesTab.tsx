@@ -26,13 +26,14 @@ import {
   UserCheck,
 } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
-import { OrdenItem } from '@/types';
+import { OrdenItem, Cliente } from '@/types';
 import { fetchOrdenes } from '@/lib/api';
 import {
   filtrarItems,
   agruparPorFinca,
   agruparPorProducto,
   agruparPorComisionista,
+  agruparPorCliente,
   getTrimestreActual,
   exportarReportePDF,
   exportarReporteExcel,
@@ -96,7 +97,7 @@ function MultiSelectFilter({
 }
 
 export function ReportesTab() {
-  const { comisionistas } = useApp();
+  const { comisionistas, clientes } = useApp();
 
   const trimestre = useMemo(() => getTrimestreActual(), []);
 
@@ -105,26 +106,33 @@ export function ReportesTab() {
   const [fincasSel, setFincasSel] = useState<string[]>([]);
   const [productosSel, setProductosSel] = useState<string[]>([]);
   const [comisionistasSel, setComisionistasSel] = useState<string[]>([]);
+  const [clientesSel, setClientesSel] = useState<string[]>([]);
 
   const { data: ordenesData } = useQuery({
-    queryKey: ['ordenes', 'reportes', fechaDesde, fechaHasta, fincasSel[0], productosSel[0]],
+    queryKey: ['ordenes', 'reportes', fechaDesde, fechaHasta, fincasSel[0], productosSel[0], clientesSel[0]],
     queryFn: () => fetchOrdenes({
       fechaDesde: fechaDesde || undefined,
       fechaHasta: fechaHasta || undefined,
       finca: fincasSel[0] || undefined,
       producto: productosSel[0] || undefined,
+      clienteId: clientes.find((c: Cliente) => c.nombre === clientesSel[0])?.id || undefined,
     }),
   });
 
   const ordenItems: OrdenItem[] = ordenesData ?? [];
 
   const fincasUnicas = useMemo(() =>
-    Array.from(new Set(ordenItems.map(i => i.finca).filter(Boolean))).sort(),
+    Array.from(new Set(ordenItems.map(i => i.fincaRel?.nombre || i.finca).filter(Boolean))).sort(),
     [ordenItems]
   );
 
   const productosUnicos = useMemo(() =>
-    Array.from(new Set(ordenItems.map(i => i.producto).filter(Boolean))).sort(),
+    Array.from(new Set(ordenItems.map(i => i.productoRel?.nombre || i.producto).filter(Boolean))).sort(),
+    [ordenItems]
+  );
+
+  const clientesUnicos = useMemo(() =>
+    Array.from(new Set(ordenItems.map(i => i.cliente?.nombre).filter(Boolean) as string[])).sort(),
     [ordenItems]
   );
 
@@ -137,7 +145,8 @@ export function ReportesTab() {
     fincas: fincasSel,
     productos: productosSel,
     comisionistas: comisionistasSel.map(comisionistaNombreAId).filter(Boolean),
-  }), [fechaDesde, fechaHasta, fincasSel, productosSel, comisionistasSel, comisionistas]);
+    clientes: clientesSel,
+  }), [fechaDesde, fechaHasta, fincasSel, productosSel, comisionistasSel, clientesSel, comisionistas]);
 
   const itemsFiltrados = useMemo(() =>
     filtrarItems(ordenItems, filtros),
@@ -147,6 +156,7 @@ export function ReportesTab() {
   const resumenFincas = useMemo(() => agruparPorFinca(itemsFiltrados, comisionistas), [itemsFiltrados, comisionistas]);
   const resumenProductos = useMemo(() => agruparPorProducto(itemsFiltrados, comisionistas), [itemsFiltrados, comisionistas]);
   const resumenComisionistas = useMemo(() => agruparPorComisionista(itemsFiltrados, comisionistas), [itemsFiltrados, comisionistas]);
+  const resumenClientes = useMemo(() => agruparPorCliente(itemsFiltrados, comisionistas), [itemsFiltrados, comisionistas]);
 
   const totalOrden = itemsFiltrados.reduce((s, i) => s + i.total, 0);
   const totalComision = itemsFiltrados.reduce((s, i) => s + calcularComisionTotalItem(i, comisionistas), 0);
@@ -241,6 +251,7 @@ export function ReportesTab() {
                   setFincasSel([]);
                   setProductosSel([]);
                   setComisionistasSel([]);
+                  setClientesSel([]);
                 }}
                 className="rounded-lg border-slate-200 text-slate-600"
               >
@@ -249,7 +260,14 @@ export function ReportesTab() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mt-4">
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 mt-4">
+            <MultiSelectFilter
+              label="Clientes"
+              icon={Users}
+              options={clientesUnicos}
+              selected={clientesSel}
+              onChange={setClientesSel}
+            />
             <MultiSelectFilter
               label="Fincas"
               icon={MapPin}
@@ -376,6 +394,59 @@ export function ReportesTab() {
 
       {/* Tablas */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Por Cliente */}
+        <Card className="rounded-2xl border-slate-200 shadow-sm overflow-hidden">
+          <CardHeader className="pb-3">
+            <div className="flex items-center gap-2">
+              <Users className="h-4 w-4 text-slate-500" />
+              <CardTitle className="text-base text-slate-900">Por Cliente</CardTitle>
+            </div>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50 border-b border-slate-200">
+                  <tr>
+                    <th className="text-left px-4 py-2 font-medium text-slate-600">Cliente</th>
+                    <th className="text-right px-4 py-2 font-medium text-slate-600">Órdenes</th>
+                    <th className="text-right px-4 py-2 font-medium text-slate-600">Cantidad</th>
+                    <th className="text-right px-4 py-2 font-medium text-slate-600">Total</th>
+                    <th className="text-right px-4 py-2 font-medium text-slate-600">Comisión</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {resumenClientes.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="px-4 py-6 text-center text-slate-500">No hay datos</td>
+                    </tr>
+                  ) : (
+                    resumenClientes.map((c, idx) => (
+                      <tr key={idx} className="hover:bg-slate-50/50 transition-colors">
+                        <td className="px-4 py-2 text-slate-900 font-medium">{c.nombre}</td>
+                        <td className="px-4 py-2 text-right text-slate-700">{c.ordenes}</td>
+                        <td className="px-4 py-2 text-right text-slate-700">{c.cantidad.toLocaleString('es-ES')}</td>
+                        <td className="px-4 py-2 text-right text-slate-700">${c.total.toFixed(2)}</td>
+                        <td className="px-4 py-2 text-right font-semibold text-emerald-700">${c.comision.toFixed(2)}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+                {resumenClientes.length > 0 && (
+                  <tfoot className="bg-slate-50 border-t border-slate-200">
+                    <tr>
+                      <td className="px-4 py-2 font-medium text-slate-700">Totales</td>
+                      <td className="px-4 py-2 text-right font-bold text-slate-900">{resumenClientes.reduce((s, c) => s + c.ordenes, 0)}</td>
+                      <td className="px-4 py-2 text-right font-bold text-slate-900">{resumenClientes.reduce((s, c) => s + c.cantidad, 0).toLocaleString('es-ES')}</td>
+                      <td className="px-4 py-2 text-right font-bold text-slate-900">${resumenClientes.reduce((s, c) => s + c.total, 0).toFixed(2)}</td>
+                      <td className="px-4 py-2 text-right font-bold text-slate-900">${resumenClientes.reduce((s, c) => s + c.comision, 0).toFixed(2)}</td>
+                    </tr>
+                  </tfoot>
+                )}
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+
         {/* Por Finca */}
         <Card className="rounded-2xl border-slate-200 shadow-sm overflow-hidden">
           <CardHeader className="pb-3">

@@ -321,6 +321,8 @@ export function DashboardTab() {
                 <thead className="bg-slate-50 border-b border-slate-200">
                   <tr>
                     <th className="text-left px-4 py-3 font-medium text-slate-600">Factura</th>
+                    <th className="text-left px-4 py-3 font-medium text-slate-600">Cliente</th>
+                    <th className="text-left px-4 py-3 font-medium text-slate-600">Finca</th>
                     <th className="text-left px-4 py-3 font-medium text-slate-600">Producto</th>
                     <th className="text-right px-4 py-3 font-medium text-slate-600">Total</th>
                     <th className="text-left px-4 py-3 font-medium text-slate-600">Comisionistas</th>
@@ -329,7 +331,7 @@ export function DashboardTab() {
                 <tbody className="divide-y divide-slate-100">
                   {ordenesRecientes.length === 0 ? (
                     <tr>
-                      <td colSpan={4} className="px-4 py-8 text-center text-slate-500">
+                      <td colSpan={6} className="px-4 py-8 text-center text-slate-500">
                         No hay órdenes recientes
                       </td>
                     </tr>
@@ -338,7 +340,9 @@ export function DashboardTab() {
                       return (
                         <tr key={item.id} className="hover:bg-slate-50/50 transition-colors">
                           <td className="px-4 py-3 text-slate-900 font-medium">{item.numeroOrden}</td>
-                          <td className="px-4 py-3 text-slate-700 max-w-[200px] truncate">{item.producto}</td>
+                          <td className="px-4 py-3 text-slate-500">{item.cliente?.nombre || '-'}</td>
+                          <td className="px-4 py-3 text-slate-500">{item.fincaRel?.nombre || item.finca}</td>
+                          <td className="px-4 py-3 text-slate-700 max-w-[200px] truncate">{item.productoRel?.nombre || item.producto}</td>
                           <td className="px-4 py-3 text-right text-slate-700 tabular-nums">
                             ${item.total.toFixed(2)}
                           </td>
