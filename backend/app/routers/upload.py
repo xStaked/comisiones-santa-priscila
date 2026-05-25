@@ -2,11 +2,14 @@ from __future__ import annotations
 
 from datetime import date
 from decimal import Decimal
-from typing import Any
+from typing import Any, Optional
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
 
+from app.database import get_db
 from app.dependencies import get_current_user
 from app.models.user import User
 from app.services.ocr_extractor import extraer_orden_de_imagen
@@ -19,6 +22,8 @@ class ItemExtraido(BaseModel):
     fecha: date
     numeroOrden: str
     finca: str
+    fincaId: Optional[UUID] = None
+    clienteId: Optional[UUID] = None
     producto: str
     cantidad: Decimal
     unidad: str
@@ -38,6 +43,7 @@ class ExtraccionPDFResponse(BaseModel):
 @router.post("/pdf", response_model=ExtraccionPDFResponse)
 async def subir_pdf(
     file: UploadFile = File(...),
+    db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     if not file.filename or not file.filename.lower().endswith(".pdf"):
@@ -54,7 +60,7 @@ async def subir_pdf(
         )
 
     try:
-        resultado = extraer_orden_de_pdf(contenido, nombre_archivo=file.filename)
+        resultado = extraer_orden_de_pdf(contenido, nombre_archivo=file.filename, db=db)
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,

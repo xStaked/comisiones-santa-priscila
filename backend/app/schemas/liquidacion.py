@@ -33,6 +33,8 @@ class LiquidacionItemResponse(BaseModel):
     total_snapshot: Decimal
     sector_snapshot: Optional[str] = None
     estado_snapshot: str
+    cliente_snapshot: Optional[str] = None
+    retencion_porcentaje_snapshot: Optional[Decimal] = None
     tarifas: List[LiquidacionItemTarifaResponse]
 
     class Config:

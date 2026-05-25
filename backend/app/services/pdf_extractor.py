@@ -6,7 +6,7 @@ from typing import Any
 import fitz
 
 
-def extraer_orden_de_pdf(contenido: bytes, nombre_archivo: str = "") -> dict[str, Any]:
+def extraer_orden_de_pdf(contenido: bytes, nombre_archivo: str = "", db=None) -> dict[str, Any]:
     """Extrae ítems de una orden de compra en formato PDF específico de DINACUAMAR."""
     doc = fitz.open(stream=contenido, filetype="pdf")
     pagina = doc[0]
@@ -208,10 +208,22 @@ def extraer_orden_de_pdf(contenido: bytes, nombre_archivo: str = "") -> dict[str
             if finca_abajo:
                 finca = finca_abajo["nombre"]
 
+        # Intentar vincular finca con base de datos
+        finca_id = None
+        cliente_id = None
+        if db and finca and finca != "-":
+            from app.models.cliente import Finca
+            finca_db = db.query(Finca).filter(Finca.nombre.ilike(finca)).first()
+            if finca_db:
+                finca_id = str(finca_db.id)
+                cliente_id = str(finca_db.cliente_id)
+
         orden_items.append({
             "fecha": date.fromisoformat(fecha),
             "numeroOrden": numero_orden or f"OC-{fecha}",
             "finca": finca,
+            "fincaId": finca_id,
+            "clienteId": cliente_id,
             "producto": item["producto"],
             "cantidad": item["cantidad"],
             "unidad": inferir_unidad(item["descripcion"]),

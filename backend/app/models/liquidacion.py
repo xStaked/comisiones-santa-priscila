@@ -41,6 +41,10 @@ class LiquidacionItem(BaseModel):
     sector_snapshot = Column(String, nullable=True)
     estado_snapshot = Column(String, nullable=False)
 
+    # Nuevos snapshots de entidades normalizadas
+    cliente_snapshot = Column(String, nullable=True)
+    retencion_porcentaje_snapshot = Column(Numeric(5, 2), nullable=True)
+
     liquidacion = relationship("Liquidacion", back_populates="items")
     orden_item = relationship("OrdenItem", back_populates="liquidacion_items")
     tarifas = relationship(

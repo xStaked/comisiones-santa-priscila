@@ -5,7 +5,7 @@ from datetime import datetime
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.database import get_db
 from app.models.user import User
@@ -13,23 +13,29 @@ from app.models.comisionista import Comisionista, Tarifa, TipoTarifa
 from app.models.liquidacion import Liquidacion, LiquidacionItem, LiquidacionItemTarifa
 from app.models.orden import Asignacion, EstadoOrden, OrdenItem
 from app.dependencies import get_current_user
-from sqlalchemy.orm import selectinload
+from app.services.liquidacion import (
+    _buscar_tarifa_especifica,
+    _calcular_comision_con_tarifa,
+    _calcular_comision_especifica,
+)
 
 router = APIRouter()
 
 LIBRA_A_KG = Decimal("0.453592")
 
 
-def _calcular_comision(oi: OrdenItem, tarifa: Tarifa) -> Decimal:
-    if tarifa.tipo == TipoTarifa.porcentaje:
-        return oi.total * (tarifa.valor / Decimal("100"))
-    elif tarifa.tipo == TipoTarifa.fijo_kg:
-        if oi.unidad.lower() == "libras":
-            cantidad_kg = oi.cantidad * LIBRA_A_KG
-        else:
-            cantidad_kg = oi.cantidad
-        return cantidad_kg * tarifa.valor
-    return Decimal("0")
+def _calcular_comision_orden(
+    db: Session, oi: OrdenItem, comisionista: Comisionista
+) -> Decimal:
+    """Calcula comisión total para un comisionista en una orden (específica → global)."""
+    total = Decimal("0")
+    tarifa_esp = _buscar_tarifa_especifica(db, oi, comisionista.id)
+    if tarifa_esp:
+        total += _calcular_comision_especifica(db, oi, tarifa_esp)
+    else:
+        for tarifa in comisionista.tarifas:
+            total += _calcular_comision_con_tarifa(oi, tarifa)
+    return total
 
 
 @router.get("/resumen")
@@ -66,6 +72,12 @@ def por_finca(db: Session = Depends(get_db), current_user: User = Depends(get_cu
     ordenes = (
         db.query(OrdenItem)
         .filter(OrdenItem.estado == EstadoOrden.activo)
+        .options(
+            selectinload(OrdenItem.asignaciones).selectinload(Asignacion.comisionista),
+            selectinload(OrdenItem.cliente),
+            selectinload(OrdenItem.producto_obj),
+            selectinload(OrdenItem.finca_obj),
+        )
         .all()
     )
     grupos = defaultdict(
@@ -78,14 +90,14 @@ def por_finca(db: Session = Depends(get_db), current_user: User = Depends(get_cu
     )
 
     for oi in ordenes:
-        grupos[oi.finca]["ordenes"] += 1
-        grupos[oi.finca]["cantidad"] += oi.cantidad
-        grupos[oi.finca]["total"] += oi.total
+        clave = oi.finca_obj.nombre if oi.finca_obj else oi.finca
+        grupos[clave]["ordenes"] += 1
+        grupos[clave]["cantidad"] += oi.cantidad
+        grupos[clave]["total"] += oi.total
         for asignacion in oi.asignaciones:
-            for tarifa in asignacion.comisionista.tarifas:
-                grupos[oi.finca]["comision"] += _calcular_comision(
-                    oi, tarifa
-                )
+            grupos[clave]["comision"] += _calcular_comision_orden(
+                db, oi, asignacion.comisionista
+            )
 
     return [
         {
@@ -104,6 +116,12 @@ def por_producto(db: Session = Depends(get_db), current_user: User = Depends(get
     ordenes = (
         db.query(OrdenItem)
         .filter(OrdenItem.estado == EstadoOrden.activo)
+        .options(
+            selectinload(OrdenItem.asignaciones).selectinload(Asignacion.comisionista),
+            selectinload(OrdenItem.cliente),
+            selectinload(OrdenItem.producto_obj),
+            selectinload(OrdenItem.finca_obj),
+        )
         .all()
     )
     grupos = defaultdict(
@@ -116,14 +134,14 @@ def por_producto(db: Session = Depends(get_db), current_user: User = Depends(get
     )
 
     for oi in ordenes:
-        grupos[oi.producto]["ordenes"] += 1
-        grupos[oi.producto]["cantidad"] += oi.cantidad
-        grupos[oi.producto]["total"] += oi.total
+        clave = oi.producto_obj.nombre if oi.producto_obj else oi.producto
+        grupos[clave]["ordenes"] += 1
+        grupos[clave]["cantidad"] += oi.cantidad
+        grupos[clave]["total"] += oi.total
         for asignacion in oi.asignaciones:
-            for tarifa in asignacion.comisionista.tarifas:
-                grupos[oi.producto]["comision"] += _calcular_comision(
-                    oi, tarifa
-                )
+            grupos[clave]["comision"] += _calcular_comision_orden(
+                db, oi, asignacion.comisionista
+            )
 
     return [
         {
@@ -150,6 +168,11 @@ def por_comisionista(db: Session = Depends(get_db), current_user: User = Depends
                 Asignacion.comisionista_id == c.id,
                 OrdenItem.estado == EstadoOrden.activo,
             )
+            .options(
+                selectinload(OrdenItem.cliente),
+                selectinload(OrdenItem.producto_obj),
+                selectinload(OrdenItem.finca_obj),
+            )
             .all()
         )
 
@@ -157,8 +180,7 @@ def por_comisionista(db: Session = Depends(get_db), current_user: User = Depends
         total_orden = Decimal("0")
         for oi in ordenes:
             total_orden += oi.total
-            for tarifa in c.tarifas:
-                total_comision += _calcular_comision(oi, tarifa)
+            total_comision += _calcular_comision_orden(db, oi, c)
 
         resultados.append(
             {
@@ -175,6 +197,50 @@ def por_comisionista(db: Session = Depends(get_db), current_user: User = Depends
         )
 
     return resultados
+
+
+@router.get("/por-cliente")
+def por_cliente(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    ordenes = (
+        db.query(OrdenItem)
+        .filter(OrdenItem.estado == EstadoOrden.activo)
+        .options(
+            selectinload(OrdenItem.asignaciones).selectinload(Asignacion.comisionista),
+            selectinload(OrdenItem.cliente),
+            selectinload(OrdenItem.producto_obj),
+            selectinload(OrdenItem.finca_obj),
+        )
+        .all()
+    )
+    grupos = defaultdict(
+        lambda: {
+            "ordenes": 0,
+            "cantidad": Decimal("0"),
+            "total": Decimal("0"),
+            "comision": Decimal("0"),
+        }
+    )
+
+    for oi in ordenes:
+        clave = oi.cliente.nombre if oi.cliente else "Sin cliente"
+        grupos[clave]["ordenes"] += 1
+        grupos[clave]["cantidad"] += oi.cantidad
+        grupos[clave]["total"] += oi.total
+        for asignacion in oi.asignaciones:
+            grupos[clave]["comision"] += _calcular_comision_orden(
+                db, oi, asignacion.comisionista
+            )
+
+    return [
+        {
+            "cliente": cliente,
+            "ordenes": v["ordenes"],
+            "cantidad": float(v["cantidad"]),
+            "total": float(v["total"]),
+            "comision": float(v["comision"]),
+        }
+        for cliente, v in grupos.items()
+    ]
 
 
 @router.get("/global")
@@ -209,7 +275,12 @@ def global_stats(db: Session = Depends(get_db), current_user: User = Depends(get
     ordenes_activas = (
         db.query(OrdenItem)
         .filter(OrdenItem.estado == EstadoOrden.activo)
-        .options(selectinload(OrdenItem.asignaciones).selectinload(Asignacion.comisionista).selectinload(Comisionista.tarifas))
+        .options(
+            selectinload(OrdenItem.asignaciones).selectinload(Asignacion.comisionista),
+            selectinload(OrdenItem.cliente),
+            selectinload(OrdenItem.producto_obj),
+            selectinload(OrdenItem.finca_obj),
+        )
         .all()
     )
     total_comision_activas = Decimal("0")
@@ -217,8 +288,7 @@ def global_stats(db: Session = Depends(get_db), current_user: User = Depends(get
     for oi in ordenes_activas:
         total_vendido_activas += oi.total
         for asig in oi.asignaciones:
-            for tarifa in asig.comisionista.tarifas:
-                total_comision_activas += _calcular_comision(oi, tarifa)
+            total_comision_activas += _calcular_comision_orden(db, oi, asig.comisionista)
 
     return {
         "total_ordenes_activas": total_ordenes_activas,
@@ -256,7 +326,12 @@ def tendencias(db: Session = Depends(get_db), current_user: User = Depends(get_c
     ordenes_activas = (
         db.query(OrdenItem)
         .filter(OrdenItem.estado == EstadoOrden.activo)
-        .options(selectinload(OrdenItem.asignaciones).selectinload(Asignacion.comisionista).selectinload(Comisionista.tarifas))
+        .options(
+            selectinload(OrdenItem.asignaciones).selectinload(Asignacion.comisionista),
+            selectinload(OrdenItem.cliente),
+            selectinload(OrdenItem.producto_obj),
+            selectinload(OrdenItem.finca_obj),
+        )
         .all()
     )
     if ordenes_activas:
@@ -266,8 +341,7 @@ def tendencias(db: Session = Depends(get_db), current_user: User = Depends(get_c
             meses[mes_actual]["ventas"] += oi.total
             meses[mes_actual]["ordenes"] += 1
             for asig in oi.asignaciones:
-                for tarifa in asig.comisionista.tarifas:
-                    meses[mes_actual]["comision"] += _calcular_comision(oi, tarifa)
+                meses[mes_actual]["comision"] += _calcular_comision_orden(db, oi, asig.comisionista)
 
     return [
         {"mes": mes, "comision": float(v["comision"]), "ventas": float(v["ventas"]), "ordenes": v["ordenes"]}

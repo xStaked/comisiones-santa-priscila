@@ -38,7 +38,12 @@ def listar_ordenes(
 ):
     query = (
         db.query(OrdenItem)
-        .options(selectinload(OrdenItem.asignaciones))
+        .options(
+            selectinload(OrdenItem.asignaciones),
+            selectinload(OrdenItem.cliente),
+            selectinload(OrdenItem.producto_obj),
+            selectinload(OrdenItem.finca_obj),
+        )
         .filter(OrdenItem.estado != EstadoOrden.anulado)
     )
 
@@ -73,6 +78,9 @@ def crear_ordenes(items: List[OrdenItemCreate], db: Session = Depends(get_db), c
                 total=item.total,
                 sector=item.sector,
                 estado=EstadoOrden.activo,
+                cliente_id=item.cliente_id,
+                producto_id=item.producto_id,
+                finca_id=item.finca_id,
             )
             db.add(oi)
             db.flush()

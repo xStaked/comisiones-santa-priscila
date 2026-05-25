@@ -60,6 +60,27 @@ class OrdenItem(BaseModel):
         default=EstadoOrden.activo,
     )
 
+    # Relaciones con entidades normalizadas (nullable para compatibilidad)
+    cliente_id = Column(
+        Uuid,
+        ForeignKey("clientes.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    producto_id = Column(
+        Uuid,
+        ForeignKey("productos.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    finca_id = Column(
+        Uuid,
+        ForeignKey("fincas.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+
+    cliente = relationship("Cliente")
+    producto_obj = relationship("Producto")
+    finca_obj = relationship("Finca")
+
     asignaciones = relationship(
         "Asignacion", back_populates="orden_item", cascade="all, delete-orphan"
     )

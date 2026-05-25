@@ -5,7 +5,10 @@ from decimal import Decimal
 from typing import List, Optional
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, ConfigDict
+
+from app.schemas.cliente import ClienteResponse, FincaResponse
+from app.schemas.producto import ProductoResponse
 
 
 class AsignacionBase(BaseModel):
@@ -34,6 +37,9 @@ class OrdenItemBase(BaseModel):
 
 class OrdenItemCreate(OrdenItemBase):
     comisionista_ids: List[UUID] = []
+    cliente_id: Optional[UUID] = None
+    producto_id: Optional[UUID] = None
+    finca_id: Optional[UUID] = None
 
 
 class OrdenItemUpdate(BaseModel):
@@ -47,11 +53,19 @@ class OrdenItemUpdate(BaseModel):
     total: Optional[Decimal] = None
     sector: Optional[str] = None
     estado: Optional[str] = None
+    cliente_id: Optional[UUID] = None
+    producto_id: Optional[UUID] = None
+    finca_id: Optional[UUID] = None
 
 
 class OrdenItemResponse(OrdenItemBase):
     id: UUID
     comisionistas: List[AsignacionResponse]
+    cliente_id: Optional[UUID] = None
+    producto_id: Optional[UUID] = None
+    finca_id: Optional[UUID] = None
+    cliente: Optional[ClienteResponse] = None
+    producto_obj: Optional[ProductoResponse] = Field(default=None, alias="productoEntidad")
+    finca_obj: Optional[FincaResponse] = Field(default=None, alias="fincaEntidad")
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)

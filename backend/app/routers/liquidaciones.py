@@ -103,6 +103,8 @@ def detalle(id: UUID, db: Session = Depends(get_db), current_user: User = Depend
                 "total_snapshot": li.total_snapshot,
                 "sector_snapshot": li.sector_snapshot,
                 "estado_snapshot": li.estado_snapshot,
+                "cliente_snapshot": li.cliente_snapshot,
+                "retencion_porcentaje_snapshot": li.retencion_porcentaje_snapshot,
                 "tarifas": tarifas,
             }
         )
