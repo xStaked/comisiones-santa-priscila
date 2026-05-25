@@ -52,14 +52,10 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
-    container_name: dinacuamar-frontend
+        NEXT_PUBLIC_API_URL: "https://comisiones-backend-0kkxza-39ebb7-2-24-106-227.sslip.io"
     restart: unless-stopped
-    env_file:
-      - .env
     environment:
       NODE_ENV: production
-      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
     depends_on:
       - backend
     networks:
