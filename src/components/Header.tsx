@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { LayoutDashboard, Calculator, Users, FileText, Download, History, RotateCcw, BarChart3, LogOut, UserCircle } from 'lucide-react';
+import { LayoutDashboard, Calculator, Users, FileText, Download, History, RotateCcw, BarChart3, LogOut, UserCircle, Building2, Package, Percent } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useApp } from '@/context/AppContext';
 import { useAuth } from '@/context/AuthContext';
@@ -12,6 +12,9 @@ interface HeaderProps {
 
 const tabs = [
   { value: 'dashboard', label: 'Resumen', href: '/', icon: LayoutDashboard },
+  { value: 'clientes', label: 'Clientes', href: '/clientes', icon: Building2 },
+  { value: 'productos', label: 'Productos', href: '/productos', icon: Package },
+  { value: 'tarifas', label: 'Tarifas', href: '/tarifas', icon: Percent },
   { value: 'comisionistas', label: 'Comisionistas', href: '/comisionistas', icon: Users },
   { value: 'ordenes', label: 'Cargar Órdenes', href: '/ordenes', icon: FileText },
   { value: 'liquidacion', label: 'Liquidación', href: '/liquidacion', icon: Download },

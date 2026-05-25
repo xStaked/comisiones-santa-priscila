@@ -138,7 +138,7 @@ export async function deleteComisionista(id: string) {
 }
 
 // Ordenes
-export async function fetchOrdenes(params?: { finca?: string; producto?: string; fechaDesde?: string; fechaHasta?: string }) {
+export async function fetchOrdenes(params?: { finca?: string; producto?: string; fechaDesde?: string; fechaHasta?: string; clienteId?: string }) {
   const res = await api.get('/api/v1/ordenes', { params: toSnakeCase(params) });
   return toCamelCase(res.data);
 }
@@ -149,7 +149,7 @@ export async function createOrdenes(items: any[]) {
 }
 
 export async function updateOrden(id: string, data: any) {
-  const allowed = ['fecha', 'numeroOrden', 'finca', 'producto', 'cantidad', 'unidad', 'precioUnitario', 'total', 'sector', 'estado'];
+  const allowed = ['fecha', 'numeroOrden', 'finca', 'producto', 'cantidad', 'unidad', 'precioUnitario', 'total', 'sector', 'estado', 'clienteId', 'productoId', 'fincaId'];
   const payload: any = {};
   for (const key of allowed) {
     if (key in data) payload[key] = data[key];
@@ -251,6 +251,86 @@ export async function uploadImage(file: File) {
     headers: { 'Content-Type': undefined },
   });
   return toCamelCase(res.data);
+}
+
+// Clientes
+export async function fetchClientes() {
+  const res = await api.get('/api/v1/clientes');
+  return toCamelCase(res.data);
+}
+
+export async function createCliente(data: any) {
+  const res = await api.post('/api/v1/clientes', toSnakeCase(data));
+  return toCamelCase(res.data);
+}
+
+export async function updateCliente(id: string, data: any) {
+  const res = await api.put(`/api/v1/clientes/${id}`, toSnakeCase(data));
+  return toCamelCase(res.data);
+}
+
+export async function deleteCliente(id: string) {
+  await api.delete(`/api/v1/clientes/${id}`);
+}
+
+// Fincas
+export async function fetchFincas(clienteId: string) {
+  const res = await api.get(`/api/v1/clientes/${clienteId}/fincas`);
+  return toCamelCase(res.data);
+}
+
+export async function createFinca(clienteId: string, data: any) {
+  const res = await api.post(`/api/v1/clientes/${clienteId}/fincas`, toSnakeCase(data));
+  return toCamelCase(res.data);
+}
+
+export async function updateFinca(clienteId: string, id: string, data: any) {
+  const res = await api.put(`/api/v1/clientes/${clienteId}/fincas/${id}`, toSnakeCase(data));
+  return toCamelCase(res.data);
+}
+
+export async function deleteFinca(clienteId: string, id: string) {
+  await api.delete(`/api/v1/clientes/${clienteId}/fincas/${id}`);
+}
+
+// Productos
+export async function fetchProductos() {
+  const res = await api.get('/api/v1/productos');
+  return toCamelCase(res.data);
+}
+
+export async function createProducto(data: any) {
+  const res = await api.post('/api/v1/productos', toSnakeCase(data));
+  return toCamelCase(res.data);
+}
+
+export async function updateProducto(id: string, data: any) {
+  const res = await api.put(`/api/v1/productos/${id}`, toSnakeCase(data));
+  return toCamelCase(res.data);
+}
+
+export async function deleteProducto(id: string) {
+  await api.delete(`/api/v1/productos/${id}`);
+}
+
+// Tarifas Cliente Producto
+export async function fetchTarifasClienteProducto(params?: { comisionistaId?: string; clienteId?: string; productoId?: string }) {
+  const res = await api.get('/api/v1/tarifas-cliente-producto', { params: toSnakeCase(params) });
+  return toCamelCase(res.data);
+}
+
+export async function createTarifaClienteProducto(data: any) {
+  const res = await api.post('/api/v1/tarifas-cliente-producto', toSnakeCase(data));
+  return toCamelCase(res.data);
+}
+
+export async function updateTarifaClienteProducto(id: string, data: any) {
+  const res = await api.put(`/api/v1/tarifas-cliente-producto/${id}`, toSnakeCase(data));
+  return toCamelCase(res.data);
+}
+
+export async function deleteTarifaClienteProducto(id: string) {
+  await api.delete(`/api/v1/tarifas-cliente-producto/${id}`);
 }
 
 // Admin

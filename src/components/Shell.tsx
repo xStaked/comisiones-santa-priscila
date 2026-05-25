@@ -9,6 +9,9 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
   const activeTab =
     pathname.startsWith('/historial') ? 'historial' :
+    pathname.startsWith('/clientes') ? 'clientes' :
+    pathname.startsWith('/productos') ? 'productos' :
+    pathname.startsWith('/tarifas') ? 'tarifas' :
     pathname.startsWith('/comisionistas') ? 'comisionistas' :
     pathname.startsWith('/ordenes') ? 'ordenes' :
     pathname.startsWith('/liquidacion') ? 'liquidacion' :
