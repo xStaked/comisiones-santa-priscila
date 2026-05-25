@@ -66,6 +66,11 @@ function FincaSelect({
   );
 }
 
+function nombreRelacion(valor?: string | { nombre: string } | null) {
+  if (!valor) return undefined;
+  return typeof valor === 'string' ? valor : valor.nombre;
+}
+
 export function TarifasTab() {
   const {
     tarifasClienteProducto,
@@ -119,8 +124,11 @@ export function TarifasTab() {
   });
 
   const fincas = useMemo(
-    () => fincasQueries.flatMap((query) => (query.data ?? []) as Finca[]),
-    [fincasQueries]
+    () => [
+      ...clientes.flatMap((cliente) => cliente.fincas ?? []),
+      ...fincasQueries.flatMap((query) => (query.data ?? []) as Finca[]),
+    ],
+    [clientes, fincasQueries]
   );
 
   const comisionistaPorId = useMemo(
@@ -149,13 +157,13 @@ export function TarifasTab() {
   };
 
   const getComisionistaTarifa = (t: TarifaClienteProducto) =>
-    t.comisionista?.nombre || nombreComisionista(t.comisionistaId);
+    nombreRelacion(t.comisionista) || nombreComisionista(t.comisionistaId);
   const getClienteTarifa = (t: TarifaClienteProducto) =>
-    t.cliente?.nombre || nombreCliente(t.clienteId);
+    nombreRelacion(t.cliente) || nombreCliente(t.clienteId);
   const getProductoTarifa = (t: TarifaClienteProducto) =>
-    t.producto?.nombre || nombreProducto(t.productoId);
+    nombreRelacion(t.producto) || nombreProducto(t.productoId);
   const getFincaTarifa = (t: TarifaClienteProducto) =>
-    t.finca?.nombre || nombreFinca(t.fincaId);
+    nombreRelacion(t.finca) || nombreFinca(t.fincaId);
 
   const filtered = tarifasClienteProducto.filter((t) => {
     const textoBusqueda = [

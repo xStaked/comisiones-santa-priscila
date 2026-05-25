@@ -84,10 +84,10 @@ export interface TarifaClienteProducto {
   activo: boolean;
   createdAt: string;
   // Relaciones opcionales (populadas por el backend)
-  comisionista?: { id: string; nombre: string };
-  cliente?: { id: string; nombre: string };
-  producto?: { id: string; nombre: string };
-  finca?: { id: string; nombre: string };
+  comisionista?: string | { id: string; nombre: string };
+  cliente?: string | { id: string; nombre: string };
+  producto?: string | { id: string; nombre: string };
+  finca?: string | { id: string; nombre: string };
 }
 
 // Legacy types para migración
