@@ -56,6 +56,7 @@ export function ClientesTab() {
       createFinca(clienteId, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['fincas'] });
+      queryClient.invalidateQueries({ queryKey: ['clientes'] });
     },
   });
 
@@ -64,6 +65,7 @@ export function ClientesTab() {
       apiUpdateFinca(clienteId, id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['fincas'] });
+      queryClient.invalidateQueries({ queryKey: ['clientes'] });
     },
   });
 
@@ -71,6 +73,7 @@ export function ClientesTab() {
     mutationFn: ({ clienteId, id }: { clienteId: string; id: string }) => apiDeleteFinca(clienteId, id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['fincas'] });
+      queryClient.invalidateQueries({ queryKey: ['clientes'] });
     },
   });
 
@@ -139,7 +142,7 @@ export function ClientesTab() {
 
   const handleEdit = (c: Cliente) => {
     setEditing(c);
-    const fincasCliente = fincasExistentes
+    const fincasCliente = (c.fincas ?? fincasExistentes)
       .filter((f) => f.clienteId === c.id)
       .map((f) => ({ id: f.id, nombre: f.nombre }));
     setForm({
@@ -182,8 +185,8 @@ export function ClientesTab() {
     }));
   };
 
-  const fincasPorCliente = (clienteId: string) =>
-    fincasExistentes.filter((f) => f.clienteId === clienteId);
+  const fincasPorCliente = (cliente: Cliente) =>
+    cliente.fincas ?? fincasExistentes.filter((f) => f.clienteId === cliente.id);
 
   return (
     <div className="space-y-6">
@@ -397,7 +400,7 @@ export function ClientesTab() {
                   <div className="pt-2 border-t border-slate-100">
                     <p className="text-xs text-slate-500 mb-1.5 font-medium">Fincas</p>
                     <div className="flex flex-wrap gap-1.5">
-                      {fincasPorCliente(c.id).map((f) => (
+                      {fincasPorCliente(c).map((f) => (
                         <Badge
                           key={f.id}
                           variant="outline"
@@ -406,7 +409,7 @@ export function ClientesTab() {
                           {f.nombre}
                         </Badge>
                       ))}
-                      {fincasPorCliente(c.id).length === 0 && (
+                      {fincasPorCliente(c).length === 0 && (
                         <span className="text-xs text-slate-400">Sin fincas registradas</span>
                       )}
                     </div>

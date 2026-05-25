@@ -53,6 +53,7 @@ export interface Cliente {
   retencionPorcentaje: number;
   activo: boolean;
   createdAt: string;
+  fincas?: Finca[];
 }
 
 export interface Finca {
