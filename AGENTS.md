@@ -6,21 +6,24 @@
 
 **Dinacuamar — Sistema de Liquidación de Comisiones** es una aplicación web interna para INDUSTRIAL ACUICOLA OCHOA & BARCIA DINACUAMAR CIA.LTDA. Su propósito es gestionar la liquidación de comisiones a comisionistas por órdenes de compra de productos acuícolas (camarón, tilapia, etc.).
 
-La app es **100% cliente** (sin backend propio). Los datos se persisten en `localStorage` del navegador. No hay base de datos ni API externa para el estado principal.
+La aplicación es **full-stack**: un frontend en Next.js (App Router) se comunica con un backend en FastAPI que persiste los datos en PostgreSQL. La autenticación es requerida para acceder a cualquier funcionalidad.
 
 ### Funcionalidades clave
+- Autenticación con JWT (access token en localStorage, refresh token en cookie httpOnly).
 - CRUD de comisionistas con tarifas múltiples (porcentaje y/o fijo por kg).
-- Carga de órdenes de compra desde **PDF** (formato específico de la empresa) y edición manual.
+- Carga de órdenes de compra desde **PDF** o **imagen** (formato específico de la empresa) mediante el backend, con edición manual.
 - Asignación de comisionistas a ítems de orden (múltiples comisionistas por ítem).
 - Cálculo automático de comisiones según tarifas.
 - Guardado de liquidaciones mensuales en historial.
-- Exportación de liquidaciones a **PDF** y **Excel**.
+- Exportación de liquidaciones a **PDF** y **Excel** (generados en el frontend).
 - Dashboard con KPIs y gráficos (barras, pie).
 - Reportes filtrados por fecha, finca, producto y comisionista.
 
 ---
 
 ## Stack Tecnológico
+
+### Frontend
 
 | Capa | Tecnología | Versión |
 |------|-----------|---------|
@@ -31,12 +34,39 @@ La app es **100% cliente** (sin backend propio). Los datos se persisten en `loca
 | UI Components | shadcn/ui (`base-nova` style) + `@base-ui/react` | ^1.4.1 |
 | Iconos | lucide-react | ^1.14.0 |
 | Gráficos | recharts | ^3.8.1 |
+| Estado servidor | @tanstack/react-query | ^5.100.13 |
+| HTTP client | axios | ^1.16.1 |
 | PDF (generación) | jspdf + jspdf-autotable | ^4.2.1 / ^5.0.7 |
-| PDF (extracción) | pdfjs-dist | ^5.7.284 |
 | Excel | xlsx | ^0.18.5 |
 | Toast | sonner | ^2.0.7 |
 | Gestor de paquetes | pnpm | 11.2.2 |
 | Node requerido | >= 22.13.0 | — |
+
+### Backend
+
+| Capa | Tecnología | Versión |
+|------|-----------|---------|
+| Framework | FastAPI | 0.115.0 |
+| Servidor | Uvicorn | 0.32.0 |
+| ORM | SQLAlchemy | 2.0.36 |
+| Migraciones | Alembic | 1.14.0 |
+| Base de datos | PostgreSQL | 16 |
+| Driver | psycopg2-binary | 2.9.10 |
+| Validación | Pydantic + pydantic-settings | 2.9.0 / 2.6.0 |
+| Auth JWT | python-jose[cryptography] | 3.3.0 |
+| Hash passwords | passlib[bcrypt] | 1.7.4 |
+| PDF extracción | PyMuPDF | 1.24.14 |
+| OCR (imágenes) | easyocr + pillow | 1.7.2 / 11.0.0 |
+| Testing | pytest | 8.3.5 |
+| HTTP test client | httpx | 0.28.1 |
+
+### Infraestructura / DevOps
+
+| Componente | Tecnología |
+|-----------|-----------|
+| Contenedores | Docker + Docker Compose |
+| Reverse proxy | nginx |
+| E2E Testing | Playwright (@playwright/test ^1.52.0) |
 
 **Nota importante sobre Next.js:** esta versión (16.x) tiene cambios significativos respecto a versiones anteriores. Antes de escribir código, consulta la guía en `node_modules/next/dist/docs/` y respeta los avisos de deprecación.
 
@@ -45,11 +75,12 @@ La app es **100% cliente** (sin backend propio). Los datos se persisten en `loca
 ## Estructura de Carpetas
 
 ```
-src/
-├── app/                    # App Router de Next.js (páginas)
-│   ├── page.tsx            # Dashboard (tablero principal)
-│   ├── layout.tsx          # Root layout con AppProvider + fuente IBM Plex Sans
-│   ├── globals.css         # Tailwind + variables CSS + utilidades custom
+src/                          # Frontend Next.js
+├── app/                      # App Router de Next.js (páginas)
+│   ├── page.tsx              # Dashboard (tablero principal)
+│   ├── layout.tsx            # Root layout con providers + fuente IBM Plex Sans
+│   ├── globals.css           # Tailwind v4 + variables CSS + utilidades custom
+│   ├── login/page.tsx        # Página de inicio de sesión
 │   ├── comisionistas/page.tsx
 │   ├── ordenes/page.tsx
 │   ├── liquidacion/page.tsx
@@ -57,27 +88,77 @@ src/
 │   ├── historial/[id]/page.tsx   # Detalle de liquidación guardada
 │   └── reportes/page.tsx
 ├── components/
-│   ├── Shell.tsx           # Layout envolvente con Header y max-width
-│   ├── Header.tsx          # Navegación principal + botón "Restaurar demo"
+│   ├── Shell.tsx             # Layout envolvente con Header y max-width
+│   ├── Header.tsx            # Navegación principal + botón "Restaurar demo"
+│   ├── AuthGuard.tsx         # Protege rutas privadas (redirige a /login)
+│   ├── QueryProvider.tsx     # Proveedor de React Query
 │   ├── dashboard/DashboardTab.tsx
 │   ├── comisionistas/ComisionistasTab.tsx
 │   ├── ordenes/OrdenesTab.tsx
 │   ├── liquidacion/LiquidacionTab.tsx
 │   ├── historial/HistorialTab.tsx
 │   ├── reportes/ReportesTab.tsx
-│   └── ui/                 # Componentes de shadcn/ui (button, card, dialog, etc.)
+│   └── ui/                   # Componentes de shadcn/ui
 ├── context/
-│   └── AppContext.tsx      # Estado global: comisionistas, ordenItems, liquidaciones
+│   ├── AppContext.tsx        # Estado global vía React Query + mutaciones API
+│   └── AuthContext.tsx       # Auth: user, login, logout, loadUser
 ├── hooks/
-│   └── useLocalStorage.ts  # Hook con hidratación segura para SSR
+│   └── useLocalStorage.ts    # Hook con hidratación segura para SSR
 ├── lib/
-│   ├── utils.ts            # `cn()` para merge de clases Tailwind
-│   ├── id.ts               # `generarId()` — crypto.randomUUID o fallback
-│   ├── demo-data.ts        # Datos de demostración precargados
-│   ├── pdf-extractor.ts    # Parser de PDFs de órdenes de compra
-│   └── export-utils.ts     # Cálculo de comisiones + export PDF/Excel + reportes
+│   ├── utils.ts              # `cn()` para merge de clases Tailwind
+│   ├── id.ts                 # `generarId()` — crypto.randomUUID o fallback
+│   ├── demo-data.ts          # Datos de demostración precargados
+│   ├── pdf-extractor.ts      # Parser de PDFs de órdenes (cliente)
+│   ├── export-utils.ts       # Cálculo de comisiones + export PDF/Excel + reportes
+│   ├── api.ts                # Cliente axios + endpoints de la API REST
+│   └── transform.ts          # Conversión snake_case ↔ camelCase recursiva
 └── types/
-    └── index.ts            # Interfaces TypeScript del dominio
+    └── index.ts              # Interfaces TypeScript del dominio
+
+backend/                      # Backend FastAPI
+├── app/
+│   ├── main.py               # Punto de entrada FastAPI, routers, middlewares
+│   ├── config.py             # Pydantic Settings (env vars)
+│   ├── database.py           # Engine, SessionLocal, Base declarativa
+│   ├── dependencies.py       # get_db, get_current_user, get_current_superuser
+│   ├── security.py           # Hash/verify passwords, JWT encode/decode
+│   ├── rate_limit.py         # Rate limiting por endpoint
+│   ├── models/               # SQLAlchemy models
+│   │   ├── base.py           # BaseModel abstracto (id UUID, created_at)
+│   │   ├── user.py
+│   │   ├── refresh_token.py
+│   │   ├── comisionista.py   # Comisionista + Tarifa
+│   │   ├── orden.py          # OrdenItem + Asignacion + EstadoOrden
+│   │   └── liquidacion.py    # Liquidacion + LiquidacionItem + LiquidacionItemTarifa
+│   ├── routers/              # FastAPI routers (API endpoints)
+│   │   ├── auth.py           # Login, refresh, logout, register, me
+│   │   ├── comisionistas.py
+│   │   ├── ordenes.py
+│   │   ├── liquidaciones.py
+│   │   ├── reportes.py
+│   │   ├── upload.py         # Subida de PDF e imagen para extracción OCR
+│   │   └── admin.py          # Seed demo, utilidades admin
+│   ├── services/             # Lógica de negocio (extracción PDF/OCR)
+│   └── commands/             # Comandos CLI (create_superuser, seed_demo)
+├── tests/                    # Tests pytest
+│   ├── conftest.py
+│   ├── test_auth.py
+│   ├── test_comisionistas.py
+│   └── test_ordenes.py
+├── alembic/                  # Migraciones de base de datos
+├── requirements.txt
+├── Dockerfile
+└── .env.example
+
+e2e/                          # Tests End-to-End con Playwright
+├── helpers/
+│   └── auth.ts               # Utilidades de login para tests
+├── auth.spec.ts
+├── comisionistas.spec.ts
+└── ordenes.spec.ts
+
+nginx/
+└── nginx.conf                # Configuración de reverse proxy (prod)
 ```
 
 ### Convenciones de código
@@ -86,32 +167,60 @@ src/
 - **Componentes UI:** todos los componentes base están en `src/components/ui/` y siguen el patrón de shadcn/ui (usando `@base-ui/react` primitives + `cva` + `cn`).
 - **Estilos:** se usa Tailwind CSS v4 con `@import "tailwindcss"` en `globals.css`. Las utilidades custom se definen en `@layer utilities`.
 - **Client components:** la gran mayoría de componentes usan `'use client'` porque dependen de estado local, contexto o interacciones del DOM.
+- **Backend Python:** código en español; rutas de API en kebab-case; modelos SQLAlchemy en snake_case; schemas Pydantic usan camelCase en los campos expuestos al frontend.
 
 ---
 
 ## Flujo de Datos y Estado
 
-### AppContext (`src/context/AppContext.tsx`)
-Provee el estado global mediante React Context. Los tres arrays principales se guardan en `localStorage`:
+### Frontend: React Query + AppContext
 
-1. **`comisionistas`** — agentes con array de `tarifas: { tipo, valor }[]`.
-2. **`ordenItems`** — ítems activos (los que se pueden editar y asignar).
-3. **`liquidaciones`** — liquidaciones guardadas (archivo histórico).
+El estado ya no vive en `localStorage` (salvo el `access_token` JWT). En su lugar, el frontend usa **@tanstack/react-query** para sincronizar datos con el backend:
 
-### Migración de datos
-Existe lógica de migración automática de un schema antiguo (legacy) al actual:
-- Comisionistas antes tenían un solo `tipo` + `valor`; ahora tienen `tarifas[]`.
-- Órdenes antes tenían `comisionistaId: string | null`; ahora tienen `comisionistas: AsignacionComisionista[]`.
-- La migración se ejecuta una sola vez si detecta datos legacy en `localStorage`.
+1. **`comisionistas`** — se obtienen vía `fetchComisionistas()` (GET `/api/v1/comisionistas`).
+2. **`ordenItems`** — se obtienen vía `fetchOrdenes()` (GET `/api/v1/ordenes`).
+3. **`liquidaciones`** — se obtienen vía `fetchLiquidaciones()` (GET `/api/v1/liquidaciones`).
+
+`AppContext.tsx` expone funciones (add, update, delete, assign) que internamente ejecutan **mutaciones** de React Query. Tras una mutación exitosa, se invalidan las queries correspondientes para refrescar la UI.
+
+### Backend: SQLAlchemy + PostgreSQL
+
+El backend persiste todo en PostgreSQL mediante SQLAlchemy ORM:
+
+- **Comisionista** → `comisionistas` (1:N con `tarifas`).
+- **OrdenItem** → `orden_items` (1:N con `asignaciones` que vinculan comisionistas).
+- **Liquidacion** → `liquidaciones` (1:N con `liquidacion_items`, cada uno con snapshot de datos y tarifas aplicadas).
+- **User** → `users` (autenticación local).
+- **RefreshToken** → `refresh_tokens` (rotación de tokens, almacenados como hash SHA-256).
 
 ### Datos de demo
-Si no hay nada en `localStorage`, se precargan automáticamente los datos de demo definidos en `src/lib/demo-data.ts`.
+Si la base de datos está vacía, se puede ejecutar el seed de demo vía el endpoint `POST /api/v1/admin/seed-demo` o mediante el comando CLI en el backend.
+
+---
+
+## Autenticación
+
+La app utiliza un flujo **JWT dual token**:
+
+- **Access token:** JWT de corta duración (15 min por defecto) almacenado en `localStorage` (`access_token`). Se envía en el header `Authorization: Bearer <token>`.
+- **Refresh token:** token de larga duración (7 días por defecto) almacenado en una cookie **httpOnly**, **secure** (en prod) y **SameSite=strict/lax**. Se rota en cada uso.
+
+### Flujo
+1. Usuario hace login en `/login` → backend devuelve access token + user, y setea refresh cookie.
+2. El frontend guarda el access token en `localStorage` y el `AuthContext` carga el usuario.
+3. `AuthGuard` protege rutas privadas: si no hay sesión, redirige a `/login`.
+4. Si una petición API recibe 401, el interceptor de axios intenta refresh silencioso (`POST /api/v1/auth/refresh`).
+5. Si el refresh falla, se limpia el token y se redirige a `/login`.
+6. Logout elimina el refresh token de la base de datos y de la cookie.
+
+### Registro de usuarios
+El endpoint `POST /api/v1/auth/register` requiere que el usuario autenticado sea **superusuario** (`is_superuser = true`). No es un registro público.
 
 ---
 
 ## Cálculo de Comisiones
 
-Las comisiones se calculan en `src/lib/export-utils.ts`:
+Las comisiones se calculan en `src/lib/export-utils.ts` (frontend) y se validan/replican en el backend al guardar liquidaciones:
 
 - **Porcentaje:** `total * (valor / 100)`
 - **Fijo por kg:** `cantidad_en_kg * valor` (con conversión automática de libras a kg)
@@ -120,26 +229,26 @@ Las comisiones se calculan en `src/lib/export-utils.ts`:
 
 ---
 
-## Extracción de PDF
+## Extracción de PDF / Imagen
 
-`src/lib/pdf-extractor.ts` está **altamente especializado** para el formato de PDF "ORDEN DE COMPRA" de DINACUAMAR. No es un parser genérico.
+El backend (`backend/app/services/`) contiene la lógica principal de extracción:
 
-- Usa `pdfjs-dist` con import dinámico para evitar problemas de SSR.
-- El worker se carga vía CDN: `https://cdn.jsdelivr.net/npm/pdfjs-dist@.../legacy/build/pdf.worker.mjs`.
-- Extrae texto posicional (coordenadas X/Y) para identificar filas de la tabla, fincas, cantidades, precios y totales.
-- Si falla la extracción de fecha del PDF, hace fallback al nombre del archivo o a la fecha actual.
+- **PDF:** usa `PyMuPDF` para extraer texto posicional de órdenes de compra DINACUAMAR.
+- **Imágenes:** usa `easyocr` (OCR) para extraer datos de órdenes en formato imagen.
 
-**Advertencia:** modificar esta lógica puede romper la carga de PDFs reales de la empresa.
+El frontend aún conserva `src/lib/pdf-extractor.ts` (basado en `pdfjs-dist`) para extracción cliente-side, pero la carga de archivos reales se realiza contra los endpoints del backend (`POST /api/v1/upload/pdf` e `POST /api/v1/upload/imagen`).
 
 ---
 
 ## Comandos de Build y Desarrollo
 
+### Frontend
+
 ```bash
 # Instalar dependencias
 pnpm install
 
-# Servidor de desarrollo
+# Servidor de desarrollo (requiere backend corriendo en localhost:8000)
 pnpm dev              # http://localhost:3000
 
 # Build de producción
@@ -152,38 +261,106 @@ pnpm start
 pnpm lint
 ```
 
-### Docker
-Existe un `Dockerfile` multi-stage que genera una imagen de producción con `output: "standalone"`:
+### Backend
 
 ```bash
-docker build -t dinacuamar-comisiones .
-docker run -p 3000:3000 dinacuamar-comisiones
+cd backend
+
+# Crear entorno virtual (recomendado)
+python -m venv .venv
+source .venv/bin/activate   # macOS/Linux
+# .venv\Scripts\activate    # Windows
+
+# Instalar dependencias
+pip install -r requirements.txt
+
+# Correr servidor de desarrollo (requiere PostgreSQL)
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+# Ejecutar migraciones de base de datos
+alembic upgrade head
+
+# Crear superusuario
+python -m app.commands.create_superuser
+
+# Seed de datos de demo
+python -m app.commands.seed_demo
+
+# Tests del backend
+pytest
 ```
 
-La imagen final usa el usuario `nextjs` (no root) y expone el puerto `3000`.
+### E2E Tests (Playwright)
+
+```bash
+# Requiere que tanto frontend como backend estén corriendo
+pnpm test:e2e         # Ejecuta en headless
+pnpm test:e2e:ui      # Ejecuta con UI interactiva
+```
+
+### Docker (desarrollo local)
+
+```bash
+# Levantar backend + postgres
+docker-compose up --build
+
+# El frontend debe correrse por separado con pnpm dev
+```
+
+### Docker (producción)
+
+```bash
+# Levantar stack completo: nginx + frontend + backend + postgres
+docker-compose -f docker-compose.prod.yml up --build -d
+```
+
+La imagen del frontend usa `output: "standalone"` y el usuario `nextjs` (no root). El backend usa Python 3.12-slim. Nginx actúa como reverse proxy, sirviendo el frontend en `/` y el backend en `/api/`.
 
 ---
 
 ## Testing
 
-**No hay framework de testing configurado** en este proyecto. No existe Jest, Vitest, Playwright ni Cypress. Si se agrega uno, debe respetar las convenciones del proyecto y preferirmente usar pnpm.
+### Frontend E2E: Playwright
+- Tests ubicados en `e2e/`.
+- Cubren autenticación, CRUD de comisionistas y carga de órdenes.
+- Usan helpers en `e2e/helpers/auth.ts` para login programático.
+- Se ejecutan contra Chromium; Firefox y WebKit están comentados.
+- Levantan automáticamente el servidor de desarrollo (`pnpm dev`) antes de correr.
+
+### Backend: pytest
+- Tests ubicados en `backend/tests/`.
+- Usan `httpx` para peticiones HTTP al backend y una base de datos de test.
+- Archivos:
+  - `test_auth.py` — login, refresh, logout, register protegido
+  - `test_comisionistas.py` — CRUD de comisionistas
+  - `test_ordenes.py` — CRUD de órdenes y asignaciones
 
 ---
 
 ## Seguridad y Consideraciones
 
-- **Sin autenticación:** la app es pública una vez desplegada. No hay login ni roles.
-- **Datos locales:** toda la información sensible (nombres de comisionistas, montos) vive en `localStorage` del navegador del usuario. No se transmite a ningún servidor.
-- **No hay API externa:** salvo el CDN de `pdfjs-dist` para el worker, la app no hace peticiones de red para funcionalidades principales.
-- **Validación de inputs:** se usa confirmación nativa del navegador (`confirm()`) para acciones destructivas (eliminar liquidaciones, restaurar demo).
+- **Autenticación obligatoria:** todas las rutas protegidas requieren JWT válido. El endpoint de login tiene rate limiting.
+- **JWT en producción:** `JWT_SECRET_KEY` debe tener al menos 32 caracteres. Los orígenes wildcard (`*`) en `CORS_ORIGINS` están prohibidos en producción.
+- **Refresh tokens:** se almacenan como hash SHA-256 en la base de datos y se rotan en cada uso. La cookie es httpOnly y secure en producción.
+- **Headers de seguridad:** tanto el backend (middleware) como nginx agregan headers de seguridad (X-Content-Type-Options, X-Frame-Options, CSP-like, etc.).
+- **Rate limiting:** configurado vía `RATE_LIMIT_PER_MINUTE` (default 60 req/min).
+- **Validación de inputs:** el backend valida todos los inputs con Pydantic; en el frontend se usan formularios controlados y toasts de error.
+- **Acciones destructivas:** se usa `confirm()` del navegador para eliminar liquidaciones, restaurar demo, etc.
+- **Datos sensibles:** nunca se exponen contraseñas en texto plano; todos los hashes usan bcrypt.
 
 ---
 
 ## Notas para el Agente
 
 - Antes de modificar componentes de `src/components/ui/`, verifica si son parte del sistema shadcn/ui; algunos usan primitivas de `@base-ui/react`.
-- Si agregas un nuevo campo a los tipos (`src/types/index.ts`), revisa si necesitas actualizar la lógica de migración en `AppContext.tsx`.
+- Si agregas un nuevo campo a los tipos (`src/types/index.ts`), revisa si necesitas:
+  1. Actualizar el modelo SQLAlchemy correspondiente en `backend/app/models/`.
+  2. Actualizar el schema Pydantic en `backend/app/schemas/` (si existe).
+  3. Actualizar la transformación camelCase/snakeCase en `src/lib/transform.ts` si es necesario.
 - Al trabajar con fechas, usa el formato ISO (`YYYY-MM-DD`) internamente y `toLocaleDateString('es-ES')` para mostrar al usuario.
 - El formato numérico visible al usuario usa locale español: `1.234,56`.
-- No elimines ni modifiques la lógica de migración legacy sin entender el impacto en datos existentes de usuarios.
-- Para nuevas páginas, sigue el patrón: `page.tsx` envuelve `<Shell><MiTab /></Shell>`.
+- Para nuevas páginas, sigue el patrón: `page.tsx` envuelve `<Shell><MiTab /></Shell>` y debe estar protegida por `AuthGuard` si es privada.
+- Las rutas de API en el backend deben seguir el prefijo `/api/v1/` y usar kebab-case.
+- Los modelos SQLAlchemy usan snake_case; los schemas Pydantic expuestos al frontend usan camelCase para consistencia con TypeScript.
+- No modifiques la lógica de extracción de PDF del backend (`backend/app/services/pdf_extractor.py`) sin entender el impacto en órdenes reales de la empresa.
+- Siempre que agregues una dependencia nueva en el backend, actualiza `backend/requirements.txt`.
