@@ -219,7 +219,7 @@ export function ComisionistasTab() {
                   {c.tarifas.map((t, idx) => (
                     <Badge key={idx} variant="secondary" className="flex items-center gap-1 bg-slate-100 text-slate-700 border-0">
                       {t.tipo === 'porcentaje' ? <Percent className="h-3 w-3" /> : <Weight className="h-3 w-3" />}
-                      {t.tipo === 'porcentaje' ? `${t.valor}%` : `$${t.valor.toFixed(3)}/kg`}
+                      {t.tipo === 'porcentaje' ? `${typeof t.valor === 'string' ? parseFloat(t.valor) : t.valor}%` : `$${typeof t.valor === 'string' ? parseFloat(t.valor).toFixed(3) : t.valor.toFixed(3)}/kg`}
                     </Badge>
                   ))}
                 </div>
