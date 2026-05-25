@@ -1,8 +1,6 @@
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: dinacuamar-postgres
-    restart: unless-stopped
     env_file:
       - .env
     environment:
@@ -17,15 +15,16 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
-    networks:
-      - dinacuamar-network
+    deploy:
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
 
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: dinacuamar-backend
-    restart: unless-stopped
     env_file:
       - .env
     environment:
@@ -35,17 +34,17 @@ services:
       ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-15}
       REFRESH_TOKEN_EXPIRE_DAYS: ${REFRESH_TOKEN_EXPIRE_DAYS:-7}
       CORS_ORIGINS: ${CORS_ORIGINS}
-    depends_on:
-      postgres:
-        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 15s
       timeout: 5s
       retries: 5
       start_period: 10s
-    networks:
-      - dinacuamar-network
+    deploy:
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
 
   frontend:
     build:
@@ -53,38 +52,31 @@ services:
       dockerfile: Dockerfile
       args:
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
-    container_name: dinacuamar-frontend
-    restart: unless-stopped
     env_file:
       - .env
     environment:
       NODE_ENV: production
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
-    depends_on:
-      - backend
-    networks:
-      - dinacuamar-network
+    deploy:
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
 
   nginx:
     image: nginx:alpine
-    container_name: dinacuamar-nginx
-    restart: unless-stopped
     ports:
       - "80:80"
       - "443:443"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./nginx/ssl:/etc/nginx/ssl:ro
-    depends_on:
-      - frontend
-      - backend
-    networks:
-      - dinacuamar-network
+    deploy:
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
 
 volumes:
   postgres_data:
     driver: local
-
-networks:
-  dinacuamar-network:
-    driver: bridge
