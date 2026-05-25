@@ -3,11 +3,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 
-from app.database import Base, engine
 from app.config import settings
 
-# Import models so Base.metadata.create_all knows about them
-from app.models import user, refresh_token, comisionista, orden, liquidacion, cliente, producto, tarifa_cliente_producto
+# Import models so routers know about them
+from app.models import user, refresh_token, comisionista, orden, liquidacion, cliente, producto, tarifa_cliente_producto  # noqa: F401
 
 from app.routers import admin, auth, comisionistas, liquidaciones, ordenes, reportes, upload, clientes, productos, tarifas_cliente_producto
 
@@ -22,7 +21,6 @@ async def startup_event():
         origins = [o.strip() for o in settings.CORS_ORIGINS.split(",")]
         if any("*" in o for o in origins):
             raise RuntimeError("Orígenes wildcard no están permitidos en producción")
-    Base.metadata.create_all(bind=engine)
 
 
 # Security headers middleware
