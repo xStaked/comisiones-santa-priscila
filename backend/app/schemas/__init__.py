@@ -25,6 +25,22 @@ from app.schemas.orden import (
     OrdenItemResponse,
     OrdenItemUpdate,
 )
+from app.schemas.cliente import (
+    ClienteBase,
+    ClienteCreate,
+    ClienteResponse,
+    ClienteUpdate,
+    FincaBase,
+    FincaCreate,
+    FincaResponse,
+    FincaUpdate,
+)
+from app.schemas.producto import (
+    ProductoBase,
+    ProductoCreate,
+    ProductoResponse,
+    ProductoUpdate,
+)
 
 __all__ = [
     "ResponseBase",
@@ -46,4 +62,16 @@ __all__ = [
     "LiquidacionBase",
     "LiquidacionCreate",
     "LiquidacionResponse",
+    "ClienteBase",
+    "ClienteCreate",
+    "ClienteUpdate",
+    "ClienteResponse",
+    "FincaBase",
+    "FincaCreate",
+    "FincaUpdate",
+    "FincaResponse",
+    "ProductoBase",
+    "ProductoCreate",
+    "ProductoUpdate",
+    "ProductoResponse",
 ]

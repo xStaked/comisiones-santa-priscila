@@ -7,9 +7,9 @@ from app.database import Base, engine
 from app.config import settings
 
 # Import models so Base.metadata.create_all knows about them
-from app.models import user, refresh_token, comisionista, orden, liquidacion
+from app.models import user, refresh_token, comisionista, orden, liquidacion, cliente, producto, tarifa_cliente_producto
 
-from app.routers import admin, auth, comisionistas, liquidaciones, ordenes, reportes, upload
+from app.routers import admin, auth, comisionistas, liquidaciones, ordenes, reportes, upload, clientes, productos, tarifas_cliente_producto
 
 app = FastAPI(
     title="Dinacuamar — Sistema de Liquidación de Comisiones",
@@ -84,6 +84,21 @@ app.include_router(
     upload.router,
     prefix="/api/v1/upload",
     tags=["upload"],
+)
+app.include_router(
+    clientes.router,
+    prefix="/api/v1/clientes",
+    tags=["clientes"],
+)
+app.include_router(
+    productos.router,
+    prefix="/api/v1/productos",
+    tags=["productos"],
+)
+app.include_router(
+    tarifas_cliente_producto.router,
+    prefix="/api/v1/tarifas-cliente-producto",
+    tags=["tarifas-cliente-producto"],
 )
 
 
