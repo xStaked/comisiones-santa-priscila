@@ -23,7 +23,10 @@ from app.models.producto import Producto
 from app.models.cliente import Finca
 from app.models.tarifa_cliente_producto import TarifaClienteProducto
 
-EXCEL_PATH = "/Users/xstaked/Desktop/projects/sn8-projects/comisiones/Copia de COMISIONES GENERAL.xlsx"
+EXCEL_PATH = os.environ.get(
+    "EXCEL_PATH",
+    os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "Copia de COMISIONES GENERAL.xlsx")
+)
 
 NOMBRES_COMISIONISTAS = ["ARROYO", "CASTRO", "PINEDA", "MALAVE"]
 
@@ -228,8 +231,15 @@ def main():
     print("Seed de tarifas desde Excel")
     print("=" * 60)
 
-    if not os.path.exists(EXCEL_PATH):
-        print(f"ERROR: No se encontró el archivo Excel: {EXCEL_PATH}")
+    excel_path = EXCEL_PATH
+    if len(sys.argv) > 1:
+        excel_path = sys.argv[1]
+
+    print(f"Archivo: {excel_path}")
+
+    if not os.path.exists(excel_path):
+        print(f"ERROR: No se encontró el archivo Excel: {excel_path}")
+        print("Uso: python -m app.commands.seed_tarifas_excel [ruta_al_excel]")
         sys.exit(1)
 
     db = SessionLocal()
@@ -255,8 +265,8 @@ def main():
         print(f"   Productos: {len(productos)}")
 
         # Abrir Excel
-        print(f"\n4. Leyendo Excel: {EXCEL_PATH}")
-        wb = openpyxl.load_workbook(EXCEL_PATH, data_only=True)
+        print(f"\n4. Leyendo Excel: {excel_path}")
+        wb = openpyxl.load_workbook(excel_path, data_only=True)
 
         total_tarifas = 0
 
