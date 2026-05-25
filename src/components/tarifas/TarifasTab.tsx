@@ -1,8 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Plus, Pencil, Trash2, Percent, Weight, Search, FileSpreadsheet } from 'lucide-react';
-import { useQuery } from '@tanstack/react-query';
+import { useQueries, useQuery } from '@tanstack/react-query';
 import { useApp } from '@/context/AppContext';
 import { TarifaClienteProducto, Finca } from '@/types';
 import { fetchFincas } from '@/lib/api';
@@ -17,7 +17,6 @@ import {
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue,
 } from '@/components/ui/select';
 import {
   Table,
@@ -44,12 +43,15 @@ function FincaSelect({
     enabled: !!clienteId,
   });
 
+  const fincaSeleccionada = fincas.find((f: Finca) => f.id === value);
+  const etiqueta = value ? fincaSeleccionada?.nombre || 'Finca no encontrada' : 'Todas las fincas del cliente';
+
   return (
     <div className="space-y-2">
       <Label htmlFor="finca">Finca (opcional)</Label>
       <Select value={value} onValueChange={(v) => onChange(v ?? '')}>
         <SelectTrigger className="w-full rounded-xl border-slate-200 bg-white h-10 text-sm text-slate-900">
-          <SelectValue placeholder="Selecciona una finca" />
+          <span className="flex flex-1 truncate text-left">{etiqueta}</span>
         </SelectTrigger>
         <SelectContent>
           <SelectItem value="">Todas las fincas del cliente</SelectItem>
@@ -108,13 +110,64 @@ export function TarifasTab() {
     enabled: filtroCliente !== 'todos',
   });
 
+  const fincasQueries = useQueries({
+    queries: clientes.map((cliente) => ({
+      queryKey: ['fincas', cliente.id],
+      queryFn: () => fetchFincas(cliente.id),
+      enabled: !!cliente.id,
+    })),
+  });
+
+  const fincas = useMemo(
+    () => fincasQueries.flatMap((query) => (query.data ?? []) as Finca[]),
+    [fincasQueries]
+  );
+
+  const comisionistaPorId = useMemo(
+    () => new Map(comisionistas.map((c) => [c.id, c])),
+    [comisionistas]
+  );
+  const clientePorId = useMemo(
+    () => new Map(clientes.map((c) => [c.id, c])),
+    [clientes]
+  );
+  const productoPorId = useMemo(
+    () => new Map(productos.map((p) => [p.id, p])),
+    [productos]
+  );
+  const fincaPorId = useMemo(
+    () => new Map(fincas.map((f) => [f.id, f])),
+    [fincas]
+  );
+
+  const nombreComisionista = (id: string) => comisionistaPorId.get(id)?.nombre || 'Comisionista no encontrado';
+  const nombreCliente = (id: string) => clientePorId.get(id)?.nombre || 'Cliente no encontrado';
+  const nombreProducto = (id: string) => productoPorId.get(id)?.nombre || 'Producto no encontrado';
+  const nombreFinca = (id?: string) => {
+    if (!id) return 'Todas las fincas';
+    return fincaPorId.get(id)?.nombre || 'Finca no encontrada';
+  };
+
+  const getComisionistaTarifa = (t: TarifaClienteProducto) =>
+    t.comisionista?.nombre || nombreComisionista(t.comisionistaId);
+  const getClienteTarifa = (t: TarifaClienteProducto) =>
+    t.cliente?.nombre || nombreCliente(t.clienteId);
+  const getProductoTarifa = (t: TarifaClienteProducto) =>
+    t.producto?.nombre || nombreProducto(t.productoId);
+  const getFincaTarifa = (t: TarifaClienteProducto) =>
+    t.finca?.nombre || nombreFinca(t.fincaId);
+
   const filtered = tarifasClienteProducto.filter((t) => {
+    const textoBusqueda = [
+      getComisionistaTarifa(t),
+      getClienteTarifa(t),
+      getProductoTarifa(t),
+      getFincaTarifa(t),
+    ].join(' ').toLowerCase();
+
     const matchSearch =
       search === '' ||
-      t.comisionista?.nombre?.toLowerCase().includes(search.toLowerCase()) ||
-      t.cliente?.nombre?.toLowerCase().includes(search.toLowerCase()) ||
-      t.producto?.nombre?.toLowerCase().includes(search.toLowerCase()) ||
-      t.finca?.nombre?.toLowerCase().includes(search.toLowerCase());
+      textoBusqueda.includes(search.toLowerCase());
 
     const matchComisionista = filtroComisionista === 'todos' || t.comisionistaId === filtroComisionista;
     const matchCliente = filtroCliente === 'todos' || t.clienteId === filtroCliente;
@@ -213,6 +266,18 @@ export function TarifasTab() {
 
   const clienteSeleccionado = clientes.find((c) => c.id === form.clienteId);
   const mostrarFincaEnForm = clienteSeleccionado?.tipo === 'grupo';
+  const etiquetaFiltroComisionista =
+    filtroComisionista === 'todos' ? 'Todos los comisionistas' : nombreComisionista(filtroComisionista);
+  const etiquetaFiltroCliente = filtroCliente === 'todos' ? 'Todos los clientes' : nombreCliente(filtroCliente);
+  const etiquetaFiltroProducto = filtroProducto === 'todos' ? 'Todos los productos' : nombreProducto(filtroProducto);
+  const etiquetaFiltroFinca =
+    filtroFinca === 'todas' ? 'Todas las fincas' : filtroFinca === 'ninguna' ? 'Sin finca' : nombreFinca(filtroFinca);
+  const etiquetaFormComisionista = form.comisionistaId
+    ? nombreComisionista(form.comisionistaId)
+    : 'Selecciona un comisionista';
+  const etiquetaFormCliente = form.clienteId ? nombreCliente(form.clienteId) : 'Selecciona un cliente';
+  const etiquetaFormProducto = form.productoId ? nombreProducto(form.productoId) : 'Selecciona un producto';
+  const etiquetaFormTipo = form.tipo === 'porcentaje' ? 'Porcentaje (%)' : 'Fijo por kg (USD)';
 
   return (
     <div className="space-y-6">
@@ -233,7 +298,7 @@ export function TarifasTab() {
 
               <Select value={filtroComisionista} onValueChange={(v) => setFiltroComisionista(v ?? 'todos')}>
                 <SelectTrigger className="w-48 rounded-xl border-slate-200 bg-white h-10 text-sm text-slate-900">
-                  <SelectValue placeholder="Comisionista" />
+                  <span className="flex flex-1 truncate text-left">{etiquetaFiltroComisionista}</span>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="todos">Todos los comisionistas</SelectItem>
@@ -247,7 +312,7 @@ export function TarifasTab() {
 
               <Select value={filtroCliente} onValueChange={(v) => { setFiltroCliente(v ?? 'todos'); setFiltroFinca('todas'); }}>
                 <SelectTrigger className="w-48 rounded-xl border-slate-200 bg-white h-10 text-sm text-slate-900">
-                  <SelectValue placeholder="Cliente" />
+                  <span className="flex flex-1 truncate text-left">{etiquetaFiltroCliente}</span>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="todos">Todos los clientes</SelectItem>
@@ -261,7 +326,7 @@ export function TarifasTab() {
 
               <Select value={filtroProducto} onValueChange={(v) => setFiltroProducto(v ?? 'todos')}>
                 <SelectTrigger className="w-48 rounded-xl border-slate-200 bg-white h-10 text-sm text-slate-900">
-                  <SelectValue placeholder="Producto" />
+                  <span className="flex flex-1 truncate text-left">{etiquetaFiltroProducto}</span>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="todos">Todos los productos</SelectItem>
@@ -275,7 +340,7 @@ export function TarifasTab() {
 
               <Select value={filtroFinca} onValueChange={(v) => setFiltroFinca(v ?? 'todas')}>
                 <SelectTrigger className="w-48 rounded-xl border-slate-200 bg-white h-10 text-sm text-slate-900">
-                  <SelectValue placeholder="Finca" />
+                  <span className="flex flex-1 truncate text-left">{etiquetaFiltroFinca}</span>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="todas">Todas las fincas</SelectItem>
@@ -327,7 +392,7 @@ export function TarifasTab() {
                 onValueChange={(value) => setForm({ ...form, comisionistaId: value ?? '' })}
               >
                 <SelectTrigger className="w-full rounded-xl border-slate-200 bg-white h-10 text-sm text-slate-900">
-                  <SelectValue placeholder="Selecciona un comisionista" />
+                  <span className="flex flex-1 truncate text-left">{etiquetaFormComisionista}</span>
                 </SelectTrigger>
                 <SelectContent>
                   {comisionistas.map((c) => (
@@ -346,7 +411,7 @@ export function TarifasTab() {
                 onValueChange={(value) => setForm({ ...form, clienteId: value ?? '', fincaId: '' })}
               >
                 <SelectTrigger className="w-full rounded-xl border-slate-200 bg-white h-10 text-sm text-slate-900">
-                  <SelectValue placeholder="Selecciona un cliente" />
+                  <span className="flex flex-1 truncate text-left">{etiquetaFormCliente}</span>
                 </SelectTrigger>
                 <SelectContent>
                   {clientes.map((c) => (
@@ -365,7 +430,7 @@ export function TarifasTab() {
                 onValueChange={(value) => setForm({ ...form, productoId: value ?? '' })}
               >
                 <SelectTrigger className="w-full rounded-xl border-slate-200 bg-white h-10 text-sm text-slate-900">
-                  <SelectValue placeholder="Selecciona un producto" />
+                  <span className="flex flex-1 truncate text-left">{etiquetaFormProducto}</span>
                 </SelectTrigger>
                 <SelectContent>
                   {productos.map((p) => (
@@ -393,7 +458,7 @@ export function TarifasTab() {
                   onValueChange={(value) => setForm({ ...form, tipo: value as 'porcentaje' | 'fijo_kg' })}
                 >
                   <SelectTrigger className="w-full rounded-xl border-slate-200 bg-white h-10 text-sm text-slate-900">
-                    <SelectValue placeholder="Tipo" />
+                    <span className="flex flex-1 truncate text-left">{etiquetaFormTipo}</span>
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="porcentaje">Porcentaje (%)</SelectItem>
@@ -477,11 +542,11 @@ export function TarifasTab() {
                 {filtered.map((t) => (
                   <TableRow key={t.id} className="border-slate-100">
                     <TableCell className="font-medium text-slate-900">
-                      {t.comisionista?.nombre || '—'}
+                      {getComisionistaTarifa(t)}
                     </TableCell>
-                    <TableCell className="text-slate-700">{t.cliente?.nombre || '—'}</TableCell>
-                    <TableCell className="text-slate-700">{t.finca?.nombre || '—'}</TableCell>
-                    <TableCell className="text-slate-700">{t.producto?.nombre || '—'}</TableCell>
+                    <TableCell className="text-slate-700">{getClienteTarifa(t)}</TableCell>
+                    <TableCell className="text-slate-700">{getFincaTarifa(t)}</TableCell>
+                    <TableCell className="text-slate-700">{getProductoTarifa(t)}</TableCell>
                     <TableCell>
                       <Badge
                         variant="secondary"
