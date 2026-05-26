@@ -1,7 +1,7 @@
 'use client';
 
 import { Fragment, useState, useRef, useEffect, useMemo } from 'react';
-import { Plus, Upload, Trash2, Pencil, UserCheck, Calculator, FileUp, Check, X, Sparkles, Search, ChevronDown, ChevronRight } from 'lucide-react';
+import { Plus, Upload, Trash2, Pencil, UserCheck, Calculator, FileUp, Check, X, Search, ChevronDown, ChevronRight } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { OrdenItem, TarifaClienteProducto } from '@/types';
 import { Button } from '@/components/ui/button';
@@ -134,6 +134,7 @@ export function OrdenesTab() {
   } | null>(null);
   const [isProcessingPDF, setIsProcessingPDF] = useState(false);
   const [uploadType, setUploadType] = useState<'pdf' | 'imagen'>('pdf');
+  const [pdfClienteId, setPdfClienteId] = useState<string>('');
 
   const [form, setForm] = useState({
     fecha: '',
@@ -291,7 +292,7 @@ export function OrdenesTab() {
     setUploadType(isPdf ? 'pdf' : 'imagen');
     setIsProcessingPDF(true);
     try {
-      const result = isPdf ? await uploadPDF(file) : await uploadImage(file);
+      const result = isPdf ? await uploadPDF(file, pdfClienteId || undefined) : await uploadImage(file, pdfClienteId || undefined);
       setPdfPreview({
         fileName: file.name,
         fecha: result.fecha,
@@ -312,12 +313,18 @@ export function OrdenesTab() {
 
   const handleConfirmPDF = () => {
     if (!pdfPreview || pdfPreview.items.length === 0) return;
-    addOrdenItems(pdfPreview.items);
+    const itemsConCliente = pdfPreview.items.map(item => ({
+      ...item,
+      clienteId: pdfClienteId || item.clienteId,
+    }));
+    addOrdenItems(itemsConCliente);
     setPdfPreview(null);
+    setPdfClienteId('');
   };
 
   const handleDiscardPDF = () => {
     setPdfPreview(null);
+    setPdfClienteId('');
   };
 
   const handleEdit = (item: OrdenItem) => {
@@ -489,6 +496,21 @@ export function OrdenesTab() {
             </form>
           ) : (
             <div className="space-y-4">
+              <div className="space-y-1.5">
+                <Label className="text-xs text-slate-500">Cliente (opcional)</Label>
+                <Select value={pdfClienteId} onValueChange={(value) => setPdfClienteId(value ?? '')}>
+                  <SelectTrigger className="w-full rounded-xl border-slate-200 bg-white h-10 text-sm text-slate-900">
+                    <SelectValue placeholder="Seleccionar cliente para vincular fincas...">
+                      {clientes.find(c => c.id === pdfClienteId)?.nombre}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {clientes.map(c => (
+                      <SelectItem key={c.id} value={c.id}>{c.nombre}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
               {!pdfPreview ? (
                 <>
                   <div
@@ -506,40 +528,6 @@ export function OrdenesTab() {
                     className="hidden"
                     onChange={handleFileSelect}
                   />
-                  <div className="mt-4 flex justify-center">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={async () => {
-                        setUploadType('pdf');
-                        setIsProcessingPDF(true);
-                        try {
-                          const res = await fetch('/orden-demo.pdf');
-                          const blob = await res.blob();
-                          const file = new File([blob], 'orden-demo.pdf', { type: 'application/pdf' });
-                          const result = await uploadPDF(file);
-                          setPdfPreview({
-                            fileName: file.name,
-                            fecha: result.fecha,
-                            numeroOrden: result.numeroOrden,
-                            proveedor: result.proveedor,
-                            semana: result.semana,
-                            items: result.items,
-                          });
-                          toast.success(`${result.items.length} productos extraídos del PDF de ejemplo`);
-                        } catch (err) {
-                          console.error(err);
-                          toast.error('Error al cargar el PDF de ejemplo');
-                        } finally {
-                          setIsProcessingPDF(false);
-                        }
-                      }}
-                      className="rounded-xl border-slate-200 text-slate-600 hover:text-slate-900 hover:bg-slate-50"
-                    >
-                      <Sparkles className="h-4 w-4 mr-2 text-amber-500" />
-                      Cargar orden de ejemplo
-                    </Button>
-                  </div>
                   {isProcessingPDF && (
                     <div className="text-center py-4">
                       <div className="inline-block h-6 w-6 animate-spin rounded-full border-2 border-solid border-slate-900 border-r-transparent align-[-0.125em] motion-reduce:animate-[spin_1.5s_linear_infinite]" />

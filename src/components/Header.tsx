@@ -16,7 +16,7 @@ const tabs = [
   { value: 'productos', label: 'Productos', href: '/productos', icon: Package },
   { value: 'tarifas', label: 'Tarifas', href: '/tarifas', icon: Percent },
   { value: 'comisionistas', label: 'Comisionistas', href: '/comisionistas', icon: Users },
-  { value: 'ordenes', label: 'Cargar Órdenes', href: '/ordenes', icon: FileText },
+  { value: 'ordenes', label: 'Órdenes', href: '/ordenes', icon: FileText },
   { value: 'liquidacion', label: 'Liquidación', href: '/liquidacion', icon: Download },
   { value: 'historial', label: 'Historial', href: '/historial', icon: History },
   { value: 'reportes', label: 'Reportes', href: '/reportes', icon: BarChart3 },

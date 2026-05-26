@@ -55,6 +55,7 @@ def extraer_orden_de_imagen(
     contenido: bytes,
     nombre_archivo: str = "",
     db=None,
+    cliente_id: str | None = None,
 ) -> dict[str, Any]:
     """Extrae ítems de una orden de compra a partir de una imagen usando OCR."""
     if settings.AI_EXTRACTION_ENABLED:
@@ -68,7 +69,7 @@ def extraer_orden_de_imagen(
             )
         )
         orden_validada = validar_orden_extraida(orden_ia)
-        orden_normalizada = normalizar_orden_extraida(db, orden_validada)
+        orden_normalizada = normalizar_orden_extraida(db, orden_validada, cliente_id=cliente_id)
         return _orden_validada_a_respuesta(orden_normalizada)
 
     reader = _obtener_reader()

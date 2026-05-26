@@ -40,11 +40,17 @@ def _buscar_producto(db: Session, nombre: str) -> Producto | None:
     return db.query(Producto).filter(func.lower(Producto.nombre) == limpio.lower()).first()
 
 
-def normalizar_orden_extraida(db: Session | None, orden: OrdenValidada) -> OrdenValidada:
+def normalizar_orden_extraida(db: Session | None, orden: OrdenValidada, cliente_id: str | None = None) -> OrdenValidada:
     if db is None:
         return orden
 
-    cliente = _buscar_cliente(db, orden.cliente)
+    cliente = None
+    if cliente_id:
+        from uuid import UUID
+        cliente = db.query(Cliente).filter(Cliente.id == UUID(cliente_id)).first()
+    if not cliente:
+        cliente = _buscar_cliente(db, orden.cliente)
+
     for item in orden.items:
         item_cliente = cliente or _buscar_cliente(db, item.clienteTexto)
         finca = _buscar_finca(db, item.finca or orden.finca, item_cliente)

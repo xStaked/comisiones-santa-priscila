@@ -270,19 +270,21 @@ export async function fetchTendencias() {
 }
 
 // Upload
-export async function uploadPDF(file: File) {
+export async function uploadPDF(file: File, clienteId?: string) {
   const formData = new FormData();
   formData.append('file', file);
-  const res = await api.post('/api/v1/upload/pdf', formData, {
+  const url = clienteId ? `/api/v1/upload/pdf?cliente_id=${clienteId}` : '/api/v1/upload/pdf';
+  const res = await api.post(url, formData, {
     headers: { 'Content-Type': undefined },
   });
   return toCamelCase(res.data);
 }
 
-export async function uploadImage(file: File) {
+export async function uploadImage(file: File, clienteId?: string) {
   const formData = new FormData();
   formData.append('file', file);
-  const res = await api.post('/api/v1/upload/imagen', formData, {
+  const url = clienteId ? `/api/v1/upload/imagen?cliente_id=${clienteId}` : '/api/v1/upload/imagen';
+  const res = await api.post(url, formData, {
     headers: { 'Content-Type': undefined },
   });
   return toCamelCase(res.data);

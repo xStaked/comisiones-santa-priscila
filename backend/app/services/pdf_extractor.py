@@ -52,6 +52,7 @@ def _extraer_con_ia(
     nombre_archivo: str,
     db=None,
     texto_override: str | None = None,
+    cliente_id: str | None = None,
 ) -> dict[str, Any]:
     texto = texto_override if texto_override is not None else _extraer_texto_pdf(contenido)
     extractor = obtener_extractor_configurado()
@@ -63,7 +64,7 @@ def _extraer_con_ia(
         )
     )
     orden_validada = validar_orden_extraida(orden_ia)
-    orden_normalizada = normalizar_orden_extraida(db, orden_validada)
+    orden_normalizada = normalizar_orden_extraida(db, orden_validada, cliente_id=cliente_id)
     return _orden_validada_a_respuesta(orden_normalizada)
 
 
@@ -163,6 +164,7 @@ def extraer_orden_de_pdf(
     nombre_archivo: str = "",
     db=None,
     texto_override: str | None = None,
+    cliente_id: str | None = None,
 ) -> dict[str, Any]:
     """Extrae ítems de una orden de compra en formato PDF específico de DINACUAMAR."""
     texto_pdf = texto_override if texto_override is not None else _extraer_texto_pdf(contenido)
@@ -175,6 +177,7 @@ def extraer_orden_de_pdf(
             nombre_archivo=nombre_archivo,
             db=db,
             texto_override=texto_pdf,
+            cliente_id=cliente_id,
         )
 
     try:
@@ -188,6 +191,7 @@ def extraer_orden_de_pdf(
                 nombre_archivo=nombre_archivo,
                 db=db,
                 texto_override=texto_pdf,
+                cliente_id=cliente_id,
             )
         raise
 
@@ -275,17 +279,21 @@ def extraer_orden_de_pdf(
             for item in items_santa_priscila:
                 finca = item["finca"] or "-"
                 finca_id = None
-                cliente_id = None
+                cliente_id_item = cliente_id
                 producto_id = None
                 producto = item["producto"]
                 if db:
                     from app.models.cliente import Finca
                     from app.models.producto import Producto
 
-                    finca_db = db.query(Finca).filter(Finca.nombre.ilike(finca)).first()
+                    query_finca = db.query(Finca).filter(Finca.nombre.ilike(finca))
+                    if cliente_id:
+                        from uuid import UUID
+                        query_finca = query_finca.filter(Finca.cliente_id == UUID(cliente_id))
+                    finca_db = query_finca.first()
                     if finca_db:
                         finca_id = str(finca_db.id)
-                        cliente_id = str(finca_db.cliente_id)
+                        cliente_id_item = str(finca_db.cliente_id)
                     producto_db = db.query(Producto).filter(Producto.nombre.ilike(producto)).first()
                     if producto_db:
                         producto_id = str(producto_db.id)
@@ -297,7 +305,7 @@ def extraer_orden_de_pdf(
                         "numeroOrden": numero_orden or f"OC-{fecha}",
                         "finca": finca,
                         "fincaId": finca_id,
-                        "clienteId": cliente_id,
+                        "clienteId": cliente_id_item,
                         "productoId": producto_id,
                         "producto": producto,
                         "cantidad": item["cantidad"],
@@ -322,6 +330,7 @@ def extraer_orden_de_pdf(
             nombre_archivo=nombre_archivo,
             db=db,
             texto_override=texto_pdf,
+            cliente_id=cliente_id,
         )
 
     # 5. Extraer filas de tabla (entre Y < 690 y Y > 530)

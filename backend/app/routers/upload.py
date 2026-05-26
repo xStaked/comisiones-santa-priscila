@@ -5,7 +5,7 @@ from decimal import Decimal
 from typing import Any, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -44,6 +44,7 @@ class ExtraccionPDFResponse(BaseModel):
 @router.post("/pdf", response_model=ExtraccionPDFResponse)
 async def subir_pdf(
     file: UploadFile = File(...),
+    cliente_id: UUID | None = Query(None, description="ID del cliente para vincular fincas"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -61,7 +62,7 @@ async def subir_pdf(
         )
 
     try:
-        resultado = extraer_orden_de_pdf(contenido, nombre_archivo=file.filename, db=db)
+        resultado = extraer_orden_de_pdf(contenido, nombre_archivo=file.filename, db=db, cliente_id=str(cliente_id) if cliente_id else None)
     except Exception as exc:
         mensaje = str(exc)
         if len(mensaje) > 160:
@@ -77,6 +78,7 @@ async def subir_pdf(
 @router.post("/imagen", response_model=ExtraccionPDFResponse)
 async def subir_imagen(
     file: UploadFile = File(...),
+    cliente_id: UUID | None = Query(None, description="ID del cliente para vincular fincas"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -94,7 +96,7 @@ async def subir_imagen(
         )
 
     try:
-        resultado = extraer_orden_de_imagen(contenido, nombre_archivo=file.filename, db=db)
+        resultado = extraer_orden_de_imagen(contenido, nombre_archivo=file.filename, db=db, cliente_id=str(cliente_id) if cliente_id else None)
     except Exception as exc:
         mensaje = str(exc)
         if len(mensaje) > 160:
