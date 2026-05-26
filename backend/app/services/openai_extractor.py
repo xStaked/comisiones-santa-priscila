@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import json
 
-from openai import OpenAI
+from openai import OpenAI, OpenAIError
+from pydantic import ValidationError
 
+from app.services.ai_extractor import ErrorExtraccionIA
 from app.services.order_extraction_models import EntradaExtraccion, OrdenExtraidaIA
 
 
@@ -84,17 +86,23 @@ class OpenAIOrdenExtractor:
                 }
             )
 
-        response = self.client.responses.create(
-            model=self.model,
-            input=[{"role": "user", "content": contenido}],
-            text={
-                "format": {
-                    "type": "json_schema",
-                    "name": "orden_compra_extraida",
-                    "schema": ORDEN_SCHEMA,
-                    "strict": True,
-                }
-            },
-        )
-        data = json.loads(response.output_text)
-        return OrdenExtraidaIA.model_validate(data)
+        try:
+            response = self.client.responses.create(
+                model=self.model,
+                input=[{"role": "user", "content": contenido}],
+                text={
+                    "format": {
+                        "type": "json_schema",
+                        "name": "orden_compra_extraida",
+                        "schema": ORDEN_SCHEMA,
+                        "strict": True,
+                    }
+                },
+            )
+            output_text = getattr(response, "output_text", None)
+            if not output_text:
+                raise ErrorExtraccionIA("La respuesta IA no contiene datos extraidos")
+            data = json.loads(output_text)
+            return OrdenExtraidaIA.model_validate(data)
+        except (OpenAIError, json.JSONDecodeError, ValidationError) as exc:
+            raise ErrorExtraccionIA("No se pudo extraer la orden con IA") from exc

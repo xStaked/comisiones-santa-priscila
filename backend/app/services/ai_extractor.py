@@ -1,11 +1,16 @@
 from __future__ import annotations
 
+import importlib
 from typing import Protocol
 
 from app.services.order_extraction_models import EntradaExtraccion, OrdenExtraidaIA
 
 
 class ExtraccionIADeshabilitada(RuntimeError):
+    pass
+
+
+class ErrorExtraccionIA(RuntimeError):
     pass
 
 
@@ -25,7 +30,12 @@ def obtener_extractor_ia(provider: str, api_key: str, model: str) -> ExtractorIA
     if provider == "openai":
         if not api_key:
             raise ExtraccionIADeshabilitada("OPENAI_API_KEY no esta configurado")
-        from app.services.openai_extractor import OpenAIOrdenExtractor
+        try:
+            modulo = importlib.import_module("app.services.openai_extractor")
+        except ModuleNotFoundError as exc:
+            raise ExtraccionIADeshabilitada(
+                "La dependencia OpenAI no esta disponible para extraccion IA"
+            ) from exc
 
-        return OpenAIOrdenExtractor(api_key=api_key, model=model)
+        return modulo.OpenAIOrdenExtractor(api_key=api_key, model=model)
     raise ExtraccionIADeshabilitada(f"Proveedor IA no soportado: {provider}")
