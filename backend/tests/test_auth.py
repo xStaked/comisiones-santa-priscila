@@ -1,4 +1,9 @@
+from datetime import datetime, timedelta, timezone
+
 import pytest
+
+from app.models.refresh_token import RefreshToken
+from app.routers.auth import _datetime_utc, _hash_token
 
 
 def test_login_success(client, test_user):
@@ -64,6 +69,35 @@ def test_refresh_token_rotation(client, test_user):
     client.cookies.clear()
     response = client.post("/api/v1/auth/refresh", cookies={"refresh_token": old_refresh})
     assert response.status_code == 401
+
+
+def test_refresh_accepts_timezone_aware_expiration(client, test_user, db_session):
+    raw_refresh = "refresh-aware-token"
+    db_session.add(
+        RefreshToken(
+            token_hash=_hash_token(raw_refresh),
+            user_id=test_user.id,
+            expires_at=datetime.now(timezone.utc) + timedelta(days=1),
+        )
+    )
+    db_session.commit()
+
+    response = client.post(
+        "/api/v1/auth/refresh",
+        cookies={"refresh_token": raw_refresh},
+    )
+
+    assert response.status_code == 200
+    assert "access_token" in response.json()
+
+
+def test_datetime_utc_normaliza_naive_y_aware():
+    naive = datetime(2026, 5, 26, 12, 0, 0)
+    aware = datetime(2026, 5, 26, 12, 0, 0, tzinfo=timezone.utc)
+
+    assert _datetime_utc(naive).tzinfo == timezone.utc
+    assert _datetime_utc(aware).tzinfo == timezone.utc
+    assert _datetime_utc(naive) == aware
 
 
 def test_logout_invalidates_refresh(client, test_user):

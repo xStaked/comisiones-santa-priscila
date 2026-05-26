@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import secrets
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status, Response, Request
 from sqlalchemy.orm import Session
@@ -26,10 +26,20 @@ def _hash_token(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 
 
+def _datetime_utc(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
+def _utc_now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
 def _create_refresh_cookie(response: Response, db: Session, user_id: uuid.UUID) -> str:
     raw_token = secrets.token_urlsafe(32)
     token_hash = _hash_token(raw_token)
-    expires_at = datetime.utcnow() + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
+    expires_at = _utc_now() + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
 
     refresh = RefreshToken(token_hash=token_hash, user_id=user_id, expires_at=expires_at)
     db.add(refresh)
@@ -97,7 +107,7 @@ def refresh(
         .first()
     )
 
-    if not refresh_record or refresh_record.expires_at < datetime.utcnow():
+    if not refresh_record or _datetime_utc(refresh_record.expires_at) < _utc_now():
         _clear_refresh_cookie(response)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Refresh token inválido o expirado")
 
