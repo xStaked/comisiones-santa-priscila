@@ -5,9 +5,92 @@ from typing import Any
 
 import fitz
 
+from app.config import settings
+from app.services.ai_extractor import obtener_extractor_ia
+from app.services.order_extraction_models import EntradaExtraccion, OrdenValidada
+from app.services.order_extraction_normalizer import normalizar_orden_extraida
+from app.services.order_extraction_validator import validar_orden_extraida
 
-def extraer_orden_de_pdf(contenido: bytes, nombre_archivo: str = "", db=None) -> dict[str, Any]:
+
+def obtener_extractor_configurado():
+    provider = "openai" if settings.AI_EXTRACTION_ENABLED else "disabled"
+    return obtener_extractor_ia(
+        provider=provider,
+        api_key=settings.OPENAI_API_KEY,
+        model=settings.OPENAI_EXTRACTION_MODEL,
+    )
+
+
+def _orden_validada_a_respuesta(orden: OrdenValidada) -> dict[str, Any]:
+    return {
+        "fecha": orden.fecha,
+        "numeroOrden": orden.numeroOrden,
+        "proveedor": orden.proveedor,
+        "semana": orden.semana,
+        "items": [
+            {
+                "fecha": item.fecha,
+                "numeroOrden": item.numeroOrden,
+                "finca": item.finca,
+                "fincaId": item.fincaId,
+                "clienteId": item.clienteId,
+                "productoId": item.productoId,
+                "producto": item.producto,
+                "cantidad": item.cantidad,
+                "unidad": item.unidad,
+                "precioUnitario": item.precioUnitario,
+                "total": item.total,
+                "comisionistas": [],
+            }
+            for item in orden.items
+        ],
+    }
+
+
+def _extraer_con_ia(
+    contenido: bytes,
+    nombre_archivo: str,
+    db=None,
+    texto_override: str | None = None,
+) -> dict[str, Any]:
+    texto = texto_override if texto_override is not None else _extraer_texto_pdf(contenido)
+    extractor = obtener_extractor_configurado()
+    orden_ia = extractor.extraer_orden(
+        EntradaExtraccion(
+            nombre_archivo=nombre_archivo,
+            content_type="application/pdf",
+            texto=texto,
+        )
+    )
+    orden_validada = validar_orden_extraida(orden_ia)
+    orden_normalizada = normalizar_orden_extraida(db, orden_validada)
+    return _orden_validada_a_respuesta(orden_normalizada)
+
+
+def _extraer_texto_pdf(contenido: bytes) -> str:
+    doc = fitz.open(stream=contenido, filetype="pdf")
+    try:
+        return "\n".join(page.get_text("text") for page in doc)
+    finally:
+        doc.close()
+
+
+def extraer_orden_de_pdf(
+    contenido: bytes,
+    nombre_archivo: str = "",
+    db=None,
+    texto_override: str | None = None,
+) -> dict[str, Any]:
     """Extrae ítems de una orden de compra en formato PDF específico de DINACUAMAR."""
+    texto_pdf = texto_override if texto_override is not None else _extraer_texto_pdf(contenido)
+    if "FILACAS" in texto_pdf.upper() or "FECHA DE EMISIÓN" in texto_pdf.upper():
+        return _extraer_con_ia(
+            contenido,
+            nombre_archivo=nombre_archivo,
+            db=db,
+            texto_override=texto_pdf,
+        )
+
     doc = fitz.open(stream=contenido, filetype="pdf")
     pagina = doc[0]
 
