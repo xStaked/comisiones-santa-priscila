@@ -1,9 +1,17 @@
+import importlib
+
 import pytest
 
-from app.config import Settings
 
-
-AI_ENV_VARS = (
+SETTINGS_ENV_VARS = (
+    "DATABASE_URL",
+    "JWT_SECRET_KEY",
+    "JWT_ALGORITHM",
+    "ACCESS_TOKEN_EXPIRE_MINUTES",
+    "REFRESH_TOKEN_EXPIRE_DAYS",
+    "CORS_ORIGINS",
+    "ENV",
+    "RATE_LIMIT_PER_MINUTE",
     "AI_EXTRACTION_PROVIDER",
     "AI_EXTRACTION_ENABLED",
     "OPENAI_API_KEY",
@@ -13,10 +21,17 @@ AI_ENV_VARS = (
 )
 
 
-def test_ai_extraction_defaults_are_safe(monkeypatch):
-    for env_var in AI_ENV_VARS:
+def cargar_settings_aislado(monkeypatch):
+    for env_var in SETTINGS_ENV_VARS:
         monkeypatch.delenv(env_var, raising=False)
 
+    config = importlib.import_module("app.config")
+    config = importlib.reload(config)
+    return config.Settings
+
+
+def test_ai_extraction_defaults_are_safe(monkeypatch):
+    Settings = cargar_settings_aislado(monkeypatch)
     settings = Settings(_env_file=None)
 
     assert settings.AI_EXTRACTION_PROVIDER == "openai"
@@ -26,7 +41,9 @@ def test_ai_extraction_defaults_are_safe(monkeypatch):
     assert settings.AI_EXTRACTION_MAX_FILE_MB == 10
 
 
-def test_ai_extraction_openai_requires_api_key():
+def test_ai_extraction_openai_requires_api_key(monkeypatch):
+    Settings = cargar_settings_aislado(monkeypatch)
+
     with pytest.raises(ValueError, match="OPENAI_API_KEY es obligatorio"):
         Settings(
             AI_EXTRACTION_ENABLED=True,
