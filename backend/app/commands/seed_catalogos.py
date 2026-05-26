@@ -85,9 +85,9 @@ PRODUCTOS_DATA = [
 
 
 def truncate_catalogos(db) -> None:
-    tables = ["fincas", "clientes", "productos"]
+    tables = ["tarifas_cliente_producto", "fincas", "clientes", "productos"]
     for table in tables:
-        db.execute(text(f'DELETE FROM "{table}" CASCADE'))
+        db.execute(text(f'DELETE FROM "{table}"'))
     db.commit()
     print("Catálogos truncados.")
 

@@ -1,5 +1,6 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 import { toCamelCase, toSnakeCase } from './transform';
+import type { Liquidacion, OrdenItem } from '@/types';
 
 const API_BASE_URL = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000').replace(/\/+$/, '');
 
@@ -178,10 +179,43 @@ export async function limpiarOrdenes() {
   await api.post('/api/v1/ordenes/limpiar');
 }
 
+function snapshotItemToOrdenItem(item: any): OrdenItem {
+  return {
+    id: item.id,
+    fecha: item.fechaSnapshot,
+    numeroOrden: item.numeroOrdenSnapshot,
+    finca: item.fincaSnapshot,
+    producto: item.productoSnapshot,
+    cantidad: item.cantidadSnapshot,
+    unidad: item.unidadSnapshot,
+    precioUnitario: item.precioUnitarioSnapshot,
+    total: item.totalSnapshot,
+    sector: item.sectorSnapshot,
+    estado: item.estadoSnapshot,
+    comisionistas: (item.tarifas || []).map((t: any) => ({ comisionistaId: t.comisionistaId })),
+  };
+}
+
+function normalizarLiquidacionConItems(data: any): Liquidacion {
+  return {
+    id: data.id,
+    nombre: data.nombre,
+    mes: data.mes,
+    fechaCreacion: data.fechaCreacion,
+    items: (data.items || []).map(snapshotItemToOrdenItem),
+  };
+}
+
 // Liquidaciones
 export async function fetchLiquidaciones() {
   const res = await api.get('/api/v1/liquidaciones/');
-  return toCamelCase(res.data);
+  const liquidaciones = toCamelCase<any[]>(res.data);
+  return Promise.all(
+    liquidaciones.map(async (liquidacion) => {
+      const detalle = await api.get(`/api/v1/liquidaciones/${liquidacion.id}`);
+      return normalizarLiquidacionConItems(toCamelCase(detalle.data));
+    })
+  );
 }
 
 export async function fetchLiquidacion(id: string) {
@@ -335,5 +369,5 @@ export async function deleteTarifaClienteProducto(id: string) {
 
 // Admin
 export async function seedDemo() {
-  await api.post('/api/v1/admin/seed-demo');
+  await api.post('/api/v1/admin/seed-real');
 }

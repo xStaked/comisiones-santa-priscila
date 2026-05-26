@@ -100,7 +100,7 @@ def truncate_all(db) -> None:
         "comisionistas",
     ]
     for table in tables:
-        db.execute(text(f'DELETE FROM "{table}" CASCADE'))
+        db.execute(text(f'DELETE FROM "{table}"'))
     db.commit()
     print("Existing data truncated.")
 

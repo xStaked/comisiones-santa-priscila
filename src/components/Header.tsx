@@ -44,14 +44,14 @@ export function Header({ activeTab }: HeaderProps) {
               variant="ghost"
               size="sm"
               onClick={() => {
-                if (confirm('¿Restaurar los datos de demostración? Se perderán los cambios no guardados.')) {
+                if (confirm('¿Cargar los datos reales del Excel? Se eliminarán órdenes y liquidaciones existentes.')) {
                   resetDemoData();
                 }
               }}
               className="text-slate-500 hover:text-slate-900 gap-1.5 h-8 text-xs"
             >
               <RotateCcw className="h-3.5 w-3.5" />
-              Restaurar demo
+              Cargar datos reales
             </Button>
             <div className="h-4 w-px bg-slate-200" />
             {user && (

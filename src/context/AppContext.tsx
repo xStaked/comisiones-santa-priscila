@@ -291,10 +291,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     mutationFn: seedDemo,
     onSuccess: () => {
       queryClient.invalidateQueries();
-      toast.success('Datos de demo restaurados');
+      toast.success('Datos reales cargados');
     },
     onError: (err: any) => {
-      toast.error(err?.response?.data?.detail || 'Error al restaurar datos de demo');
+      toast.error(err?.response?.data?.detail || 'Error al cargar datos reales');
     },
   });
 
