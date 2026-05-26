@@ -25,8 +25,12 @@ def _buscar_finca(db: Session, nombre: str, cliente: Cliente | None) -> Finca | 
         return None
     query = db.query(Finca).filter(func.lower(Finca.nombre) == limpio.lower())
     if cliente:
-        query = query.filter(Finca.cliente_id == cliente.id)
-    return query.first()
+        return query.filter(Finca.cliente_id == cliente.id).first()
+
+    coincidencias = query.limit(2).all()
+    if len(coincidencias) != 1:
+        return None
+    return coincidencias[0]
 
 
 def _buscar_producto(db: Session, nombre: str) -> Producto | None:
