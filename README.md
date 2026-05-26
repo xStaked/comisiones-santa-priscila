@@ -20,6 +20,27 @@ You can start editing the page by modifying `app/page.tsx`. The page auto-update
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
+## Backend
+
+The FastAPI backend lives in `backend/`.
+
+### Extraccion IA de ordenes
+
+El backend puede usar OpenAI API para extraer ordenes de compra desde PDFs o imagenes con formatos variables.
+
+Variables:
+
+```txt
+AI_EXTRACTION_PROVIDER=openai
+AI_EXTRACTION_ENABLED=true
+OPENAI_API_KEY=sk-proj-demo-redacted
+OPENAI_EXTRACTION_MODEL=gpt-4.1-mini
+AI_EXTRACTION_TIMEOUT_SECONDS=45
+AI_EXTRACTION_MAX_FILE_MB=10
+```
+
+La IA solo propone datos estructurados. El usuario revisa la previsualizacion antes de guardar ordenes. No se deben registrar PDFs, imagenes ni texto completo extraido en logs.
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:
