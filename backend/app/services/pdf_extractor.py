@@ -72,6 +72,15 @@ def _extraer_texto_pdf(contenido: bytes) -> str:
         return "\n".join(page.get_text("text") for page in doc)
 
 
+def _debe_usar_extraccion_ia(texto_pdf: str) -> bool:
+    texto = texto_pdf.upper()
+    return (
+        "FILACAS" in texto
+        or "FECHA DE EMISIÓN" in texto
+        or "INDUSTRIAL PESQUERA SANTA PRISCILA" in texto
+    )
+
+
 def extraer_orden_de_pdf(
     contenido: bytes,
     nombre_archivo: str = "",
@@ -80,7 +89,7 @@ def extraer_orden_de_pdf(
 ) -> dict[str, Any]:
     """Extrae ítems de una orden de compra en formato PDF específico de DINACUAMAR."""
     texto_pdf = texto_override if texto_override is not None else _extraer_texto_pdf(contenido)
-    if "FILACAS" in texto_pdf.upper() or "FECHA DE EMISIÓN" in texto_pdf.upper():
+    if _debe_usar_extraccion_ia(texto_pdf):
         return _extraer_con_ia(
             contenido,
             nombre_archivo=nombre_archivo,

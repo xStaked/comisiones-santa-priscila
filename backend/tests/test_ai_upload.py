@@ -55,6 +55,63 @@ def test_pdf_filacas_delega_a_ia_y_conserva_contrato(monkeypatch):
     assert resultado["items"][0]["unidad"] == "kg"
 
 
+def test_pdf_santa_priscila_ecubacillus_delega_a_ia(monkeypatch):
+    class ExtractorSantaPriscilaFake:
+        def extraer_orden(self, entrada):
+            assert entrada.nombre_archivo == "93188 SEM 15 ECU-BACILLUS.pdf"
+            assert "INDUSTRIAL PESQUERA SANTA PRISCILA" in entrada.texto
+            assert "ECU-BACILLUS SUELO-PASTILLA TH" in entrada.texto
+            return OrdenExtraidaIA(
+                fecha="2026-04-08",
+                numeroOrden="93188",
+                proveedor="INDUSTRIAL ACUICOLA OCHOA & BARCIA DINACUAMAR CIA.LTDA.",
+                cliente="INDUSTRIAL PESQUERA SANTA PRISCILA S.A.",
+                finca="",
+                semana="15",
+                items=[
+                    OrdenItemExtraidoIA(
+                        finca="CALIFORNIA ADM A",
+                        producto="ECU-BACILLUS SUELO-PASTILLA TH",
+                        cantidad=Decimal("5.00"),
+                        unidad="TACHO 10 KG",
+                        precioUnitario=Decimal("685.00000"),
+                        total=Decimal("3425.00"),
+                    ),
+                    OrdenItemExtraidoIA(
+                        finca="CALIFORNIA ADM B",
+                        producto="ECU-BACILLUS SUELO-PASTILLA TH",
+                        cantidad=Decimal("15.00"),
+                        unidad="TACHO 10 KG",
+                        precioUnitario=Decimal("685.00000"),
+                        total=Decimal("10275.00"),
+                    ),
+                ],
+            )
+
+    monkeypatch.setattr(
+        "app.services.pdf_extractor.obtener_extractor_configurado",
+        lambda: ExtractorSantaPriscilaFake(),
+    )
+
+    contenido = b"%PDF-1.4\ntexto simulado"
+    resultado = extraer_orden_de_pdf(
+        contenido,
+        nombre_archivo="93188 SEM 15 ECU-BACILLUS.pdf",
+        db=None,
+        texto_override=(
+            "INDUSTRIAL PESQUERA SANTA PRISCILA S.A. ORDEN DE COMPRA No. 93188 "
+            "SEMANA : 15 ECU-BACILLUS SUELO-PASTILLA TH CALIFORNIA ADM A"
+        ),
+    )
+
+    assert resultado["fecha"].isoformat() == "2026-04-08"
+    assert resultado["numeroOrden"] == "93188"
+    assert resultado["semana"] == "15"
+    assert len(resultado["items"]) == 2
+    assert resultado["items"][0]["finca"] == "CALIFORNIA ADM A"
+    assert resultado["items"][1]["finca"] == "CALIFORNIA ADM B"
+
+
 def test_schema_upload_conserva_producto_id():
     producto_id = uuid4()
     item = ItemExtraido.model_validate(
