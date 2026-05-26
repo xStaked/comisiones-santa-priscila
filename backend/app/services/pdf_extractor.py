@@ -81,6 +81,83 @@ def _debe_usar_extraccion_ia(texto_pdf: str) -> bool:
     )
 
 
+def _texto_en_rango(celdas: list[dict[str, Any]], x_min: int, x_max: int) -> str:
+    return " ".join(c["text"] for c in celdas if x_min <= c["x"] <= x_max).strip()
+
+
+def _celda_decimal_en_rango(
+    celdas: list[dict[str, Any]], x_min: int, x_max: int
+) -> dict[str, Any] | None:
+    return next(
+        (
+            c
+            for c in celdas
+            if x_min <= c["x"] <= x_max
+            and re.match(r"^[\d,]+\.\d+$", c["text"].replace(",", ""))
+        ),
+        None,
+    )
+
+
+def _extraer_items_santa_priscila_desde_filas(
+    filas: list[dict[str, Any]], semana: str
+) -> list[dict[str, Any]]:
+    items: list[dict[str, Any]] = []
+    finca_actual = "-"
+
+    for fila in sorted(filas, key=lambda f: f["y"]):
+        celdas = fila["cells"]
+        if not celdas:
+            continue
+
+        pedido = next(
+            (c for c in celdas if 70 <= c["x"] <= 85 and re.match(r"^\d+$", c["text"])),
+            None,
+        )
+        precio_celda = _celda_decimal_en_rango(celdas, 270, 292)
+        cantidad_celda = _celda_decimal_en_rango(celdas, 365, 390)
+        total_celda = _celda_decimal_en_rango(celdas, 490, 515)
+
+        if pedido and precio_celda and cantidad_celda and total_celda:
+            producto = _texto_en_rango(celdas, 110, 270)
+            unidad_texto = _texto_en_rango(celdas, 300, 365)
+            items.append(
+                {
+                    "codigo": pedido["text"],
+                    "semana": semana,
+                    "finca": finca_actual,
+                    "producto": producto,
+                    "cantidad": Decimal(cantidad_celda["text"].replace(",", "")),
+                    "descripcion": unidad_texto or producto,
+                    "precioUnitario": Decimal(precio_celda["text"].replace(",", "")),
+                    "total": Decimal(total_celda["text"].replace(",", "")),
+                    "unidad": inferir_unidad(unidad_texto),
+                }
+            )
+            continue
+
+        texto_fila = " ".join(c["text"] for c in celdas).strip()
+        tiene_decimal = any(
+            re.match(r"^[\d,]+\.\d+$", c["text"])
+            for c in celdas[1:]
+        )
+        es_finca = (
+            texto_fila
+            and len(celdas) <= 3
+            and 70 <= celdas[0]["x"] <= 120
+            and not re.match(r"^\d", texto_fila)
+            and not tiene_decimal
+            and "SUB-TOTAL" not in texto_fila.upper()
+            and "OBSERVACIONES" not in texto_fila.upper()
+            and "TOTAL" not in texto_fila.upper()
+            and "R.U.C." not in texto_fila.upper()
+        )
+        if es_finca:
+            finca_actual = texto_fila
+
+    return items
+
+
 def extraer_orden_de_pdf(
     contenido: bytes,
     nombre_archivo: str = "",
@@ -89,7 +166,10 @@ def extraer_orden_de_pdf(
 ) -> dict[str, Any]:
     """Extrae ítems de una orden de compra en formato PDF específico de DINACUAMAR."""
     texto_pdf = texto_override if texto_override is not None else _extraer_texto_pdf(contenido)
-    if _debe_usar_extraccion_ia(texto_pdf):
+    usar_ia = _debe_usar_extraccion_ia(texto_pdf)
+    es_santa_priscila = "INDUSTRIAL PESQUERA SANTA PRISCILA" in texto_pdf.upper()
+
+    if usar_ia and not es_santa_priscila:
         return _extraer_con_ia(
             contenido,
             nombre_archivo=nombre_archivo,
@@ -97,9 +177,19 @@ def extraer_orden_de_pdf(
             texto_override=texto_pdf,
         )
 
-    with fitz.open(stream=contenido, filetype="pdf") as doc:
-        pagina = doc[0]
-        palabras = pagina.get_text("words")
+    try:
+        with fitz.open(stream=contenido, filetype="pdf") as doc:
+            pagina = doc[0]
+            palabras = pagina.get_text("words")
+    except Exception:
+        if usar_ia:
+            return _extraer_con_ia(
+                contenido,
+                nombre_archivo=nombre_archivo,
+                db=db,
+                texto_override=texto_pdf,
+            )
+        raise
 
     # 1. Extraer palabras con posiciones (x, y)
     items: list[dict[str, Any]] = []
@@ -177,6 +267,62 @@ def extraer_orden_de_pdf(
             fecha = f"{match.group(1)}-{match.group(2)}-{match.group(3)}"
         else:
             fecha = date.today().isoformat()
+
+    if es_santa_priscila:
+        items_santa_priscila = _extraer_items_santa_priscila_desde_filas(filas, semana)
+        if items_santa_priscila:
+            orden_items = []
+            for item in items_santa_priscila:
+                finca = item["finca"] or "-"
+                finca_id = None
+                cliente_id = None
+                producto_id = None
+                producto = item["producto"]
+                if db:
+                    from app.models.cliente import Finca
+                    from app.models.producto import Producto
+
+                    finca_db = db.query(Finca).filter(Finca.nombre.ilike(finca)).first()
+                    if finca_db:
+                        finca_id = str(finca_db.id)
+                        cliente_id = str(finca_db.cliente_id)
+                    producto_db = db.query(Producto).filter(Producto.nombre.ilike(producto)).first()
+                    if producto_db:
+                        producto_id = str(producto_db.id)
+                        producto = producto_db.nombre
+
+                orden_items.append(
+                    {
+                        "fecha": date.fromisoformat(fecha),
+                        "numeroOrden": numero_orden or f"OC-{fecha}",
+                        "finca": finca,
+                        "fincaId": finca_id,
+                        "clienteId": cliente_id,
+                        "productoId": producto_id,
+                        "producto": producto,
+                        "cantidad": item["cantidad"],
+                        "unidad": item["unidad"],
+                        "precioUnitario": item["precioUnitario"],
+                        "total": item["total"],
+                        "comisionistas": [],
+                    }
+                )
+
+            return {
+                "fecha": date.fromisoformat(fecha),
+                "numeroOrden": numero_orden or f"OC-{fecha}",
+                "proveedor": proveedor or "",
+                "semana": semana,
+                "items": orden_items,
+            }
+
+    if usar_ia:
+        return _extraer_con_ia(
+            contenido,
+            nombre_archivo=nombre_archivo,
+            db=db,
+            texto_override=texto_pdf,
+        )
 
     # 5. Extraer filas de tabla (entre Y < 690 y Y > 530)
     filas_tabla = [f for f in filas if 530 < f["y"] < 690]

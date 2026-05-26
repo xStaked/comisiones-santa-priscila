@@ -1,18 +1,18 @@
 from __future__ import annotations
 
 from datetime import date
-from typing import List
+from decimal import Decimal
+from typing import Any, List
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Body, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session, selectinload
 
 from app.database import get_db
 from app.models.user import User
-from app.models.comisionista import Comisionista
-from app.models.orden import Asignacion, EstadoOrden, OrdenItem
-from app.schemas.orden import OrdenItemCreate, OrdenItemResponse, OrdenItemUpdate
+from app.models.orden import Asignacion, EstadoOrden, Orden, OrdenItem
+from app.schemas.orden import OrdenCreate, OrdenItemCreate, OrdenItemResponse, OrdenItemUpdate
 from app.dependencies import get_current_user
 
 router = APIRouter()
@@ -27,8 +27,13 @@ class AsignarGlobalBody(BaseModel):
     comisionista_ids: List[UUID]
 
 
-@router.get("/", response_model=list[OrdenItemResponse])
+class ComisionistasOrdenBody(BaseModel):
+    comisionista_ids: List[UUID]
+
+
+@router.get("/")
 def listar_ordenes(
+    agrupadas: bool = False,
     finca: str | None = None,
     producto: str | None = None,
     fecha_desde: date | None = None,
@@ -43,6 +48,7 @@ def listar_ordenes(
             selectinload(OrdenItem.cliente),
             selectinload(OrdenItem.producto_obj),
             selectinload(OrdenItem.finca_obj),
+            selectinload(OrdenItem.orden).selectinload(Orden.items),
         )
         .filter(OrdenItem.estado != EstadoOrden.anulado)
     )
@@ -56,49 +62,171 @@ def listar_ordenes(
     if fecha_hasta:
         query = query.filter(OrdenItem.fecha <= fecha_hasta)
 
-    return query.all()
+    items = query.all()
+    if not agrupadas:
+        return [_serializar_item(item) for item in items]
+
+    return _serializar_ordenes_agrupadas(items)
 
 
-@router.post(
-    "/", response_model=list[OrdenItemResponse], status_code=status.HTTP_201_CREATED
-)
-def crear_ordenes(items: List[OrdenItemCreate], db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+@router.post("/", status_code=status.HTTP_201_CREATED)
+def crear_ordenes(
+    payload: Any = Body(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     resultados: list[OrdenItem] = []
 
     try:
-        for item in items:
-            oi = OrdenItem(
-                fecha=item.fecha,
-                numero_orden=item.numero_orden,
-                finca=item.finca,
-                producto=item.producto,
-                cantidad=item.cantidad,
-                unidad=item.unidad,
-                precio_unitario=item.precio_unitario,
-                total=item.total,
-                sector=item.sector,
-                estado=EstadoOrden.activo,
-                cliente_id=item.cliente_id,
-                producto_id=item.producto_id,
-                finca_id=item.finca_id,
+        if isinstance(payload, list):
+            ordenes_por_clave: dict[tuple[date, str], Orden] = {}
+            for raw_item in payload:
+                item = OrdenItemCreate.model_validate(raw_item)
+                clave = (item.fecha, item.numero_orden)
+                orden = ordenes_por_clave.get(clave)
+                if not orden:
+                    orden = Orden(
+                        fecha=item.fecha,
+                        numero_orden=item.numero_orden,
+                        cliente_id=None,
+                        origen="manual",
+                        estado=EstadoOrden.activo,
+                    )
+                    db.add(orden)
+                    db.flush()
+                    ordenes_por_clave[clave] = orden
+                oi = _crear_orden_item(db, item, orden.id)
+                resultados.append(oi)
+
+            db.commit()
+            for oi in resultados:
+                db.refresh(oi)
+            return resultados
+
+        orden_data = OrdenCreate.model_validate(payload)
+        orden = Orden(
+            fecha=orden_data.fecha,
+            numero_orden=orden_data.numero_orden,
+            cliente_id=orden_data.cliente_id,
+            proveedor=orden_data.proveedor,
+            semana=orden_data.semana,
+            archivo_nombre=orden_data.archivo_nombre,
+            origen=orden_data.origen,
+            estado=EstadoOrden.activo,
+        )
+        db.add(orden)
+        db.flush()
+
+        for linea in orden_data.items:
+            item = OrdenItemCreate(
+                fecha=orden_data.fecha,
+                numero_orden=orden_data.numero_orden,
+                finca=linea.finca,
+                producto=linea.producto,
+                cantidad=linea.cantidad,
+                unidad=linea.unidad,
+                precio_unitario=linea.precio_unitario,
+                total=linea.total,
+                sector=linea.sector,
+                estado=linea.estado,
+                comisionista_ids=linea.comisionista_ids,
+                cliente_id=linea.cliente_id or orden_data.cliente_id,
+                producto_id=linea.producto_id,
+                finca_id=linea.finca_id,
             )
-            db.add(oi)
-            db.flush()
-
-            for cid in item.comisionista_ids:
-                db.add(Asignacion(orden_item_id=oi.id, comisionista_id=cid))
-
+            oi = _crear_orden_item(db, item, orden.id)
             resultados.append(oi)
 
         db.commit()
-        for oi in resultados:
-            db.refresh(oi)
-        return resultados
+        db.refresh(orden)
+        return _serializar_orden(orden)
     except Exception as exc:
         db.rollback()
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
         ) from exc
+
+
+def _crear_orden_item(db: Session, item: OrdenItemCreate, orden_id: UUID) -> OrdenItem:
+    oi = OrdenItem(
+        orden_id=orden_id,
+        fecha=item.fecha,
+        numero_orden=item.numero_orden,
+        finca=item.finca,
+        producto=item.producto,
+        cantidad=item.cantidad,
+        unidad=item.unidad,
+        precio_unitario=item.precio_unitario,
+        total=item.total,
+        sector=item.sector,
+        estado=EstadoOrden.activo,
+        cliente_id=item.cliente_id,
+        producto_id=item.producto_id,
+        finca_id=item.finca_id,
+    )
+    db.add(oi)
+    db.flush()
+
+    for cid in item.comisionista_ids:
+        db.add(Asignacion(orden_item_id=oi.id, comisionista_id=cid))
+
+    return oi
+
+
+def _serializar_item(item: OrdenItem) -> dict[str, Any]:
+    return OrdenItemResponse.model_validate(item).model_dump(by_alias=True)
+
+
+def _serializar_orden(orden: Orden) -> dict[str, Any]:
+    items = [item for item in orden.items if item.estado != EstadoOrden.anulado]
+    return {
+        "id": orden.id,
+        "fecha": orden.fecha,
+        "numero_orden": orden.numero_orden,
+        "cliente_id": orden.cliente_id,
+        "proveedor": orden.proveedor,
+        "semana": orden.semana,
+        "archivo_nombre": orden.archivo_nombre,
+        "origen": orden.origen,
+        "estado": orden.estado.value,
+        "total": sum((item.total for item in items), Decimal("0")),
+        "cantidad_productos": len(items),
+        "items": [_serializar_item(item) for item in items],
+    }
+
+
+def _serializar_ordenes_agrupadas(items: list[OrdenItem]) -> list[dict[str, Any]]:
+    ordenes: dict[UUID, Orden] = {}
+    items_sin_cabecera: dict[tuple[date, str, UUID | None], list[OrdenItem]] = {}
+
+    for item in items:
+        if item.orden:
+            ordenes[item.orden.id] = item.orden
+        else:
+            clave = (item.fecha, item.numero_orden, item.cliente_id)
+            items_sin_cabecera.setdefault(clave, []).append(item)
+
+    resultado = [_serializar_orden(orden) for orden in ordenes.values()]
+
+    for (fecha, numero_orden, cliente_id), grupo_items in items_sin_cabecera.items():
+        resultado.append(
+            {
+                "id": grupo_items[0].id,
+                "fecha": fecha,
+                "numero_orden": numero_orden,
+                "cliente_id": cliente_id,
+                "proveedor": None,
+                "semana": None,
+                "archivo_nombre": None,
+                "origen": "manual",
+                "estado": EstadoOrden.activo.value,
+                "total": sum((item.total for item in grupo_items), Decimal("0")),
+                "cantidad_productos": len(grupo_items),
+                "items": [_serializar_item(item) for item in grupo_items],
+            }
+        )
+
+    return resultado
 
 
 @router.post("/limpiar")
@@ -108,6 +236,9 @@ def limpiar_ordenes(db: Session = Depends(get_db), current_user: User = Depends(
             db.query(OrdenItem)
             .filter(OrdenItem.estado == EstadoOrden.activo)
             .update({OrdenItem.estado: EstadoOrden.anulado}, synchronize_session=False)
+        )
+        db.query(Orden).filter(Orden.estado == EstadoOrden.activo).update(
+            {Orden.estado: EstadoOrden.anulado}, synchronize_session=False
         )
         db.commit()
         return {"message": f"{count} orden(es) anulada(s)"}
@@ -146,6 +277,40 @@ def actualizar_orden(
         ) from exc
 
 
+@router.post("/grupos/{id}/comisionistas")
+def asignar_comisionistas_a_orden(
+    id: UUID,
+    body: ComisionistasOrdenBody,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    orden = (
+        db.query(Orden)
+        .options(selectinload(Orden.items))
+        .filter(Orden.id == id)
+        .first()
+    )
+    if not orden:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Orden no encontrada"
+        )
+
+    try:
+        for item in orden.items:
+            db.query(Asignacion).filter(
+                Asignacion.orden_item_id == item.id
+            ).delete(synchronize_session=False)
+            for cid in body.comisionista_ids:
+                db.add(Asignacion(orden_item_id=item.id, comisionista_id=cid))
+        db.commit()
+        return {"message": "Comisionistas asignados a la orden"}
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
+        ) from exc
+
+
 @router.delete("/{id}", status_code=status.HTTP_204_NO_CONTENT)
 def eliminar_orden(id: UUID, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     oi = db.query(OrdenItem).filter(OrdenItem.id == id).first()
@@ -156,6 +321,20 @@ def eliminar_orden(id: UUID, db: Session = Depends(get_db), current_user: User =
 
     oi.estado = EstadoOrden.anulado
     try:
+        db.flush()
+        if oi.orden_id:
+            activos = (
+                db.query(OrdenItem)
+                .filter(
+                    OrdenItem.orden_id == oi.orden_id,
+                    OrdenItem.estado != EstadoOrden.anulado,
+                )
+                .count()
+            )
+            if activos == 0:
+                orden = db.query(Orden).filter(Orden.id == oi.orden_id).first()
+                if orden:
+                    orden.estado = EstadoOrden.anulado
         db.commit()
     except Exception as exc:
         db.rollback()

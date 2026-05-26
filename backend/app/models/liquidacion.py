@@ -28,6 +28,11 @@ class LiquidacionItem(BaseModel):
         ForeignKey("orden_items.id", ondelete="SET NULL"),
         nullable=True,
     )
+    orden_id = Column(
+        Uuid,
+        ForeignKey("ordenes.id", ondelete="SET NULL"),
+        nullable=True,
+    )
 
     # Snapshot fields from OrdenItem
     fecha_snapshot = Column(Date, nullable=False)
@@ -46,6 +51,7 @@ class LiquidacionItem(BaseModel):
     retencion_porcentaje_snapshot = Column(Numeric(5, 2), nullable=True)
 
     liquidacion = relationship("Liquidacion", back_populates="items")
+    orden = relationship("Orden")
     orden_item = relationship("OrdenItem", back_populates="liquidacion_items")
     tarifas = relationship(
         "LiquidacionItemTarifa",

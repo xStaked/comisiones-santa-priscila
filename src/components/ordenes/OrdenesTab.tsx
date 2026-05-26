@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useRef, useEffect, useMemo } from 'react';
-import { Plus, Upload, Trash2, Pencil, UserCheck, Calculator, FileUp, Check, X, Sparkles, Search, ChevronDown } from 'lucide-react';
+import { Fragment, useState, useRef, useEffect, useMemo } from 'react';
+import { Plus, Upload, Trash2, Pencil, UserCheck, Calculator, FileUp, Check, X, Sparkles, Search, ChevronDown, ChevronRight } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { OrdenItem, TarifaClienteProducto } from '@/types';
 import { Button } from '@/components/ui/button';
@@ -164,6 +164,7 @@ export function OrdenesTab() {
   const [editForm, setEditForm] = useState<Partial<OrdenItem>>({});
   const [editOpen, setEditOpen] = useState(false);
   const [search, setSearch] = useState('');
+  const [collapsedOrdenIds, setCollapsedOrdenIds] = useState<string[]>([]);
 
   const filteredOrdenItems = useMemo(() => {
     if (!search.trim()) return ordenItems;
@@ -178,6 +179,51 @@ export function OrdenesTab() {
       item.comisionistas.some(a => comisionistas.find(c => c.id === a.comisionistaId)?.nombre.toLowerCase().includes(q))
     );
   }, [ordenItems, search, comisionistas]);
+
+  const ordenesAgrupadas = useMemo(() => {
+    const map = new Map<string, {
+      id: string;
+      fecha: string;
+      numeroOrden: string;
+      cliente: string;
+      fincas: string[];
+      total: number;
+      estado: string;
+      comisionistaIds: string[];
+      items: OrdenItem[];
+    }>();
+
+    filteredOrdenItems.forEach((item) => {
+      const id = item.ordenId || `${item.fecha}-${item.numeroOrden}-${item.clienteId || ''}`;
+      const existente = map.get(id);
+      const finca = item.fincaRel?.nombre || item.finca;
+      const comisionistaIds = item.comisionistas.map(a => a.comisionistaId);
+      if (existente) {
+        existente.total += item.total;
+        existente.items.push(item);
+        if (finca && !existente.fincas.includes(finca)) existente.fincas.push(finca);
+        comisionistaIds.forEach((cid) => {
+          if (!existente.comisionistaIds.includes(cid)) existente.comisionistaIds.push(cid);
+        });
+        existente.estado = existente.items.every(i => i.estado === 'liquidado') ? 'liquidado' : 'activo';
+        return;
+      }
+
+      map.set(id, {
+        id,
+        fecha: item.fecha,
+        numeroOrden: item.numeroOrden,
+        cliente: item.cliente?.nombre || '-',
+        fincas: finca ? [finca] : [],
+        total: item.total,
+        estado: item.estado || 'activo',
+        comisionistaIds,
+        items: [item],
+      });
+    });
+
+    return Array.from(map.values()).sort((a, b) => b.fecha.localeCompare(a.fecha));
+  }, [filteredOrdenItems]);
 
   const resetForm = () => {
     setForm({
@@ -291,6 +337,10 @@ export function OrdenesTab() {
   };
 
   const totalGeneral = ordenItems.reduce((s, i) => s + i.total, 0);
+  const cantidadOrdenes = useMemo(() => {
+    const ids = new Set(ordenItems.map(item => item.ordenId || `${item.fecha}-${item.numeroOrden}-${item.clienteId || ''}`));
+    return ids.size;
+  }, [ordenItems]);
 
   return (
     <div className="space-y-6">
@@ -610,7 +660,7 @@ export function OrdenesTab() {
           </div>
           <div className="flex items-center gap-4">
             <div className="text-right">
-              <p className="text-xs text-slate-500">Total Orden</p>
+              <p className="text-xs text-slate-500">{cantidadOrdenes} orden{cantidadOrdenes === 1 ? '' : 'es'} / {ordenItems.length} productos</p>
               <p className="text-xl font-bold text-slate-900 tabular-nums">${totalGeneral.toFixed(2)}</p>
             </div>
             <Button variant="outline" size="sm" onClick={clearOrdenItems} className="text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg border-slate-200">
@@ -628,33 +678,81 @@ export function OrdenesTab() {
               <table className="w-full text-sm">
                 <thead className="bg-slate-50 border-b border-slate-200">
                   <tr>
-                    <th className="text-left px-4 py-3 font-medium text-slate-600">Fecha</th>
-                    <th className="text-left px-4 py-3 font-medium text-slate-600">Factura</th>
+                    <th className="text-left px-4 py-3 font-medium text-slate-600">Orden</th>
                     <th className="text-left px-4 py-3 font-medium text-slate-600">Cliente</th>
-                    <th className="text-left px-4 py-3 font-medium text-slate-600">Finca</th>
-                    <th className="text-left px-4 py-3 font-medium text-slate-600">Producto</th>
-                    <th className="text-right px-4 py-3 font-medium text-slate-600">Cantidad</th>
-                    <th className="text-right px-4 py-3 font-medium text-slate-600">Precio</th>
+                    <th className="text-left px-4 py-3 font-medium text-slate-600">Fincas</th>
+                    <th className="text-right px-4 py-3 font-medium text-slate-600">Productos</th>
                     <th className="text-right px-4 py-3 font-medium text-slate-600">Total</th>
                     <th className="text-left px-4 py-3 font-medium text-slate-600">Comisionistas</th>
+                    <th className="text-left px-4 py-3 font-medium text-slate-600">Estado</th>
                     <th className="text-center px-4 py-3 font-medium text-slate-600 w-20">Acción</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {filteredOrdenItems.map(item => (
-                    <tr key={item.id} className="hover:bg-slate-50/50 transition-colors">
-                      <td className="px-4 py-3 text-slate-500">{item.fecha}</td>
-                      <td className="px-4 py-3 text-slate-900 font-medium">{item.numeroOrden}</td>
-                      <td className="px-4 py-3 text-slate-500">{item.cliente?.nombre || '-'}</td>
-                      <td className="px-4 py-3 text-slate-500">{item.fincaRel?.nombre || item.finca}</td>
-                      <td className="px-4 py-3 text-slate-700">{item.productoRel?.nombre || item.producto}</td>
-                      <td className="px-4 py-3 text-right text-slate-700">
-                        {item.cantidad.toLocaleString('es-ES')} <span className="text-xs text-slate-400">{item.unidad}</span>
-                      </td>
-                      <td className="px-4 py-3 text-right text-slate-500">${item.precioUnitario.toFixed(2)}</td>
-                      <td className="px-4 py-3 text-right font-medium text-slate-900">${item.total.toFixed(2)}</td>
-                      <td className="px-4 py-3">
-                        {item.comisionistas.length > 0 ? (
+                  {ordenesAgrupadas.map(orden => {
+                    const collapsed = collapsedOrdenIds.includes(orden.id);
+                    return (
+                      <Fragment key={orden.id}>
+                        <tr key={orden.id} className="bg-slate-50/70 hover:bg-slate-100/70 transition-colors">
+                          <td className="px-4 py-3">
+                            <button
+                              type="button"
+                              onClick={() => setCollapsedOrdenIds(prev => collapsed ? prev.filter(id => id !== orden.id) : [...prev, orden.id])}
+                              className="flex items-center gap-2 text-left"
+                            >
+                              {collapsed ? <ChevronRight className="h-4 w-4 text-slate-400" /> : <ChevronDown className="h-4 w-4 text-slate-400" />}
+                              <span>
+                                <span className="block font-semibold text-slate-900">{orden.numeroOrden}</span>
+                                <span className="block text-xs text-slate-500">{orden.fecha}</span>
+                              </span>
+                            </button>
+                          </td>
+                          <td className="px-4 py-3 text-slate-600">{orden.cliente}</td>
+                          <td className="px-4 py-3 text-slate-600">{orden.fincas.length > 1 ? `${orden.fincas.length} fincas` : (orden.fincas[0] || '-')}</td>
+                          <td className="px-4 py-3 text-right text-slate-700">{orden.items.length}</td>
+                          <td className="px-4 py-3 text-right font-semibold text-slate-900">${orden.total.toFixed(2)}</td>
+                          <td className="px-4 py-3">
+                            {orden.comisionistaIds.length > 0 ? (
+                              <div className="flex flex-wrap gap-1">
+                                {orden.comisionistaIds.map(cid => {
+                                  const com = comisionistas.find(c => c.id === cid);
+                                  return com ? (
+                                    <Badge key={cid} variant="secondary" className="text-xs border-0 bg-slate-100 text-slate-700">
+                                      {com.nombre}
+                                    </Badge>
+                                  ) : null;
+                                })}
+                              </div>
+                            ) : (
+                              <span className="text-xs text-slate-400">Sin asignar</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3">
+                            <Badge variant="secondary" className={orden.estado === 'liquidado' ? 'bg-emerald-100 text-emerald-700 border-0' : 'bg-slate-100 text-slate-700 border-0'}>
+                              {orden.estado === 'liquidado' ? 'Liquidado' : 'Activo'}
+                            </Badge>
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg" onClick={() => {
+                              if (confirm('¿Eliminar toda la orden y sus productos?')) {
+                                orden.items.forEach(item => deleteOrdenItem(item.id));
+                              }
+                            }}>
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </td>
+                        </tr>
+                        {!collapsed && orden.items.map(item => (
+                          <tr key={item.id} className="hover:bg-slate-50/50 transition-colors">
+                            <td className="px-4 py-3 pl-10 text-slate-500">{item.productoRel?.nombre || item.producto}</td>
+                            <td className="px-4 py-3 text-slate-500">{item.cliente?.nombre || '-'}</td>
+                            <td className="px-4 py-3 text-slate-500">{item.fincaRel?.nombre || item.finca}</td>
+                            <td className="px-4 py-3 text-right text-slate-700">
+                              {item.cantidad.toLocaleString('es-ES')} <span className="text-xs text-slate-400">{item.unidad}</span>
+                            </td>
+                            <td className="px-4 py-3 text-right font-medium text-slate-900">${item.total.toFixed(2)}</td>
+                            <td className="px-4 py-3">
+                              {item.comisionistas.length > 0 ? (
                           <div className="flex flex-wrap gap-1">
                             {item.comisionistas.map(a => {
                               const com = comisionistas.find(c => c.id === a.comisionistaId);
@@ -669,19 +767,25 @@ export function OrdenesTab() {
                         ) : (
                           <span className="text-xs text-slate-400">Sin asignar</span>
                         )}
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex justify-center gap-1">
-                          <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg" onClick={() => handleEdit(item)}>
-                            <Pencil className="h-3.5 w-3.5" />
-                          </Button>
-                          <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg" onClick={() => deleteOrdenItem(item.id)}>
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                            </td>
+                            <td className="px-4 py-3 text-slate-500">
+                              <span className="text-xs">${item.precioUnitario.toFixed(2)} unit.</span>
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className="flex justify-center gap-1">
+                                <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg" onClick={() => handleEdit(item)}>
+                                  <Pencil className="h-3.5 w-3.5" />
+                                </Button>
+                                <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg" onClick={() => deleteOrdenItem(item.id)}>
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </Button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </Fragment>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

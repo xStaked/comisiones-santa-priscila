@@ -20,10 +20,13 @@ from app.schemas.liquidacion import (
 from app.schemas.orden import (
     AsignacionBase,
     AsignacionResponse,
+    OrdenCreate,
     OrdenItemBase,
     OrdenItemCreate,
     OrdenItemResponse,
     OrdenItemUpdate,
+    OrdenLineaCreate,
+    OrdenResponse,
 )
 from app.schemas.cliente import (
     ClienteBase,
@@ -53,6 +56,9 @@ __all__ = [
     "ComisionistaResponse",
     "AsignacionBase",
     "AsignacionResponse",
+    "OrdenCreate",
+    "OrdenLineaCreate",
+    "OrdenResponse",
     "OrdenItemBase",
     "OrdenItemCreate",
     "OrdenItemUpdate",

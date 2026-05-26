@@ -30,10 +30,20 @@ export function LiquidacionTab() {
     [comisionistas]
   );
 
+  const ordenItemsActivos = useMemo(
+    () => ordenItems.filter(item => item.estado !== 'liquidado' && item.estado !== 'anulado'),
+    [ordenItems]
+  );
+
+  const cantidadOrdenes = useMemo(() => {
+    const ids = new Set(ordenItemsActivos.map(item => item.ordenId || `${item.fecha}-${item.numeroOrden}-${item.clienteId || ''}`));
+    return ids.size;
+  }, [ordenItemsActivos]);
+
   const filteredItems = useMemo(() => {
-    if (!filterComisionista) return ordenItems;
-    return ordenItems.filter(i => i.comisionistas.some(a => a.comisionistaId === filterComisionista));
-  }, [ordenItems, filterComisionista]);
+    if (!filterComisionista) return ordenItemsActivos;
+    return ordenItemsActivos.filter(i => i.comisionistas.some(a => a.comisionistaId === filterComisionista));
+  }, [ordenItemsActivos, filterComisionista]);
 
   const itemsConComision = useMemo(() => {
     return filteredItems.map(item => {
@@ -91,7 +101,7 @@ export function LiquidacionTab() {
   };
 
   const handlePreviewSave = () => {
-    if (ordenItems.length === 0) {
+    if (ordenItemsActivos.length === 0) {
       toast.error('No hay órdenes para guardar');
       return;
     }
@@ -99,7 +109,7 @@ export function LiquidacionTab() {
     setPreviewOpen(true);
   };
 
-  if (ordenItems.length === 0) {
+  if (ordenItemsActivos.length === 0) {
     return (
       <div className="text-center py-20 bg-white rounded-2xl border border-dashed border-slate-200">
         <Calculator className="h-12 w-12 text-slate-300 mx-auto mb-4" />
@@ -151,11 +161,15 @@ export function LiquidacionTab() {
               <div className="space-y-4 mt-2">
                 <div className="bg-slate-50 rounded-xl p-4 border border-slate-200 space-y-3">
                   <div className="flex justify-between items-center">
-                    <span className="text-sm text-slate-500">Registros a liquidar</span>
-                    <span className="text-sm font-semibold text-slate-900">{ordenItems.length}</span>
+                    <span className="text-sm text-slate-500">Órdenes a liquidar</span>
+                    <span className="text-sm font-semibold text-slate-900">{cantidadOrdenes}</span>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-sm text-slate-500">Total de órdenes</span>
+                    <span className="text-sm text-slate-500">Productos a liquidar</span>
+                    <span className="text-sm font-semibold text-slate-900">{ordenItemsActivos.length}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-slate-500">Total vendido</span>
                     <span className="text-sm font-semibold text-slate-900">${totalOrden.toFixed(2)}</span>
                   </div>
                   <div className="flex justify-between items-center">
@@ -188,7 +202,7 @@ export function LiquidacionTab() {
 
       <Card className="card-elevated rounded-2xl overflow-hidden">
         <CardHeader className="pb-3">
-          <CardTitle className="text-base text-slate-900">Vista de Liquidación</CardTitle>
+            <CardTitle className="text-base text-slate-900">Vista de Liquidación: {cantidadOrdenes} orden{cantidadOrdenes === 1 ? '' : 'es'} / {itemsConComision.length} producto{itemsConComision.length === 1 ? '' : 's'}</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
           <div className="overflow-x-auto">

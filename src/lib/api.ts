@@ -182,6 +182,7 @@ export async function limpiarOrdenes() {
 function snapshotItemToOrdenItem(item: any): OrdenItem {
   return {
     id: item.id,
+    ordenId: item.ordenId,
     fecha: item.fechaSnapshot,
     numeroOrden: item.numeroOrdenSnapshot,
     finca: item.fincaSnapshot,

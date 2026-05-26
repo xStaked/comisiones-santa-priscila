@@ -472,11 +472,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const saveLiquidacion = useCallback(
     (nombre: string) => {
-      if (ordenItems.length === 0) {
+      const itemsActivos = ordenItems.filter((o) => o.estado !== 'liquidado' && o.estado !== 'anulado');
+      if (itemsActivos.length === 0) {
         toast.error('No hay órdenes para guardar');
         return;
       }
-      const ids = ordenItems.map((o) => o.id);
+      const ids = itemsActivos.map((o) => o.id);
       createLiquidacionMutation.mutate({ nombre, ordenItemIds: ids });
     },
     [createLiquidacionMutation, ordenItems]

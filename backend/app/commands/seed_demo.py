@@ -20,6 +20,7 @@ from app.models import (
     Comisionista,
     Tarifa,
     TipoTarifa,
+    Orden,
     OrdenItem,
     Asignacion,
     EstadoOrden,
@@ -96,6 +97,7 @@ def truncate_all(db) -> None:
         "liquidaciones",
         "asignaciones",
         "orden_items",
+        "ordenes",
         "tarifas",
         "comisionistas",
     ]
@@ -131,8 +133,19 @@ def seed_ordenes(db, comisionistas):
         estado = EstadoOrden.liquidado if in_liquidacion else EstadoOrden.activo
 
         oid = make_uuid(f"orden-{i}")
+        cabecera = Orden(
+            id=make_uuid(f"orden-cabecera-{i}"),
+            fecha=datetime.strptime(data["fecha"], "%Y-%m-%d").date(),
+            numero_orden=data["numero"],
+            origen="manual",
+            estado=estado,
+        )
+        db.add(cabecera)
+        db.flush()
+
         orden = OrdenItem(
             id=oid,
+            orden_id=cabecera.id,
             fecha=datetime.strptime(data["fecha"], "%Y-%m-%d").date(),
             numero_orden=data["numero"],
             finca=prod["finca"],
@@ -185,6 +198,7 @@ def seed_liquidaciones(db, ordenes, comisionistas):
                 id=make_uuid(f"{liq_data['id_seed']}-item-{orden.id}"),
                 liquidacion_id=liq.id,
                 orden_item_id=orden.id,
+                orden_id=orden.orden_id,
                 fecha_snapshot=orden.fecha,
                 numero_orden_snapshot=orden.numero_orden,
                 finca_snapshot=orden.finca,

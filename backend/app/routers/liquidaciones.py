@@ -93,6 +93,7 @@ def detalle(id: UUID, db: Session = Depends(get_db), current_user: User = Depend
             {
                 "id": li.id,
                 "orden_item_id": li.orden_item_id,
+                "orden_id": li.orden_id,
                 "fecha_snapshot": li.fecha_snapshot,
                 "numero_orden_snapshot": li.numero_orden_snapshot,
                 "finca_snapshot": li.finca_snapshot,

@@ -60,6 +60,7 @@ class OrdenItemUpdate(BaseModel):
 
 class OrdenItemResponse(OrdenItemBase):
     id: UUID
+    orden_id: Optional[UUID] = None
     comisionistas: List[AsignacionResponse]
     cliente_id: Optional[UUID] = None
     producto_id: Optional[UUID] = None
@@ -69,3 +70,46 @@ class OrdenItemResponse(OrdenItemBase):
     finca_obj: Optional[FincaResponse] = Field(default=None, alias="fincaEntidad")
 
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+
+
+class OrdenLineaCreate(BaseModel):
+    finca: str
+    producto: str
+    cantidad: Decimal
+    unidad: str
+    precio_unitario: Decimal
+    total: Decimal
+    sector: Optional[str] = None
+    estado: Optional[str] = "activo"
+    comisionista_ids: List[UUID] = []
+    cliente_id: Optional[UUID] = None
+    producto_id: Optional[UUID] = None
+    finca_id: Optional[UUID] = None
+
+
+class OrdenCreate(BaseModel):
+    fecha: date
+    numero_orden: str
+    cliente_id: Optional[UUID] = None
+    proveedor: Optional[str] = None
+    semana: Optional[str] = None
+    archivo_nombre: Optional[str] = None
+    origen: str = "manual"
+    items: List[OrdenLineaCreate]
+
+
+class OrdenResponse(BaseModel):
+    id: UUID
+    fecha: date
+    numero_orden: str
+    cliente_id: Optional[UUID] = None
+    proveedor: Optional[str] = None
+    semana: Optional[str] = None
+    archivo_nombre: Optional[str] = None
+    origen: str
+    estado: str
+    total: Decimal
+    cantidad_productos: int
+    items: List[OrdenItemResponse]
+
+    model_config = ConfigDict(from_attributes=True)

@@ -15,6 +15,7 @@ export interface AsignacionComisionista {
 
 export interface OrdenItem {
   id: string;
+  ordenId?: string;
   fecha: string;
   numeroOrden: string;
   finca: string;
@@ -34,6 +35,21 @@ export interface OrdenItem {
   cliente?: { id: string; nombre: string; retencionPorcentaje: number };
   productoRel?: { id: string; nombre: string; unidadComision: string; tachoKilos?: number };
   fincaRel?: { id: string; nombre: string };
+}
+
+export interface Orden {
+  id: string;
+  fecha: string;
+  numeroOrden: string;
+  clienteId?: string;
+  proveedor?: string;
+  semana?: string;
+  archivoNombre?: string;
+  origen: 'manual' | 'pdf' | 'imagen' | string;
+  estado: 'activo' | 'liquidado' | 'anulado' | string;
+  total: number;
+  cantidadProductos: number;
+  items: OrdenItem[];
 }
 
 export interface Liquidacion {

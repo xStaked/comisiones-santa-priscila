@@ -19,6 +19,32 @@ class EstadoOrden(str, enum.Enum):
     anulado = "anulado"
 
 
+class Orden(BaseModel):
+    __tablename__ = "ordenes"
+
+    fecha = Column(Date, nullable=False)
+    numero_orden = Column(String, nullable=False)
+    cliente_id = Column(
+        Uuid,
+        ForeignKey("clientes.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    proveedor = Column(String, nullable=True)
+    semana = Column(String, nullable=True)
+    archivo_nombre = Column(String, nullable=True)
+    origen = Column(String, nullable=False, default="manual")
+    estado = Column(
+        SAEnum(EstadoOrden, name="estado_orden"),
+        nullable=False,
+        default=EstadoOrden.activo,
+    )
+
+    cliente = relationship("Cliente")
+    items = relationship(
+        "OrdenItem", back_populates="orden", cascade="all, delete-orphan"
+    )
+
+
 class Asignacion(BaseModel):
     __tablename__ = "asignaciones"
     __table_args__ = (
@@ -45,6 +71,11 @@ class Asignacion(BaseModel):
 class OrdenItem(BaseModel):
     __tablename__ = "orden_items"
 
+    orden_id = Column(
+        Uuid,
+        ForeignKey("ordenes.id", ondelete="CASCADE"),
+        nullable=True,
+    )
     fecha = Column(Date, nullable=False)
     numero_orden = Column(String, nullable=False)
     finca = Column(String, nullable=False)
@@ -77,6 +108,7 @@ class OrdenItem(BaseModel):
         nullable=True,
     )
 
+    orden = relationship("Orden", back_populates="items")
     cliente = relationship("Cliente")
     producto_obj = relationship("Producto")
     finca_obj = relationship("Finca")

@@ -23,6 +23,7 @@ class LiquidacionItemTarifaResponse(BaseModel):
 class LiquidacionItemResponse(BaseModel):
     id: UUID
     orden_item_id: Optional[UUID] = None
+    orden_id: Optional[UUID] = None
     fecha_snapshot: date
     numero_orden_snapshot: str
     finca_snapshot: str

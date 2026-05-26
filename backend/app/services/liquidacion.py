@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.models.comisionista import Tarifa, TipoTarifa
 from app.models.liquidacion import Liquidacion, LiquidacionItem, LiquidacionItemTarifa
-from app.models.orden import Asignacion, EstadoOrden, OrdenItem
+from app.models.orden import Asignacion, EstadoOrden, Orden, OrdenItem
 from app.models.tarifa_cliente_producto import TarifaClienteProducto
 
 LIBRA_A_KG = Decimal("0.453592")
@@ -137,6 +137,7 @@ def crear_liquidacion(
         li = LiquidacionItem(
             liquidacion_id=liquidacion.id,
             orden_item_id=oi.id,
+            orden_id=oi.orden_id,
             fecha_snapshot=oi.fecha,
             numero_orden_snapshot=oi.numero_orden,
             finca_snapshot=oi.finca,
@@ -187,6 +188,23 @@ def crear_liquidacion(
     for oi in orden_items:
         oi.estado = EstadoOrden.liquidado
 
+    db.flush()
+
+    orden_ids = {oi.orden_id for oi in orden_items if oi.orden_id is not None}
+    for orden_id in orden_ids:
+        pendientes = (
+            db.query(OrdenItem)
+            .filter(
+                OrdenItem.orden_id == orden_id,
+                OrdenItem.estado == EstadoOrden.activo,
+            )
+            .count()
+        )
+        if pendientes == 0:
+            orden = db.query(Orden).filter(Orden.id == orden_id).first()
+            if orden:
+                orden.estado = EstadoOrden.liquidado
+
     db.commit()
     db.refresh(liquidacion)
     return liquidacion
@@ -211,6 +229,17 @@ def eliminar_liquidacion(db: Session, liquidacion_id: UUID) -> bool:
             synchronize_session=False,
         )
 
+    orden_ids = [
+        li.orden_id
+        for li in liquidacion.items
+        if li.orden_id is not None
+    ]
+    if orden_ids:
+        db.query(Orden).filter(Orden.id.in_(orden_ids)).update(
+            {Orden.estado: EstadoOrden.activo},
+            synchronize_session=False,
+        )
+
     db.delete(liquidacion)
     db.commit()
     return True
@@ -224,9 +253,24 @@ def restaurar_liquidacion(db: Session, liquidacion_id: UUID) -> list[UUID]:
         raise ValueError("Liquidación no encontrada")
 
     nuevos_ids: list[UUID] = []
+    ordenes_restauradas: dict[UUID, Orden] = {}
 
     for li in liquidacion.items:
+        clave_orden = li.orden_id or li.id
+        orden = ordenes_restauradas.get(clave_orden)
+        if not orden:
+            orden = Orden(
+                fecha=li.fecha_snapshot,
+                numero_orden=li.numero_orden_snapshot,
+                origen="manual",
+                estado=EstadoOrden.activo,
+            )
+            db.add(orden)
+            db.flush()
+            ordenes_restauradas[clave_orden] = orden
+
         nuevo_oi = OrdenItem(
+            orden_id=orden.id,
             fecha=li.fecha_snapshot,
             numero_orden=li.numero_orden_snapshot,
             finca=li.finca_snapshot,
