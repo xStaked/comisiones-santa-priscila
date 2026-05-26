@@ -86,6 +86,49 @@ def test_no_inventa_ids_si_no_hay_match(db_session):
     assert item.productoId is None
 
 
+def test_asigna_finca_global_unica_sin_cliente(db_session):
+    cliente = Cliente(
+        nombre="CLIENTE UNO",
+        tipo="grupo",
+        retencion_porcentaje=Decimal("1.75"),
+    )
+    db_session.add(cliente)
+    db_session.commit()
+    db_session.refresh(cliente)
+
+    finca = Finca(nombre="EL MORRO", cliente_id=cliente.id)
+    db_session.add(finca)
+    db_session.commit()
+    db_session.refresh(finca)
+
+    orden = OrdenValidada(
+        fecha=date(2026, 5, 14),
+        numeroOrden="2199",
+        proveedor="DINACUAMAR",
+        cliente="CLIENTE DESCONOCIDO",
+        finca="",
+        semana="",
+        items=[
+            OrdenItemValidado(
+                fecha=date(2026, 5, 14),
+                numeroOrden="2199",
+                finca="EL MORRO",
+                producto="PRODUCTO NUEVO",
+                cantidad=Decimal("1"),
+                unidad="kg",
+                precioUnitario=Decimal("1"),
+                total=Decimal("1"),
+            )
+        ],
+    )
+
+    normalizada = normalizar_orden_extraida(db_session, orden)
+
+    item = normalizada.items[0]
+    assert item.fincaId == str(finca.id)
+    assert item.clienteId == str(cliente.id)
+
+
 def test_no_asigna_finca_global_ambigua_sin_cliente(db_session):
     cliente_uno = Cliente(
         nombre="CLIENTE UNO",
