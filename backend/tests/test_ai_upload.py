@@ -1,6 +1,11 @@
 from decimal import Decimal
+from uuid import uuid4
 
+from app.models.cliente import Cliente, Finca
+from app.models.producto import Producto
+from app.routers.upload import ItemExtraido
 from app.services.order_extraction_models import OrdenExtraidaIA, OrdenItemExtraidoIA
+from app.services.ocr_extractor import extraer_orden_de_imagen
 from app.services.pdf_extractor import extraer_orden_de_pdf
 
 
@@ -45,3 +50,99 @@ def test_pdf_filacas_delega_a_ia_y_conserva_contrato(monkeypatch):
     assert resultado["numeroOrden"] == "2199"
     assert resultado["items"][0]["producto"] == "ECUBACILLUS TH"
     assert resultado["items"][0]["unidad"] == "kg"
+
+
+def test_schema_upload_conserva_producto_id():
+    producto_id = uuid4()
+    item = ItemExtraido.model_validate(
+        {
+            "fecha": "2026-05-14",
+            "numeroOrden": "2199",
+            "finca": "EL MORRO",
+            "productoId": producto_id,
+            "producto": "ECUBACILLUS TH",
+            "cantidad": Decimal("20.00"),
+            "unidad": "kg",
+            "precioUnitario": Decimal("65.0000"),
+            "total": Decimal("1300.0000"),
+            "comisionistas": [],
+        }
+    )
+
+    assert item.productoId == producto_id
+
+
+def test_imagen_con_ia_deshabilitada_usa_fallback_easyocr(monkeypatch):
+    def fallar_si_usa_ia():
+        raise AssertionError("No debe configurar IA cuando esta deshabilitada")
+
+    class ReaderFake:
+        def readtext(self, _img_array):
+            return [
+                ([(0, 0), (100, 0), (100, 20), (0, 20)], "14 de mayo de 2026", 0.99),
+                ([(0, 30), (160, 30), (160, 50), (0, 50)], "ORDEN DE COMPRA No. 2199", 0.99),
+                ([(0, 60), (200, 60), (200, 80), (0, 80)], "PROVEEDOR : DINACUAMAR", 0.99),
+                ([(0, 90), (100, 90), (100, 110), (0, 110)], "EL MORRO", 0.99),
+                (
+                    [(0, 120), (300, 120), (300, 140), (0, 140)],
+                    "100 ECUBACILLUS TH 20.00 65.0000 1300.0000",
+                    0.99,
+                ),
+            ]
+
+    monkeypatch.setattr("app.services.pdf_extractor.settings.AI_EXTRACTION_ENABLED", False)
+    monkeypatch.setattr(
+        "app.services.ocr_extractor.obtener_extractor_configurado",
+        fallar_si_usa_ia,
+    )
+    monkeypatch.setattr("app.services.ocr_extractor._obtener_reader", lambda: ReaderFake())
+    monkeypatch.setattr("app.services.ocr_extractor._preprocesar_imagen", lambda _contenido: object())
+
+    resultado = extraer_orden_de_imagen(b"imagen", nombre_archivo="orden.png")
+
+    assert resultado["numeroOrden"] == "2199"
+    assert resultado["items"][0]["producto"] == "ECUBACILLUS TH"
+
+
+def test_imagen_con_ia_normaliza_usando_db(monkeypatch, db_session):
+    cliente = Cliente(nombre="FILACAS SA", tipo="empresa")
+    producto = Producto(nombre="ECUBACILLUS TH", unidad_comision="kg")
+    db_session.add_all([cliente, producto])
+    db_session.flush()
+    finca = Finca(nombre="EL MORRO", cliente_id=cliente.id)
+    db_session.add(finca)
+    db_session.commit()
+
+    class ExtractorImagenFake:
+        def extraer_orden(self, entrada):
+            assert entrada.nombre_archivo == "orden.png"
+            assert entrada.imagenes_base64
+            return OrdenExtraidaIA(
+                fecha="14/05/2026",
+                numeroOrden="2199",
+                proveedor="DINACUAMAR",
+                cliente="FILACAS SA",
+                finca="EL MORRO",
+                semana="",
+                items=[
+                    OrdenItemExtraidoIA(
+                        producto="ECUBACILLUS TH",
+                        cantidad=Decimal("20.00"),
+                        unidad="KILOGRAMOS",
+                        precioUnitario=Decimal("65.0000"),
+                        total=Decimal("1300.0000"),
+                    )
+                ],
+            )
+
+    monkeypatch.setattr("app.services.pdf_extractor.settings.AI_EXTRACTION_ENABLED", True)
+    monkeypatch.setattr(
+        "app.services.ocr_extractor.obtener_extractor_configurado",
+        lambda: ExtractorImagenFake(),
+    )
+
+    resultado = extraer_orden_de_imagen(b"imagen", nombre_archivo="orden.png", db=db_session)
+
+    assert resultado["items"][0]["clienteId"] == str(cliente.id)
+    assert resultado["items"][0]["fincaId"] == str(finca.id)
+    assert resultado["items"][0]["productoId"] == str(producto.id)

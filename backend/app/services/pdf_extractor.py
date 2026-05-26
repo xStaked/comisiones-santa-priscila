@@ -68,11 +68,8 @@ def _extraer_con_ia(
 
 
 def _extraer_texto_pdf(contenido: bytes) -> str:
-    doc = fitz.open(stream=contenido, filetype="pdf")
-    try:
+    with fitz.open(stream=contenido, filetype="pdf") as doc:
         return "\n".join(page.get_text("text") for page in doc)
-    finally:
-        doc.close()
 
 
 def extraer_orden_de_pdf(
@@ -91,11 +88,11 @@ def extraer_orden_de_pdf(
             texto_override=texto_pdf,
         )
 
-    doc = fitz.open(stream=contenido, filetype="pdf")
-    pagina = doc[0]
+    with fitz.open(stream=contenido, filetype="pdf") as doc:
+        pagina = doc[0]
+        palabras = pagina.get_text("words")
 
     # 1. Extraer palabras con posiciones (x, y)
-    palabras = pagina.get_text("words")
     items: list[dict[str, Any]] = []
     for w in palabras:
         x0, y0, x1, y1, texto, *_ = w

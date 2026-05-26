@@ -8,6 +8,7 @@ from typing import Any
 import numpy as np
 from PIL import Image, ImageEnhance
 
+from app.config import settings
 from app.services.order_extraction_models import EntradaExtraccion
 from app.services.order_extraction_normalizer import normalizar_orden_extraida
 from app.services.order_extraction_validator import validar_orden_extraida
@@ -50,20 +51,25 @@ def _preprocesar_imagen(contenido: bytes) -> np.ndarray:
     return np.array(img)
 
 
-def extraer_orden_de_imagen(contenido: bytes, nombre_archivo: str = "") -> dict[str, Any]:
+def extraer_orden_de_imagen(
+    contenido: bytes,
+    nombre_archivo: str = "",
+    db=None,
+) -> dict[str, Any]:
     """Extrae ítems de una orden de compra a partir de una imagen usando OCR."""
-    extractor = obtener_extractor_configurado()
-    imagen_base64 = base64.b64encode(contenido).decode("ascii")
-    orden_ia = extractor.extraer_orden(
-        EntradaExtraccion(
-            nombre_archivo=nombre_archivo,
-            content_type="image",
-            imagenes_base64=[imagen_base64],
+    if settings.AI_EXTRACTION_ENABLED:
+        extractor = obtener_extractor_configurado()
+        imagen_base64 = base64.b64encode(contenido).decode("ascii")
+        orden_ia = extractor.extraer_orden(
+            EntradaExtraccion(
+                nombre_archivo=nombre_archivo,
+                content_type="image",
+                imagenes_base64=[imagen_base64],
+            )
         )
-    )
-    orden_validada = validar_orden_extraida(orden_ia)
-    orden_normalizada = normalizar_orden_extraida(None, orden_validada)
-    return _orden_validada_a_respuesta(orden_normalizada)
+        orden_validada = validar_orden_extraida(orden_ia)
+        orden_normalizada = normalizar_orden_extraida(db, orden_validada)
+        return _orden_validada_a_respuesta(orden_normalizada)
 
     reader = _obtener_reader()
     img_array = _preprocesar_imagen(contenido)
