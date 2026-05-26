@@ -1,5 +1,8 @@
 from decimal import Decimal
+from pathlib import Path
 from uuid import uuid4
+
+import pytest
 
 from app.models.cliente import Cliente, Finca
 from app.models.producto import Producto
@@ -146,3 +149,39 @@ def test_imagen_con_ia_normaliza_usando_db(monkeypatch, db_session):
     assert resultado["items"][0]["clienteId"] == str(cliente.id)
     assert resultado["items"][0]["fincaId"] == str(finca.id)
     assert resultado["items"][0]["productoId"] == str(producto.id)
+
+
+def test_endpoint_pdf_filacas_con_ia_deshabilitada_responde_422(monkeypatch, authenticated_client):
+    ruta_pdf = Path(__file__).resolve().parents[2] / "FL OC2199 DINACUAMAR.pdf"
+    if not ruta_pdf.exists():
+        pytest.skip("No existe FL OC2199 DINACUAMAR.pdf en la raíz del repositorio")
+
+    monkeypatch.setattr("app.services.pdf_extractor.settings.AI_EXTRACTION_ENABLED", False)
+
+    with ruta_pdf.open("rb") as archivo:
+        response = authenticated_client.post(
+            "/api/v1/upload/pdf",
+            files={"file": ("FL OC2199 DINACUAMAR.pdf", archivo, "application/pdf")},
+        )
+
+    assert response.status_code == 422
+    assert "Error al procesar el PDF" in response.json()["detail"]
+
+
+def test_endpoint_pdf_recorta_mensaje_de_error_largo(monkeypatch, authenticated_client):
+    mensaje_largo = "x" * 220
+
+    def extractor_fallido(*_args, **_kwargs):
+        raise RuntimeError(mensaje_largo)
+
+    monkeypatch.setattr("app.routers.upload.extraer_orden_de_pdf", extractor_fallido)
+
+    response = authenticated_client.post(
+        "/api/v1/upload/pdf",
+        files={"file": ("orden.pdf", b"%PDF-1.4\ncontenido", "application/pdf")},
+    )
+
+    assert response.status_code == 422
+    detail = response.json()["detail"]
+    assert detail == f"Error al procesar el PDF: {'x' * 147} [recortado]"
+    assert mensaje_largo not in detail

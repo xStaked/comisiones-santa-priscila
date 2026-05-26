@@ -63,9 +63,12 @@ async def subir_pdf(
     try:
         resultado = extraer_orden_de_pdf(contenido, nombre_archivo=file.filename, db=db)
     except Exception as exc:
+        mensaje = str(exc)
+        if len(mensaje) > 160:
+            mensaje = mensaje[:147] + " [recortado]"
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"Error al procesar el PDF: {exc}",
+            detail=f"Error al procesar el PDF: {mensaje}",
         ) from exc
 
     return resultado
@@ -93,9 +96,12 @@ async def subir_imagen(
     try:
         resultado = extraer_orden_de_imagen(contenido, nombre_archivo=file.filename, db=db)
     except Exception as exc:
+        mensaje = str(exc)
+        if len(mensaje) > 160:
+            mensaje = mensaje[:147] + " [recortado]"
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"Error al procesar la imagen: {exc}",
+            detail=f"Error al procesar la imagen: {mensaje}",
         ) from exc
 
     return resultado
