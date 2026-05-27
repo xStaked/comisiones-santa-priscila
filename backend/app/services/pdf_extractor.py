@@ -78,8 +78,20 @@ def _debe_usar_extraccion_ia(texto_pdf: str) -> bool:
     return (
         "FILACAS" in texto
         or "FECHA DE EMISIÓN" in texto
-        or "INDUSTRIAL PESQUERA SANTA PRISCILA" in texto
     )
+
+
+def _es_formato_santa_priscila(texto_pdf: str) -> bool:
+    """Detecta si el PDF es de formato Santa Priscila (emisor),
+    no si es una orden DINACUAMAR donde Santa Priscila es proveedor."""
+    texto = texto_pdf.upper()
+    if "INDUSTRIAL PESQUERA SANTA PRISCILA" not in texto:
+        return False
+    # Si tiene el encabezado típico de orden DINACUAMAR, es una orden
+    # emitida por DINACUAMAR donde Santa Priscila es el proveedor.
+    if "ORDEN DE COMPRA" in texto and "PROVEEDOR :" in texto:
+        return False
+    return True
 
 
 def _texto_en_rango(celdas: list[dict[str, Any]], x_min: int, x_max: int) -> str:
@@ -159,6 +171,34 @@ def _extraer_items_santa_priscila_desde_filas(
     return items
 
 
+def _buscar_producto_en_db(db, nombre: str) -> tuple[Any | None, str]:
+    """Busca un producto en la DB por nombre o alias."""
+    from sqlalchemy import func
+    from app.models.producto import Producto, ProductoAlias
+
+    limpio = " ".join((nombre or "").strip().split())
+    if not limpio or db is None:
+        return None, nombre
+
+    # 1. Por nombre exacto
+    producto = db.query(Producto).filter(func.lower(Producto.nombre) == limpio.lower()).first()
+    if producto:
+        return producto, producto.nombre
+
+    # 2. Por alias exacto
+    alias = db.query(ProductoAlias).filter(func.lower(ProductoAlias.alias) == limpio.lower()).first()
+    if alias:
+        return alias.producto, alias.producto.nombre
+
+    # 3. Por alias contenido (alguna palabra del texto coincide con un alias)
+    palabras = limpio.lower().split()
+    alias_contenido = db.query(ProductoAlias).filter(func.lower(ProductoAlias.alias).in_(palabras)).first()
+    if alias_contenido:
+        return alias_contenido.producto, alias_contenido.producto.nombre
+
+    return None, nombre
+
+
 def extraer_orden_de_pdf(
     contenido: bytes,
     nombre_archivo: str = "",
@@ -169,7 +209,7 @@ def extraer_orden_de_pdf(
     """Extrae ítems de una orden de compra en formato PDF específico de DINACUAMAR."""
     texto_pdf = texto_override if texto_override is not None else _extraer_texto_pdf(contenido)
     usar_ia = _debe_usar_extraccion_ia(texto_pdf)
-    es_santa_priscila = "INDUSTRIAL PESQUERA SANTA PRISCILA" in texto_pdf.upper()
+    es_santa_priscila = _es_formato_santa_priscila(texto_pdf)
 
     if usar_ia and not es_santa_priscila:
         return _extraer_con_ia(
@@ -333,8 +373,31 @@ def extraer_orden_de_pdf(
             cliente_id=cliente_id,
         )
 
-    # 5. Extraer filas de tabla (entre Y < 690 y Y > 530)
-    filas_tabla = [f for f in filas if 530 < f["y"] < 690]
+    # 5. Extraer filas de tabla
+    # Detectar dinámicamente la zona de la tabla buscando el encabezado y el fin
+    y_encabezado = None
+    y_fin = None
+    for fila in filas:
+        texto_fila = " ".join(c["text"] for c in fila["cells"]).upper()
+        if (
+            y_encabezado is None
+            and ("DESCRIPCION" in texto_fila or "DESCRIPCIÓN" in texto_fila)
+            and ("CANTIDAD" in texto_fila or "PREC." in texto_fila)
+        ):
+            y_encabezado = fila["y"]
+        if y_encabezado is not None and (
+            "SUB-TOTAL" in texto_fila
+            or "SUBTOTAL" in texto_fila
+            or ("TOTAL" in texto_fila and ("BASE" in texto_fila or "IVA" in texto_fila))
+        ):
+            y_fin = fila["y"]
+            break
+
+    if y_encabezado is not None and y_fin is not None:
+        filas_tabla = [f for f in filas if y_encabezado < f["y"] < y_fin]
+    else:
+        # Fallback al rango Y estándar para órdenes DINACUAMAR tradicionales
+        filas_tabla = [f for f in filas if 100 < f["y"] < 700]
 
     fincas: list[dict[str, Any]] = []
     items_crudos: list[dict[str, Any]] = []
@@ -398,14 +461,18 @@ def extraer_orden_de_pdf(
             })
         else:
             # 8. Detectar fila de finca
-            solo_celda = len(celdas) == 1 and 70 <= celdas[0]["x"] <= 100
+            # Como ya sabemos que NO es item, si no tiene decimales y empieza
+            # en la zona izquierda, es probablemente una finca.
+            tiene_decimal = any(
+                re.match(r"^[\d,]+\.\d+$", c["text"].replace(",", ""))
+                for c in celdas
+            )
             primera_celda = celdas[0] if celdas else None
-            parece_finca = solo_celda or (
-                len(celdas) <= 2
+            parece_finca = (
+                not tiene_decimal
                 and primera_celda is not None
-                and 70 <= primera_celda["x"] <= 100
+                and 70 <= primera_celda["x"] <= 130
                 and not re.match(r"^\d+$", primera_celda["text"])
-                and "," not in primera_celda["text"]
             )
 
             if parece_finca:
@@ -413,44 +480,41 @@ def extraer_orden_de_pdf(
                 if (
                     nombre
                     and len(nombre) > 1
-                    and "PEDIDO" not in nombre
-                    and "DESCRIPCION" not in nombre
-                    and "CANTIDAD" not in nombre
-                    and "MEDIDA" not in nombre
-                    and "PREC" not in nombre
-                    and "DESC" not in nombre
-                    and "TOTAL" not in nombre
+                    and "PEDIDO" not in nombre.upper()
+                    and "DESCRIPCION" not in nombre.upper()
+                    and "DESCRIPCIÓN" not in nombre.upper()
+                    and "CANTIDAD" not in nombre.upper()
+                    and "MEDIDA" not in nombre.upper()
+                    and "PREC" not in nombre.upper()
+                    and "DESC" not in nombre.upper()
+                    and "TOTAL" not in nombre.upper()
+                    and "SUB-TOTAL" not in nombre.upper()
+                    and "OBSERVACIONES" not in nombre.upper()
                     and not re.match(r"^\d+(\.\d+)?$", nombre)
                 ):
                     fincas.append({"y": fila["y"], "nombre": nombre})
 
     # 9. Asignar fincas a ítems
+    # Buscar la finca más cercana en cualquier dirección (hasta 25 unidades).
+    # En caso de empate, preferir la finca que esté más arriba (menor Y).
     orden_items: list[dict[str, Any]] = []
     for item in items_crudos:
         finca = "-"
-
-        # Preferir finca ARRIBA (y mayor, diff <= 16)
         min_diff = float("inf")
-        finca_arriba = None
+        finca_cercana = None
         for f in fincas:
-            diff = f["y"] - item["y"]
-            if 0 < diff <= 16 and diff < min_diff:
-                min_diff = diff
-                finca_arriba = f
-
-        if finca_arriba:
-            finca = finca_arriba["nombre"]
-        else:
-            # Fallback: finca ABAJO (diff <= 14)
-            min_diff = float("inf")
-            finca_abajo = None
-            for f in fincas:
-                diff = item["y"] - f["y"]
-                if 0 < diff <= 14 and diff < min_diff:
+            diff = abs(f["y"] - item["y"])
+            if diff <= 25:
+                if (
+                    finca_cercana is None
+                    or diff < min_diff
+                    or (diff == min_diff and f["y"] < finca_cercana["y"])
+                ):
                     min_diff = diff
-                    finca_abajo = f
-            if finca_abajo:
-                finca = finca_abajo["nombre"]
+                    finca_cercana = f
+
+        if finca_cercana:
+            finca = finca_cercana["nombre"]
 
         # Intentar vincular finca con base de datos
         finca_id = None
@@ -462,13 +526,23 @@ def extraer_orden_de_pdf(
                 finca_id = str(finca_db.id)
                 cliente_id = str(finca_db.cliente_id)
 
+        # Buscar producto en DB por nombre o alias
+        producto_id = None
+        producto_nombre = item["producto"]
+        if db:
+            prod_db, prod_nombre = _buscar_producto_en_db(db, producto_nombre)
+            if prod_db:
+                producto_id = str(prod_db.id)
+                producto_nombre = prod_nombre
+
         orden_items.append({
             "fecha": date.fromisoformat(fecha),
             "numeroOrden": numero_orden or f"OC-{fecha}",
             "finca": finca,
             "fincaId": finca_id,
             "clienteId": cliente_id,
-            "producto": item["producto"],
+            "producto": producto_nombre,
+            "productoId": producto_id,
             "cantidad": item["cantidad"],
             "unidad": inferir_unidad(item["descripcion"]),
             "precioUnitario": item["precioUnitario"],

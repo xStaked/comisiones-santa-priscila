@@ -94,13 +94,16 @@ def test_pdf_santa_priscila_ecubacillus_delega_a_ia(monkeypatch):
     )
 
     contenido = b"%PDF-1.4\ntexto simulado"
+    # Texto sin "ORDEN DE COMPRA" + "PROVEEDOR :" para que SÍ se detecte como formato Santa Priscila.
+    # Incluye "FECHA DE EMISIÓN" para que usar_ia=True y haga fallback a IA cuando el parser
+    # posicional no encuentre items (PDF simulado sin coordenadas reales).
     resultado = extraer_orden_de_pdf(
         contenido,
         nombre_archivo="93188 SEM 15 ECU-BACILLUS.pdf",
         db=None,
         texto_override=(
-            "INDUSTRIAL PESQUERA SANTA PRISCILA S.A. ORDEN DE COMPRA No. 93188 "
-            "SEMANA : 15 ECU-BACILLUS SUELO-PASTILLA TH CALIFORNIA ADM A"
+            "INDUSTRIAL PESQUERA SANTA PRISCILA S.A. FECHA DE EMISIÓN 93188 "
+            "SEMANA 15 ECU-BACILLUS SUELO-PASTILLA TH CALIFORNIA ADM A"
         ),
     )
 
