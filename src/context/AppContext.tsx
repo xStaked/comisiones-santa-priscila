@@ -30,6 +30,8 @@ import {
   createProducto,
   updateProducto as apiUpdateProducto,
   deleteProducto as apiDeleteProducto,
+  createProductoAlias,
+  deleteProductoAlias,
   fetchTarifasClienteProducto,
   createTarifaClienteProducto,
   updateTarifaClienteProducto as apiUpdateTarifaClienteProducto,

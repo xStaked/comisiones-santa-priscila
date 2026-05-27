@@ -87,6 +87,7 @@ export interface Producto {
   tachoKilos?: number;
   activo: boolean;
   createdAt: string;
+  alias: string[];
 }
 
 export interface TarifaClienteProducto {

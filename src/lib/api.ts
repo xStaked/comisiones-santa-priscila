@@ -350,6 +350,15 @@ export async function deleteProducto(id: string) {
   await api.delete(`/api/v1/productos/${id}`);
 }
 
+export async function createProductoAlias(productoId: string, alias: string) {
+  const res = await api.post(`/api/v1/productos/${productoId}/alias`, toSnakeCase({ alias }));
+  return toCamelCase(res.data);
+}
+
+export async function deleteProductoAlias(productoId: string, aliasId: string) {
+  await api.delete(`/api/v1/productos/${productoId}/alias/${aliasId}`);
+}
+
 // Tarifas Cliente Producto
 export async function fetchTarifasClienteProducto(params?: { comisionistaId?: string; clienteId?: string; productoId?: string }) {
   const res = await api.get('/api/v1/tarifas-cliente-producto/', { params: toSnakeCase(params) });

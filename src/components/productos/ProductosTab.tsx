@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Plus, Pencil, Trash2, Search, Package, Weight, Droplets, Box } from 'lucide-react';
+import { Plus, Pencil, Trash2, Search, Package, Weight, Droplets, Box, X, Tag } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { Producto } from '@/types';
 import { Button } from '@/components/ui/button';
@@ -38,20 +38,24 @@ export function ProductosTab() {
   const [search, setSearch] = useState('');
   const [editing, setEditing] = useState<Producto | null>(null);
   const [open, setOpen] = useState(false);
+  const [aliasInput, setAliasInput] = useState('');
   const [form, setForm] = useState<{
     nombre: string;
     unidadComision: 'kg' | 'litro' | 'tacho' | 'unidad';
     tachoKilos: string;
     activo: boolean;
+    alias: string[];
   }>({
     nombre: '',
     unidadComision: 'kg',
     tachoKilos: '',
     activo: true,
+    alias: [],
   });
 
   const filtered = productos.filter((p) =>
-    p.nombre.toLowerCase().includes(search.toLowerCase())
+    p.nombre.toLowerCase().includes(search.toLowerCase()) ||
+    p.alias?.some((a) => a.toLowerCase().includes(search.toLowerCase()))
   );
 
   const resetForm = () => {
@@ -60,7 +64,9 @@ export function ProductosTab() {
       unidadComision: 'kg',
       tachoKilos: '',
       activo: true,
+      alias: [],
     });
+    setAliasInput('');
     setEditing(null);
   };
 
@@ -76,6 +82,7 @@ export function ProductosTab() {
       unidadComision: form.unidadComision,
       tachoKilos: form.unidadComision === 'tacho' && form.tachoKilos ? parseFloat(form.tachoKilos) : undefined,
       activo: form.activo,
+      alias: form.alias.filter((a) => a.trim() !== ''),
     };
 
     if (editing) {
@@ -94,6 +101,7 @@ export function ProductosTab() {
       unidadComision: p.unidadComision,
       tachoKilos: p.tachoKilos?.toString() ?? '',
       activo: p.activo,
+      alias: p.alias || [],
     });
     setOpen(true);
   };
@@ -179,6 +187,66 @@ export function ProductosTab() {
                 </div>
               )}
 
+              <div className="space-y-2">
+                <Label htmlFor="alias">Alias (nombres en órdenes de compra)</Label>
+                <div className="flex gap-2">
+                  <Input
+                    id="alias"
+                    value={aliasInput}
+                    onChange={(e) => setAliasInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        const trimmed = aliasInput.trim();
+                        if (trimmed && !form.alias.includes(trimmed)) {
+                          setForm({ ...form, alias: [...form.alias, trimmed] });
+                          setAliasInput('');
+                        }
+                      }
+                    }}
+                    placeholder="Ej: ECU-BACILLUS SUELO-PASTILLA TH"
+                    className="bg-white border-slate-200 rounded-xl focus:border-slate-900 focus:ring-slate-900/10"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      const trimmed = aliasInput.trim();
+                      if (trimmed && !form.alias.includes(trimmed)) {
+                        setForm({ ...form, alias: [...form.alias, trimmed] });
+                        setAliasInput('');
+                      }
+                    }}
+                    className="rounded-xl border-slate-200 shrink-0"
+                  >
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </div>
+                {form.alias.length > 0 && (
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {form.alias.map((a, i) => (
+                      <Badge
+                        key={i}
+                        variant="secondary"
+                        className="flex items-center gap-1 bg-slate-100 text-slate-700 border-0 pl-2 pr-1"
+                      >
+                        <Tag className="h-3 w-3" />
+                        {a}
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setForm({ ...form, alias: form.alias.filter((_, idx) => idx !== i) })
+                          }
+                          className="ml-1 p-0.5 rounded hover:bg-slate-200"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </Badge>
+                    ))}
+                  </div>
+                )}
+              </div>
+
               <div className="flex justify-end gap-2 pt-2">
                 <Button
                   type="button"
@@ -257,6 +325,20 @@ export function ProductosTab() {
                     </Badge>
                   )}
                 </div>
+                {p.alias && p.alias.length > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                    {p.alias.map((a, i) => (
+                      <Badge
+                        key={i}
+                        variant="outline"
+                        className="text-xs text-slate-500 border-slate-200 bg-slate-50"
+                      >
+                        <Tag className="h-3 w-3 mr-1" />
+                        {a}
+                      </Badge>
+                    ))}
+                  </div>
+                )}
               </CardContent>
             </Card>
           ))}
