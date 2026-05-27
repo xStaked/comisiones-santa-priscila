@@ -4,7 +4,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.models.cliente import Cliente, Finca
-from app.models.producto import Producto
+from app.models.producto import Producto, ProductoAlias
 from app.services.order_extraction_models import OrdenValidada
 
 
@@ -37,7 +37,27 @@ def _buscar_producto(db: Session, nombre: str) -> Producto | None:
     limpio = _limpiar(nombre)
     if not limpio:
         return None
-    return db.query(Producto).filter(func.lower(Producto.nombre) == limpio.lower()).first()
+    # 1. Buscar por nombre exacto
+    producto = db.query(Producto).filter(func.lower(Producto.nombre) == limpio.lower()).first()
+    if producto:
+        return producto
+    # 2. Buscar por alias exacto
+    alias = (
+        db.query(ProductoAlias)
+        .filter(func.lower(ProductoAlias.alias) == limpio.lower())
+        .first()
+    )
+    if alias:
+        return alias.producto
+    # 3. Buscar por alias contenido (el alias del producto está contenido en el texto extraído)
+    alias_contenido = (
+        db.query(ProductoAlias)
+        .filter(func.lower(ProductoAlias.alias).in_(limpio.lower().split()))
+        .first()
+    )
+    if alias_contenido:
+        return alias_contenido.producto
+    return None
 
 
 def normalizar_orden_extraida(db: Session | None, orden: OrdenValidada, cliente_id: str | None = None) -> OrdenValidada:
