@@ -212,6 +212,48 @@ def test_update_orden(authenticated_client):
     assert update_resp.json()["finca"] == "Finca B"
 
 
+def test_update_orden_reemplaza_comisionistas(authenticated_client):
+    comisionista_ids = []
+    for nombre in ("Comisionista Uno", "Comisionista Dos"):
+        response = authenticated_client.post("/api/v1/comisionistas/", json={
+            "nombre": nombre,
+            "tarifas": [],
+        })
+        assert response.status_code == 201
+        comisionista_ids.append(response.json()["id"])
+
+    create_resp = authenticated_client.post("/api/v1/ordenes/", json=[{
+        "fecha": str(date.today()),
+        "numero_orden": "ORD-COMISIONISTAS-001",
+        "finca": "Finca A",
+        "producto": "Camarón",
+        "cantidad": "20.00",
+        "unidad": "kg",
+        "precio_unitario": "10.00",
+        "total": "200.00",
+        "comisionista_ids": [],
+    }])
+    assert create_resp.status_code == 201
+    oid = create_resp.json()[0]["id"]
+
+    update_resp = authenticated_client.put(f"/api/v1/ordenes/{oid}", json={
+        "comisionista_ids": comisionista_ids,
+    })
+    assert update_resp.status_code == 200
+    assert {
+        asignacion["comisionista_id"]
+        for asignacion in update_resp.json()["comisionistas"]
+    } == set(comisionista_ids)
+
+    list_resp = authenticated_client.get("/api/v1/ordenes/")
+    assert list_resp.status_code == 200
+    orden = next(o for o in list_resp.json() if o["id"] == oid)
+    assert {
+        asignacion["comisionista_id"]
+        for asignacion in orden["comisionistas"]
+    } == set(comisionista_ids)
+
+
 def test_delete_orden(authenticated_client):
     payload = [{
         "fecha": str(date.today()),

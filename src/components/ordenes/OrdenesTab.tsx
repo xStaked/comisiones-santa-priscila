@@ -338,7 +338,10 @@ export function OrdenesTab() {
     if (editForm.cantidad && editForm.precioUnitario) {
       editForm.total = editForm.cantidad * editForm.precioUnitario;
     }
-    updateOrdenItem(editingId, editForm);
+    updateOrdenItem(editingId, {
+      ...editForm,
+      comisionistaIds: (editForm.comisionistas || []).map(a => a.comisionistaId),
+    } as Partial<OrdenItem> & { comisionistaIds: string[] });
     setEditOpen(false);
     setEditingId(null);
   };

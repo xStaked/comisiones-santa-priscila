@@ -150,7 +150,7 @@ export async function createOrdenes(items: any[]) {
 }
 
 export async function updateOrden(id: string, data: any) {
-  const allowed = ['fecha', 'numeroOrden', 'finca', 'producto', 'cantidad', 'unidad', 'precioUnitario', 'total', 'sector', 'estado', 'clienteId', 'productoId', 'fincaId'];
+  const allowed = ['fecha', 'numeroOrden', 'finca', 'producto', 'cantidad', 'unidad', 'precioUnitario', 'total', 'sector', 'estado', 'clienteId', 'productoId', 'fincaId', 'comisionistaIds'];
   const payload: any = {};
   for (const key of allowed) {
     if (key in data) payload[key] = data[key];

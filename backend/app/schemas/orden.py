@@ -56,6 +56,7 @@ class OrdenItemUpdate(BaseModel):
     cliente_id: Optional[UUID] = None
     producto_id: Optional[UUID] = None
     finca_id: Optional[UUID] = None
+    comisionista_ids: Optional[List[UUID]] = None
 
 
 class OrdenItemResponse(OrdenItemBase):

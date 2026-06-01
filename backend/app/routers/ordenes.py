@@ -260,6 +260,7 @@ def actualizar_orden(
         )
 
     update_data = data.model_dump(exclude_unset=True)
+    comisionista_ids = update_data.pop("comisionista_ids", None)
     if "estado" in update_data:
         update_data["estado"] = EstadoOrden(update_data["estado"])
 
@@ -267,9 +268,20 @@ def actualizar_orden(
         setattr(oi, field, value)
 
     try:
+        if comisionista_ids is not None:
+            db.query(Asignacion).filter(
+                Asignacion.orden_item_id == oi.id
+            ).delete(synchronize_session=False)
+            for comisionista_id in comisionista_ids:
+                db.add(
+                    Asignacion(
+                        orden_item_id=oi.id,
+                        comisionista_id=comisionista_id,
+                    )
+                )
         db.commit()
         db.refresh(oi)
-        return oi
+        return _serializar_item(oi)
     except Exception as exc:
         db.rollback()
         raise HTTPException(
