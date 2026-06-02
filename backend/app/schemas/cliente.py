@@ -19,7 +19,7 @@ class FincaCreate(FincaBase):
 
 
 class FincaUpdate(FincaBase):
-    pass
+    cliente_id: UUID | None = Field(default=None, alias="clienteId")
 
 
 class FincaResponse(BaseModel):

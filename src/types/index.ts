@@ -46,7 +46,7 @@ export interface Orden {
   semana?: string;
   archivoNombre?: string;
   origen: 'manual' | 'pdf' | 'imagen' | string;
-  estado: 'activo' | 'liquidado' | 'anulado' | string;
+  estado: 'activo' | 'liquidado' | string;
   total: number;
   cantidadProductos: number;
   items: OrdenItem[];

@@ -19,63 +19,7 @@ from app.dependencies import get_current_user
 router = APIRouter()
 
 
-@router.get("/")
-def listar_liquidaciones(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    liquidaciones = db.query(Liquidacion).all()
-    return [
-        {
-            "id": liq.id,
-            "nombre": liq.nombre,
-            "mes": liq.mes,
-            "fecha_creacion": liq.fecha_creacion,
-        }
-        for liq in liquidaciones
-    ]
-
-
-@router.post("/", status_code=status.HTTP_201_CREATED)
-def crear(data: LiquidacionCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    try:
-        liquidacion = crear_liquidacion(
-            db, data.nombre, data.orden_item_ids
-        )
-        return {
-            "id": liquidacion.id,
-            "nombre": liquidacion.nombre,
-            "mes": liquidacion.mes,
-            "fecha_creacion": liquidacion.fecha_creacion,
-        }
-    except ValueError as exc:
-        db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
-        ) from exc
-    except Exception as exc:
-        db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(exc),
-        ) from exc
-
-
-@router.get("/{id}")
-def detalle(id: UUID, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    liquidacion = (
-        db.query(Liquidacion)
-        .options(
-            selectinload(Liquidacion.items).selectinload(
-                LiquidacionItem.tarifas
-            )
-        )
-        .filter(Liquidacion.id == id)
-        .first()
-    )
-    if not liquidacion:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Liquidación no encontrada",
-        )
-
+def _serialize_liquidacion(liquidacion: Liquidacion) -> dict:
     items = []
     for li in liquidacion.items:
         tarifas = [
@@ -109,7 +53,6 @@ def detalle(id: UUID, db: Session = Depends(get_db), current_user: User = Depend
                 "tarifas": tarifas,
             }
         )
-
     return {
         "id": liquidacion.id,
         "nombre": liquidacion.nombre,
@@ -117,6 +60,66 @@ def detalle(id: UUID, db: Session = Depends(get_db), current_user: User = Depend
         "fecha_creacion": liquidacion.fecha_creacion,
         "items": items,
     }
+
+
+@router.get("/")
+def listar_liquidaciones(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    liquidaciones = (
+        db.query(Liquidacion)
+        .options(
+            selectinload(Liquidacion.items).selectinload(
+                LiquidacionItem.tarifas
+            )
+        )
+        .all()
+    )
+    return [_serialize_liquidacion(liq) for liq in liquidaciones]
+
+
+@router.post("/", status_code=status.HTTP_201_CREATED)
+def crear(data: LiquidacionCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    try:
+        liquidacion, omitidos = crear_liquidacion(
+            db, data.nombre, data.orden_item_ids
+        )
+        return {
+            "id": liquidacion.id,
+            "nombre": liquidacion.nombre,
+            "mes": liquidacion.mes,
+            "fecha_creacion": liquidacion.fecha_creacion,
+            "omitidos": omitidos,
+        }
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
+        ) from exc
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(exc),
+        ) from exc
+
+
+@router.get("/{id}")
+def detalle(id: UUID, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    liquidacion = (
+        db.query(Liquidacion)
+        .options(
+            selectinload(Liquidacion.items).selectinload(
+                LiquidacionItem.tarifas
+            )
+        )
+        .filter(Liquidacion.id == id)
+        .first()
+    )
+    if not liquidacion:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Liquidación no encontrada",
+        )
+    return _serialize_liquidacion(liquidacion)
 
 
 @router.delete("/{id}", status_code=status.HTTP_204_NO_CONTENT)

@@ -2,8 +2,9 @@
 
 import { useState, useMemo } from 'react';
 import { FileText, FileSpreadsheet, Save, Calculator, Filter } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useApp } from '@/context/AppContext';
-import { exportarPDF, exportarExcel, calcularComision, calcularComisionTotalItem, getTarifasLabel, calcularComisionPorTarifaEspecifica, encontrarTarifaEspecifica } from '@/lib/export-utils';
+import { exportarPDF, exportarExcel, calcularDetalleComision } from '@/lib/export-utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -31,7 +32,7 @@ export function LiquidacionTab() {
   );
 
   const ordenItemsActivos = useMemo(
-    () => ordenItems.filter(item => item.estado !== 'liquidado' && item.estado !== 'anulado'),
+    () => ordenItems.filter(item => item.estado !== 'liquidado'),
     [ordenItems]
   );
 
@@ -47,24 +48,40 @@ export function LiquidacionTab() {
 
   const itemsConComision = useMemo(() => {
     return filteredItems.map(item => {
-      const comisionistasAsignados = item.comisionistas
-        .map(a => comisionistaMap.get(a.comisionistaId))
-        .filter(Boolean);
-      // Usar tarifa específica si existe, fallback a tarifa global
-      let comisionTotal = 0;
-      item.comisionistas.forEach(a => {
-        const com = comisionistaMap.get(a.comisionistaId);
-        if (!com) return;
-        const tarifaEspecifica = encontrarTarifaEspecifica(item, a.comisionistaId, tarifasClienteProducto);
-        if (tarifaEspecifica) {
-          comisionTotal += calcularComisionPorTarifaEspecifica(item, tarifaEspecifica);
+      const comisionesAsignadas = item.comisionistas.flatMap(a => {
+        const comisionista = comisionistaMap.get(a.comisionistaId);
+        if (!comisionista) return [];
+        return [{
+          ...comisionista,
+          ...calcularDetalleComision(item, comisionista, tarifasClienteProducto),
+        }];
+      });
+      const comisionTotal = comisionesAsignadas.reduce((total, asignacion) => total + asignacion.comision, 0);
+      return { ...item, comisionTotal, comisionesAsignadas };
+    });
+  }, [filteredItems, comisionistaMap, tarifasClienteProducto]);
+
+  const resumenPorComisionista = useMemo(() => {
+    const map = new Map<string, { id: string; nombre: string; tarifasLabel: string; items: number; comision: number }>();
+    itemsConComision.forEach(item => {
+      item.comisionesAsignadas.forEach(com => {
+        const existente = map.get(com.id);
+        if (existente) {
+          existente.items += 1;
+          existente.comision += com.comision;
         } else {
-          comisionTotal += calcularComision(item, com);
+          map.set(com.id, {
+            id: com.id,
+            nombre: com.nombre,
+            tarifasLabel: com.tarifasLabel,
+            items: 1,
+            comision: com.comision,
+          });
         }
       });
-      return { ...item, comisionTotal, comisionistasAsignados };
     });
-  }, [filteredItems, comisionistas, comisionistaMap, tarifasClienteProducto]);
+    return Array.from(map.values()).sort((a, b) => b.comision - a.comision);
+  }, [itemsConComision]);
 
   const totalComision = itemsConComision.reduce((s, i) => s + i.comisionTotal, 0);
   const totalCantidad = itemsConComision.reduce((s, i) => s + i.cantidad, 0);
@@ -76,7 +93,7 @@ export function LiquidacionTab() {
       return;
     }
     const com = filterComisionista ? comisionistaMap.get(filterComisionista) : undefined;
-    exportarPDF(filteredItems, comisionistas, 'Liquidacion', com?.nombre);
+    exportarPDF(filteredItems, comisionistas, 'Liquidacion', com?.nombre, tarifasClienteProducto);
     toast.success('PDF generado');
   };
 
@@ -86,16 +103,29 @@ export function LiquidacionTab() {
       return;
     }
     const com = filterComisionista ? comisionistaMap.get(filterComisionista) : undefined;
-    exportarExcel(filteredItems, comisionistas, 'Liquidacion', com?.nombre);
+    exportarExcel(filteredItems, comisionistas, 'Liquidacion', com?.nombre, tarifasClienteProducto);
     toast.success('Excel generado');
   };
 
-  const handleSave = () => {
+  const queryClient = useQueryClient();
+
+  const handleSave = async () => {
     if (!nombreLiquidacion.trim()) {
       toast.error('Ingresa un nombre para la liquidación');
       return;
     }
-    saveLiquidacion(nombreLiquidacion);
+    // Refrescar datos para evitar enviar ítems stale (ya liquidados)
+    await queryClient.refetchQueries({ queryKey: ['ordenes'] });
+    // Reconstruir IDs a partir de los datos actualizados
+    const ids = ordenItems
+      .filter(item => item.estado !== 'liquidado')
+      .filter(i => !filterComisionista || i.comisionistas.some(a => a.comisionistaId === filterComisionista))
+      .map((i) => i.id);
+    if (ids.length === 0) {
+      toast.error('No hay órdenes activas para guardar');
+      return;
+    }
+    saveLiquidacion(nombreLiquidacion, ids);
     setNombreLiquidacion('');
     setPreviewOpen(false);
   };
@@ -114,7 +144,7 @@ export function LiquidacionTab() {
       <div className="text-center py-20 bg-white rounded-2xl border border-dashed border-slate-200">
         <Calculator className="h-12 w-12 text-slate-300 mx-auto mb-4" />
         <h3 className="text-lg font-medium text-slate-700">Sin órdenes cargadas</h3>
-        <p className="text-sm text-slate-500 mt-1 max-w-sm mx-auto">Ve a "Cargar Órdenes" para agregar registros y generar una liquidación.</p>
+        <p className="text-sm text-slate-500 mt-1 max-w-sm mx-auto">Ve a &quot;Cargar Órdenes&quot; para agregar registros y generar una liquidación.</p>
       </div>
     );
   }
@@ -240,11 +270,17 @@ export function LiquidacionTab() {
                       </td>
                       <td className="px-4 py-3 text-right text-slate-500">${item.total.toFixed(2)}</td>
                       <td className="px-4 py-3">
-                        {item.comisionistasAsignados.length > 0 ? (
-                          <div className="flex flex-wrap gap-1">
-                            {item.comisionistasAsignados.map(com => (
-                              <Badge key={com!.id} variant="outline" className="text-xs bg-white text-slate-700 border-slate-200">
-                                {com!.nombre}
+                        {item.comisionesAsignadas.length > 0 ? (
+                          <div className="space-y-1">
+                            {item.comisionesAsignadas.map(com => (
+                              <Badge key={com.id} variant="outline" className="flex w-fit gap-1 text-xs bg-white text-slate-700 border-slate-200">
+                                <span>{com.nombre}</span>
+                                <span className="text-slate-400">·</span>
+                                <span>{com.tarifasLabel}</span>
+                                <span className="text-slate-400">·</span>
+                                <span className={com.comision > 0 ? 'text-emerald-700' : 'text-amber-700'}>
+                                  ${com.comision.toFixed(2)}
+                                </span>
                               </Badge>
                             ))}
                           </div>
@@ -301,6 +337,54 @@ export function LiquidacionTab() {
           </CardContent>
         </Card>
       </div>
+
+      <Card className="card-elevated rounded-2xl overflow-hidden">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base text-slate-900">Resumen por Comisionista</CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-900 text-white">
+                <tr>
+                  <th className="text-left px-4 py-3 font-medium">Comisionista</th>
+                  <th className="text-left px-4 py-3 font-medium">Tarifa Aplicada</th>
+                  <th className="text-right px-4 py-3 font-medium">Items</th>
+                  <th className="text-right px-4 py-3 font-medium">Comisión Total</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {resumenPorComisionista.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="px-4 py-8 text-center text-slate-500">
+                      No hay comisionistas asignados
+                    </td>
+                  </tr>
+                ) : (
+                  resumenPorComisionista.map((com) => (
+                    <tr key={com.id} className="hover:bg-slate-50/50 transition-colors">
+                      <td className="px-4 py-3 text-slate-900 font-medium">{com.nombre}</td>
+                      <td className="px-4 py-3 text-slate-500">{com.tarifasLabel}</td>
+                      <td className="px-4 py-3 text-right text-slate-700">{com.items}</td>
+                      <td className="px-4 py-3 text-right font-semibold text-emerald-700">
+                        ${com.comision.toFixed(2)}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+              <tfoot className="bg-slate-50 border-t-2 border-slate-200">
+                <tr>
+                  <td colSpan={3} className="px-4 py-3 font-medium text-slate-700 text-right">Total Comisión:</td>
+                  <td className="px-4 py-3 text-right">
+                    <span className="text-lg font-bold text-slate-900 tabular-nums">${totalComision.toFixed(2)}</span>
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }

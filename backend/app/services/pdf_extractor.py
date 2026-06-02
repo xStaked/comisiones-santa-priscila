@@ -40,11 +40,21 @@ def _orden_validada_a_respuesta(orden: OrdenValidada) -> dict[str, Any]:
                 "unidad": item.unidad,
                 "precioUnitario": item.precioUnitario,
                 "total": item.total,
-                "comisionistas": [],
+                "comisionistas": item.comisionistas,
             }
             for item in orden.items
         ],
     }
+
+
+def _normalizar_respuesta_posicional(
+    db,
+    respuesta: dict[str, Any],
+    cliente_id: str | None = None,
+) -> dict[str, Any]:
+    orden = OrdenValidada.model_validate(respuesta)
+    orden_normalizada = normalizar_orden_extraida(db, orden, cliente_id=cliente_id)
+    return _orden_validada_a_respuesta(orden_normalizada)
 
 
 def _extraer_con_ia(
@@ -171,34 +181,6 @@ def _extraer_items_santa_priscila_desde_filas(
     return items
 
 
-def _buscar_producto_en_db(db, nombre: str) -> tuple[Any | None, str]:
-    """Busca un producto en la DB por nombre o alias."""
-    from sqlalchemy import func
-    from app.models.producto import Producto, ProductoAlias
-
-    limpio = " ".join((nombre or "").strip().split())
-    if not limpio or db is None:
-        return None, nombre
-
-    # 1. Por nombre exacto
-    producto = db.query(Producto).filter(func.lower(Producto.nombre) == limpio.lower()).first()
-    if producto:
-        return producto, producto.nombre
-
-    # 2. Por alias exacto
-    alias = db.query(ProductoAlias).filter(func.lower(ProductoAlias.alias) == limpio.lower()).first()
-    if alias:
-        return alias.producto, alias.producto.nombre
-
-    # 3. Por alias contenido (alguna palabra del texto coincide con un alias)
-    palabras = limpio.lower().split()
-    alias_contenido = db.query(ProductoAlias).filter(func.lower(ProductoAlias.alias).in_(palabras)).first()
-    if alias_contenido:
-        return alias_contenido.producto, alias_contenido.producto.nombre
-
-    return None, nombre
-
-
 def extraer_orden_de_pdf(
     contenido: bytes,
     nombre_archivo: str = "",
@@ -318,35 +300,13 @@ def extraer_orden_de_pdf(
             orden_items = []
             for item in items_santa_priscila:
                 finca = item["finca"] or "-"
-                finca_id = None
-                cliente_id_item = cliente_id
-                producto_id = None
                 producto = item["producto"]
-                if db:
-                    from app.models.cliente import Finca
-                    from app.models.producto import Producto
-
-                    query_finca = db.query(Finca).filter(Finca.nombre.ilike(finca))
-                    if cliente_id:
-                        from uuid import UUID
-                        query_finca = query_finca.filter(Finca.cliente_id == UUID(cliente_id))
-                    finca_db = query_finca.first()
-                    if finca_db:
-                        finca_id = str(finca_db.id)
-                        cliente_id_item = str(finca_db.cliente_id)
-                    producto_db = db.query(Producto).filter(Producto.nombre.ilike(producto)).first()
-                    if producto_db:
-                        producto_id = str(producto_db.id)
-                        producto = producto_db.nombre
 
                 orden_items.append(
                     {
                         "fecha": date.fromisoformat(fecha),
                         "numeroOrden": numero_orden or f"OC-{fecha}",
                         "finca": finca,
-                        "fincaId": finca_id,
-                        "clienteId": cliente_id_item,
-                        "productoId": producto_id,
                         "producto": producto,
                         "cantidad": item["cantidad"],
                         "unidad": item["unidad"],
@@ -356,13 +316,13 @@ def extraer_orden_de_pdf(
                     }
                 )
 
-            return {
+            return _normalizar_respuesta_posicional(db, {
                 "fecha": date.fromisoformat(fecha),
                 "numeroOrden": numero_orden or f"OC-{fecha}",
                 "proveedor": proveedor or "",
                 "semana": semana,
                 "items": orden_items,
-            }
+            }, cliente_id=cliente_id)
 
     if usar_ia:
         return _extraer_con_ia(
@@ -495,16 +455,17 @@ def extraer_orden_de_pdf(
                     fincas.append({"y": fila["y"], "nombre": nombre})
 
     # 9. Asignar fincas a ítems
-    # Buscar la finca más cercana en cualquier dirección (hasta 25 unidades).
-    # En caso de empate, preferir la finca que esté más arriba (menor Y).
+    # Buscar la finca más cercana que esté ARRIBA del ítem (menor Y, hasta 25 unidades).
+    # Las fincas actúan como encabezados: solo afectan a ítems que aparecen debajo de ellas.
     orden_items: list[dict[str, Any]] = []
     for item in items_crudos:
         finca = "-"
         min_diff = float("inf")
         finca_cercana = None
         for f in fincas:
-            diff = abs(f["y"] - item["y"])
-            if diff <= 25:
+            # La finca debe estar arriba del ítem (f["y"] < item["y"])
+            diff = item["y"] - f["y"]
+            if 0 < diff <= 25:
                 if (
                     finca_cercana is None
                     or diff < min_diff
@@ -516,33 +477,13 @@ def extraer_orden_de_pdf(
         if finca_cercana:
             finca = finca_cercana["nombre"]
 
-        # Intentar vincular finca con base de datos
-        finca_id = None
-        cliente_id = None
-        if db and finca and finca != "-":
-            from app.models.cliente import Finca
-            finca_db = db.query(Finca).filter(Finca.nombre.ilike(finca)).first()
-            if finca_db:
-                finca_id = str(finca_db.id)
-                cliente_id = str(finca_db.cliente_id)
-
-        # Buscar producto en DB por nombre o alias
-        producto_id = None
         producto_nombre = item["producto"]
-        if db:
-            prod_db, prod_nombre = _buscar_producto_en_db(db, producto_nombre)
-            if prod_db:
-                producto_id = str(prod_db.id)
-                producto_nombre = prod_nombre
 
         orden_items.append({
             "fecha": date.fromisoformat(fecha),
             "numeroOrden": numero_orden or f"OC-{fecha}",
             "finca": finca,
-            "fincaId": finca_id,
-            "clienteId": cliente_id,
             "producto": producto_nombre,
-            "productoId": producto_id,
             "cantidad": item["cantidad"],
             "unidad": inferir_unidad(item["descripcion"]),
             "precioUnitario": item["precioUnitario"],
@@ -550,13 +491,13 @@ def extraer_orden_de_pdf(
             "comisionistas": [],
         })
 
-    return {
+    return _normalizar_respuesta_posicional(db, {
         "fecha": date.fromisoformat(fecha),
         "numeroOrden": numero_orden or f"OC-{fecha}",
         "proveedor": proveedor or "",
         "semana": semana,
         "items": orden_items,
-    }
+    }, cliente_id=cliente_id)
 
 
 def inferir_unidad(descripcion: str) -> str:

@@ -28,7 +28,7 @@ import {
   Cell,
 } from 'recharts';
 import { useApp } from '@/context/AppContext';
-import { calcularComision, calcularComisionTotalItem, exportarPDF, exportarExcel } from '@/lib/export-utils';
+import { exportarPDF, exportarExcel, getTarifaLabel } from '@/lib/export-utils';
 import { fetchLiquidacion } from '@/lib/api';
 import { Comisionista, OrdenItem } from '@/types';
 import { Shell } from '@/components/Shell';
@@ -109,11 +109,12 @@ export default function LiquidacionDetallePage() {
   );
 
   const resumenPorFinca = useMemo(() => {
-    if (!liquidacion) return [];
+    if (!liquidacion || !rawLiquidacion) return [];
     const map = new Map<string, { nombre: string; ordenes: number; cantidad: number; total: number; comision: number }>();
     liquidacion.items.forEach(item => {
+      const rawItem = (rawLiquidacion.items || []).find((ri: any) => ri.id === item.id);
+      const comision = (rawItem?.tarifas || []).reduce((s: number, t: any) => s + (Number(t.comisionCalculada) || 0), 0);
       const finca = item.finca || 'Sin finca';
-      const comision = calcularComisionTotalItem(item, comisionistas);
       const existente = map.get(finca);
       if (existente) {
         existente.ordenes += 1;
@@ -131,10 +132,10 @@ export default function LiquidacionDetallePage() {
       }
     });
     return Array.from(map.values()).sort((a, b) => b.total - a.total);
-  }, [liquidacion, comisionistas]);
+  }, [liquidacion, rawLiquidacion]);
 
   const resumenPorComisionista = useMemo(() => {
-    if (!liquidacion) return [];
+    if (!rawLiquidacion) return [];
     const map = new Map<
       string,
       {
@@ -145,26 +146,25 @@ export default function LiquidacionDetallePage() {
         totalOrden: number;
       }
     >();
-    liquidacion.items.forEach((item) => {
-      item.comisionistas.forEach((asig) => {
-        const com = comisionistaMap.get(asig.comisionistaId);
-        if (!com) return;
-        const existente = map.get(com.id);
-        const comision = calcularComision(item, com);
+    (rawLiquidacion.items || []).forEach((rawItem: any) => {
+      const itemTotal = Number(rawItem.totalSnapshot) || 0;
+      (rawItem.tarifas || []).forEach((t: any) => {
+        const comision = Number(t.comisionCalculada) || 0;
+        const existente = map.get(t.comisionistaId);
+        const tarifaLabel = t.tipoSnapshot === 'sin_tarifa'
+          ? '—'
+          : getTarifaLabel({ tipo: t.tipoSnapshot, valor: Number(t.valorSnapshot) });
         if (existente) {
           existente.ordenes += 1;
           existente.totalComision += comision;
-          existente.totalOrden += item.total;
+          existente.totalOrden += itemTotal;
         } else {
-          map.set(com.id, {
-            nombre: com.nombre,
-            tarifas: com.tarifas.map(t => {
-              const valor = typeof t.valor === 'string' ? parseFloat(t.valor) : t.valor;
-              return t.tipo === 'porcentaje' ? `${valor}%` : `$${valor.toFixed(3)}/kg`;
-            }).join(' + '),
+          map.set(t.comisionistaId, {
+            nombre: t.comisionistaNombreSnapshot,
+            tarifas: tarifaLabel,
             ordenes: 1,
             totalComision: comision,
-            totalOrden: item.total,
+            totalOrden: itemTotal,
           });
         }
       });
@@ -172,7 +172,7 @@ export default function LiquidacionDetallePage() {
     return Array.from(map.values()).sort(
       (a, b) => b.totalComision - a.totalComision
     );
-  }, [liquidacion, comisionistaMap]);
+  }, [rawLiquidacion]);
 
   if (!liquidacion) {
     return (
@@ -198,21 +198,42 @@ export default function LiquidacionDetallePage() {
   }
 
   const totalOrden = liquidacion.items.reduce((s, i) => s + i.total, 0);
-  const totalComision = liquidacion.items.reduce((s, item) => {
-    return s + calcularComisionTotalItem(item, comisionistas);
-  }, 0);
+  const totalComision = rawLiquidacion
+    ? (rawLiquidacion.items || []).reduce((s: number, ri: any) => {
+        return s + (ri.tarifas || []).reduce((ss: number, t: any) => ss + (Number(t.comisionCalculada) || 0), 0);
+      }, 0)
+    : 0;
   const totalCantidad = liquidacion.items.reduce((s, i) => s + i.cantidad, 0);
   const comisionistasInvolucrados = new Set(
     liquidacion.items.flatMap((i) => i.comisionistas.map(a => a.comisionistaId)).filter(Boolean)
   ).size;
 
+  const buildComisionesSnapshot = () => {
+    const map = new Map<string, { comision: number; tarifasLabel: string }>();
+    for (const rawItem of rawLiquidacion?.items || []) {
+      for (const t of rawItem.tarifas || []) {
+        const key = `${rawItem.id}|${t.comisionistaId}`;
+        const label = t.tipoSnapshot === 'sin_tarifa'
+          ? '—'
+          : getTarifaLabel({ tipo: t.tipoSnapshot, valor: Number(t.valorSnapshot) });
+        const existing = map.get(key);
+        if (existing) {
+          existing.comision += Number(t.comisionCalculada) || 0;
+        } else {
+          map.set(key, { comision: Number(t.comisionCalculada) || 0, tarifasLabel: label });
+        }
+      }
+    }
+    return map;
+  };
+
   const handleExportPDF = () => {
-    exportarPDF(liquidacion.items, comisionistas, liquidacion.nombre);
+    exportarPDF(liquidacion.items, comisionistas, liquidacion.nombre, undefined, [], buildComisionesSnapshot());
     toast.success('PDF generado');
   };
 
   const handleExportExcel = () => {
-    exportarExcel(liquidacion.items, comisionistas, liquidacion.nombre);
+    exportarExcel(liquidacion.items, comisionistas, liquidacion.nombre, undefined, [], buildComisionesSnapshot());
     toast.success('Excel generado');
   };
 
@@ -593,7 +614,8 @@ export default function LiquidacionDetallePage() {
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {liquidacion.items.map((item) => {
-                    const comision = calcularComisionTotalItem(item, comisionistas);
+                    const rawItem = (rawLiquidacion?.items || []).find((ri: any) => ri.id === item.id);
+                    const comision = (rawItem?.tarifas || []).reduce((s: number, t: any) => s + (Number(t.comisionCalculada) || 0), 0);
                     return (
                       <tr
                         key={item.id}

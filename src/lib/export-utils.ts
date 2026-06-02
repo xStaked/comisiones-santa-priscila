@@ -2,6 +2,11 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
 import { OrdenItem, Comisionista, TarifaClienteProducto } from '@/types';
+import {
+  normalizarTexto,
+  normalizarNombreFinca,
+  normalizarNombreProducto,
+} from './normalization';
 
 export function calcularComisionPorTarifa(item: OrdenItem, tarifa: { tipo: 'porcentaje' | 'fijo_kg'; valor: number }): number {
   if (tarifa.tipo === 'porcentaje') {
@@ -45,25 +50,29 @@ export function encontrarTarifaEspecifica(
   comisionistaId: string,
   tarifas: TarifaClienteProducto[]
 ): TarifaClienteProducto | undefined {
-  // 1. Buscar con finca
-  let t = tarifas.find(
-    (ta) =>
-      ta.comisionistaId === comisionistaId &&
-      ta.clienteId === item.clienteId &&
-      ta.productoId === item.productoId &&
-      ta.fincaId === item.fincaId
+  const nombreRelacion = (relacion?: string | { nombre: string }) =>
+    typeof relacion === 'string' ? relacion : relacion?.nombre;
+  const nombreClienteItem = item.cliente?.nombre;
+  const sinClienteIdentificado = !item.clienteId && !nombreClienteItem;
+  const nombreFincaItem = item.fincaRel?.nombre || (item.finca !== '-' ? item.finca : item.sector);
+  const coincideCliente = (tarifa: TarifaClienteProducto) =>
+    tarifa.clienteId === item.clienteId ||
+    normalizarTexto(nombreRelacion(tarifa.cliente)) === normalizarTexto(nombreClienteItem);
+  const coincideProducto = (tarifa: TarifaClienteProducto) =>
+    tarifa.productoId === item.productoId ||
+    normalizarNombreProducto(nombreRelacion(tarifa.producto)) === normalizarNombreProducto(item.productoRel?.nombre || item.producto);
+  const coincideFinca = (tarifa: TarifaClienteProducto) =>
+    tarifa.fincaId === item.fincaId ||
+    normalizarNombreFinca(nombreRelacion(tarifa.finca)) === normalizarNombreFinca(nombreFincaItem);
+  const candidatas = tarifas.filter(
+    (tarifa) =>
+      tarifa.comisionistaId === comisionistaId &&
+      (coincideCliente(tarifa) || sinClienteIdentificado) &&
+      coincideProducto(tarifa)
   );
-  // 2. Buscar sin finca
-  if (!t && item.fincaId) {
-    t = tarifas.find(
-      (ta) =>
-        ta.comisionistaId === comisionistaId &&
-        ta.clienteId === item.clienteId &&
-        ta.productoId === item.productoId &&
-        !ta.fincaId
-    );
-  }
-  return t;
+
+  return candidatas.find((tarifa) => tarifa.fincaId && coincideFinca(tarifa)) ||
+    candidatas.find((tarifa) => !tarifa.fincaId && coincideCliente(tarifa));
 }
 
 export function calcularComision(item: OrdenItem, comisionista: Comisionista | undefined): number {
@@ -71,10 +80,16 @@ export function calcularComision(item: OrdenItem, comisionista: Comisionista | u
   return comisionista.tarifas.reduce((sum, tarifa) => sum + calcularComisionPorTarifa(item, tarifa), 0);
 }
 
-export function calcularComisionTotalItem(item: OrdenItem, comisionistas: Comisionista[]): number {
+export function calcularComisionTotalItem(
+  item: OrdenItem,
+  comisionistas: Comisionista[],
+  tarifasEspecificas: TarifaClienteProducto[] = []
+): number {
   return item.comisionistas.reduce((sum, asig) => {
     const com = comisionistas.find(c => c.id === asig.comisionistaId);
-    return sum + (com ? calcularComision(item, com) : 0);
+    if (!com) return sum;
+    const detalle = calcularDetalleComision(item, com, tarifasEspecificas);
+    return sum + detalle.comision;
   }, 0);
 }
 
@@ -94,11 +109,41 @@ export function getTarifasLabel(comisionista: Comisionista): string {
   return comisionista.tarifas.map(getTarifaLabel).join(' + ');
 }
 
+export function calcularDetalleComision(
+  item: OrdenItem,
+  comisionista: Comisionista,
+  tarifas: TarifaClienteProducto[]
+): { comision: number; tarifasLabel: string } {
+  const tarifaEspecifica = encontrarTarifaEspecifica(item, comisionista.id, tarifas);
+  if (tarifaEspecifica) {
+    return {
+      comision: calcularComisionPorTarifaEspecifica(item, tarifaEspecifica),
+      tarifasLabel: getTarifaLabel(tarifaEspecifica),
+    };
+  }
+
+  // Si el comisionista tiene tarifas específicas configuradas pero ninguna
+  // aplica a este item, no debe hacer fallback a tarifas globales.
+  const tieneTarifasEspecificas = tarifas.some(
+    (t) => t.comisionistaId === comisionista.id
+  );
+  if (tieneTarifasEspecificas) {
+    return { comision: 0, tarifasLabel: '—' };
+  }
+
+  return {
+    comision: calcularComision(item, comisionista),
+    tarifasLabel: getTarifasLabel(comisionista) || 'Sin tarifa configurada',
+  };
+}
+
 export function exportarPDF(
   items: OrdenItem[],
   comisionistas: Comisionista[],
   titulo: string,
-  nombreComisionista?: string
+  nombreComisionista?: string,
+  tarifasClienteProducto: TarifaClienteProducto[] = [],
+  comisionesSnapshot?: Map<string, { comision: number; tarifasLabel: string }>
 ) {
   const doc = new jsPDF({ orientation: 'portrait', format: 'letter' });
   const comisionistaMap = new Map(comisionistas.map(c => [c.id, c]));
@@ -184,13 +229,24 @@ export function exportarPDF(
 
       // Preparar body de la tabla
       const body = itemsDelGrupo.map(item => {
-        const comision = com ? calcularComision(item, com) : 0;
+        let comision = 0;
+        let tarifasLabel = '-';
+        const snapshotKey = `${item.id}|${comId}`;
+        if (comisionesSnapshot?.has(snapshotKey)) {
+          const snap = comisionesSnapshot.get(snapshotKey)!;
+          comision = snap.comision;
+          tarifasLabel = snap.tarifasLabel;
+        } else {
+          const detalle = com ? calcularDetalleComision(item, com, tarifasClienteProducto) : undefined;
+          comision = detalle?.comision || 0;
+          tarifasLabel = detalle?.tarifasLabel || '-';
+        }
         return [
           item.fecha,
           item.numeroOrden,
           item.producto,
           `${item.cantidad.toLocaleString('es-ES')}`,
-          com ? getTarifasLabel(com) : '-',
+          tarifasLabel,
           `$ ${comision.toFixed(2).replace('.', ',')}`,
           item.estado || 'Cobrado',
           item.sector || item.finca || '-',
@@ -198,7 +254,11 @@ export function exportarPDF(
       });
 
       const totalComisionGrupo = itemsDelGrupo.reduce((sum, item) => {
-        return sum + (com ? calcularComision(item, com) : 0);
+        const snapshotKey = `${item.id}|${comId}`;
+        if (comisionesSnapshot?.has(snapshotKey)) {
+          return sum + (comisionesSnapshot.get(snapshotKey)!.comision || 0);
+        }
+        return sum + (com ? calcularDetalleComision(item, com, tarifasClienteProducto).comision : 0);
       }, 0);
 
       totalGeneral += totalComisionGrupo;
@@ -270,7 +330,9 @@ export function exportarExcel(
   items: OrdenItem[],
   comisionistas: Comisionista[],
   titulo: string,
-  nombreComisionista?: string
+  nombreComisionista?: string,
+  tarifasClienteProducto: TarifaClienteProducto[] = [],
+  comisionesSnapshot?: Map<string, { comision: number; tarifasLabel: string }>
 ) {
   const comisionistaMap = new Map(comisionistas.map(c => [c.id, c]));
   const wb = XLSX.utils.book_new();
@@ -342,14 +404,25 @@ export function exportarExcel(
       // Filas de datos
       let totalGrupo = 0;
       itemsDelGrupo.forEach(item => {
-        const comision = com ? calcularComision(item, com) : 0;
+        let comision = 0;
+        let tarifasLabel = '-';
+        const snapshotKey = `${item.id}|${comId}`;
+        if (comisionesSnapshot?.has(snapshotKey)) {
+          const snap = comisionesSnapshot.get(snapshotKey)!;
+          comision = snap.comision;
+          tarifasLabel = snap.tarifasLabel;
+        } else {
+          const detalle = com ? calcularDetalleComision(item, com, tarifasClienteProducto) : undefined;
+          comision = detalle?.comision || 0;
+          tarifasLabel = detalle?.tarifasLabel || '-';
+        }
         totalGrupo += comision;
         data.push([
           item.fecha,
           item.numeroOrden,
           item.producto,
           item.cantidad,
-          com ? getTarifasLabel(com) : '-',
+          tarifasLabel,
           `$ ${comision.toFixed(2).replace('.', ',')}`,
           item.estado || 'Cobrado',
           item.sector || item.finca || '-',
@@ -438,7 +511,7 @@ export function filtrarItems(items: OrdenItem[], filtros: FiltroReporte): OrdenI
     const productoOk = filtros.productos.length === 0 || filtros.productos.includes(item.producto) || (item.productoRel?.nombre ? filtros.productos.includes(item.productoRel.nombre) : false);
     const comisionistaOk = filtros.comisionistas.length === 0 ||
       item.comisionistas.some(a => filtros.comisionistas.includes(a.comisionistaId));
-    const clienteOk = filtros.clientes.length === 0 || (item.cliente?.nombre ? filtros.clientes.includes(item.cliente.nombre) : false) || filtros.clientes.includes(item.finca);
+    const clienteOk = filtros.clientes.length === 0 || (item.cliente?.nombre ? filtros.clientes.includes(item.cliente.nombre) : false);
     return fechaOk && fincaOk && productoOk && comisionistaOk && clienteOk;
   });
 }
@@ -451,11 +524,15 @@ export interface ResumenPorFinca {
   comision: number;
 }
 
-export function agruparPorFinca(items: OrdenItem[], comisionistas: Comisionista[]): ResumenPorFinca[] {
+export function agruparPorFinca(
+  items: OrdenItem[],
+  comisionistas: Comisionista[],
+  tarifasEspecificas: TarifaClienteProducto[] = []
+): ResumenPorFinca[] {
   const map = new Map<string, ResumenPorFinca>();
   items.forEach(item => {
     const finca = item.finca || 'Sin finca';
-    const comision = calcularComisionTotalItem(item, comisionistas);
+    const comision = calcularComisionTotalItem(item, comisionistas, tarifasEspecificas);
     const existente = map.get(finca);
     if (existente) {
       existente.ordenes += 1;
@@ -477,11 +554,15 @@ export interface ResumenPorProducto {
   comision: number;
 }
 
-export function agruparPorProducto(items: OrdenItem[], comisionistas: Comisionista[]): ResumenPorProducto[] {
+export function agruparPorProducto(
+  items: OrdenItem[],
+  comisionistas: Comisionista[],
+  tarifasEspecificas: TarifaClienteProducto[] = []
+): ResumenPorProducto[] {
   const map = new Map<string, ResumenPorProducto>();
   items.forEach(item => {
     const producto = item.producto || 'Sin producto';
-    const comision = calcularComisionTotalItem(item, comisionistas);
+    const comision = calcularComisionTotalItem(item, comisionistas, tarifasEspecificas);
     const existente = map.get(producto);
     if (existente) {
       existente.ordenes += 1;
@@ -504,14 +585,19 @@ export interface ResumenPorComisionista {
   totalOrden: number;
 }
 
-export function agruparPorComisionista(items: OrdenItem[], comisionistas: Comisionista[]): ResumenPorComisionista[] {
+export function agruparPorComisionista(
+  items: OrdenItem[],
+  comisionistas: Comisionista[],
+  tarifasEspecificas: TarifaClienteProducto[] = []
+): ResumenPorComisionista[] {
   const map = new Map<string, ResumenPorComisionista>();
   items.forEach(item => {
     item.comisionistas.forEach(asig => {
       const com = comisionistas.find(c => c.id === asig.comisionistaId);
       if (!com) return;
       const existente = map.get(com.id);
-      const comision = calcularComision(item, com);
+      const detalle = calcularDetalleComision(item, com, tarifasEspecificas);
+      const comision = detalle.comision;
       if (existente) {
         existente.ordenes += 1;
         existente.totalComision += comision;
@@ -539,11 +625,15 @@ export interface ResumenPorCliente {
   comision: number;
 }
 
-export function agruparPorCliente(items: OrdenItem[], comisionistas: Comisionista[]): ResumenPorCliente[] {
+export function agruparPorCliente(
+  items: OrdenItem[],
+  comisionistas: Comisionista[],
+  tarifasEspecificas: TarifaClienteProducto[] = []
+): ResumenPorCliente[] {
   const map = new Map<string, ResumenPorCliente>();
   items.forEach(item => {
-    const cliente = item.cliente?.nombre || item.finca || 'Sin cliente';
-    const comision = calcularComisionTotalItem(item, comisionistas);
+    const cliente = item.cliente?.nombre || 'Sin cliente';
+    const comision = calcularComisionTotalItem(item, comisionistas, tarifasEspecificas);
     const existente = map.get(cliente);
     if (existente) {
       existente.ordenes += 1;
@@ -574,7 +664,8 @@ export function exportarReportePDF(
   items: OrdenItem[],
   comisionistas: Comisionista[],
   titulo: string,
-  filtros: FiltroReporte
+  filtros: FiltroReporte,
+  tarifasEspecificas: TarifaClienteProducto[] = []
 ) {
   const doc = new jsPDF({ orientation: 'portrait', format: 'letter' });
   const pageWidth = doc.internal.pageSize.getWidth();
@@ -611,9 +702,9 @@ export function exportarReportePDF(
     yPos += 4;
   }
 
-  const resumenFincas = agruparPorFinca(items, comisionistas);
-  const resumenProductos = agruparPorProducto(items, comisionistas);
-  const resumenComisionistas = agruparPorComisionista(items, comisionistas);
+  const resumenFincas = agruparPorFinca(items, comisionistas, tarifasEspecificas);
+  const resumenProductos = agruparPorProducto(items, comisionistas, tarifasEspecificas);
+  const resumenComisionistas = agruparPorComisionista(items, comisionistas, tarifasEspecificas);
 
   // Tabla por finca
   if (resumenFincas.length > 0) {
@@ -698,12 +789,13 @@ export function exportarReporteExcel(
   items: OrdenItem[],
   comisionistas: Comisionista[],
   titulo: string,
-  filtros: FiltroReporte
+  filtros: FiltroReporte,
+  tarifasEspecificas: TarifaClienteProducto[] = []
 ) {
   const wb = XLSX.utils.book_new();
 
   // Hoja 1: Resumen por Finca
-  const resumenFincas = agruparPorFinca(items, comisionistas);
+  const resumenFincas = agruparPorFinca(items, comisionistas, tarifasEspecificas);
   const wsFincas = XLSX.utils.aoa_to_sheet([
     ['Reporte de Comisiones - Resumen por Finca'],
     ['Finca', 'Órdenes', 'Cantidad', 'Total', 'Comisión'],
@@ -713,7 +805,7 @@ export function exportarReporteExcel(
   XLSX.utils.book_append_sheet(wb, wsFincas, 'Por Finca');
 
   // Hoja 2: Resumen por Producto
-  const resumenProductos = agruparPorProducto(items, comisionistas);
+  const resumenProductos = agruparPorProducto(items, comisionistas, tarifasEspecificas);
   const wsProductos = XLSX.utils.aoa_to_sheet([
     ['Reporte de Comisiones - Resumen por Producto'],
     ['Producto', 'Órdenes', 'Cantidad', 'Total', 'Comisión'],
@@ -723,7 +815,7 @@ export function exportarReporteExcel(
   XLSX.utils.book_append_sheet(wb, wsProductos, 'Por Producto');
 
   // Hoja 3: Resumen por Comisionista
-  const resumenComisionistas = agruparPorComisionista(items, comisionistas);
+  const resumenComisionistas = agruparPorComisionista(items, comisionistas, tarifasEspecificas);
   const wsComisionistas = XLSX.utils.aoa_to_sheet([
     ['Reporte de Comisiones - Resumen por Comisionista'],
     ['Comisionista', 'Tarifas', 'Órdenes', 'Total Orden', 'Comisión'],

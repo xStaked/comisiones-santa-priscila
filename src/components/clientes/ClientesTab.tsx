@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { isAxiosError } from 'axios';
 import { Plus, Pencil, Trash2, Search, Building2, X, PlusCircle, ToggleLeft, ToggleRight, Tag } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useApp } from '@/context/AppContext';
@@ -21,11 +22,17 @@ import {
 import { toast } from 'sonner';
 import { fetchFincas, createFinca, updateFinca as apiUpdateFinca, deleteFinca as apiDeleteFinca } from '@/lib/api';
 
+function mostrarErrorFinca(error: unknown, mensaje: string) {
+  const detalle = isAxiosError<{ detail?: string }>(error) ? error.response?.data?.detail : undefined;
+  toast.error(detalle || mensaje);
+}
+
 export function ClientesTab() {
   const queryClient = useQueryClient();
   const { clientes, addCliente, updateCliente, deleteCliente } = useApp();
   const [search, setSearch] = useState('');
   const [editing, setEditing] = useState<Cliente | null>(null);
+  const [fincasOriginales, setFincasOriginales] = useState<Finca[]>([]);
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<{
     nombre: string;
@@ -58,6 +65,7 @@ export function ClientesTab() {
       queryClient.invalidateQueries({ queryKey: ['fincas'] });
       queryClient.invalidateQueries({ queryKey: ['clientes'] });
     },
+    onError: (err) => mostrarErrorFinca(err, 'Error al crear finca'),
   });
 
   const updateFincaMutation = useMutation({
@@ -67,6 +75,7 @@ export function ClientesTab() {
       queryClient.invalidateQueries({ queryKey: ['fincas'] });
       queryClient.invalidateQueries({ queryKey: ['clientes'] });
     },
+    onError: (err) => mostrarErrorFinca(err, 'Error al actualizar finca'),
   });
 
   const deleteFincaMutation = useMutation({
@@ -75,6 +84,7 @@ export function ClientesTab() {
       queryClient.invalidateQueries({ queryKey: ['fincas'] });
       queryClient.invalidateQueries({ queryKey: ['clientes'] });
     },
+    onError: (err) => mostrarErrorFinca(err, 'Error al eliminar finca'),
   });
 
   const filtered = clientes.filter((c) =>
@@ -91,6 +101,7 @@ export function ClientesTab() {
       nuevaFinca: '',
     });
     setEditing(null);
+    setFincasOriginales([]);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -114,22 +125,31 @@ export function ClientesTab() {
 
     if (editing) {
       updateCliente(editing.id, payload);
-      // Sincronizar fincas
-      const fincasFormIds = form.fincas.map((f) => f.id).filter(Boolean) as string[];
-      // Eliminar fincas que ya no están
-      fincasExistentes.forEach((f) => {
-        if (!fincasFormIds.includes(f.id)) {
-          deleteFincaMutation.mutate({ clienteId: editing.id, id: f.id });
-        }
-      });
-      // Crear o actualizar fincas
-      form.fincas.forEach((f) => {
-        if (f.id) {
-          updateFincaMutation.mutate({ clienteId: editing.id, id: f.id, data: { nombre: f.nombre.trim() } });
-        } else if (f.nombre.trim()) {
-          createFincaMutation.mutate({ clienteId: editing.id, data: { nombre: f.nombre.trim(), clienteId: editing.id, activo: true } });
-        }
-      });
+      try {
+        const fincasFormIds = form.fincas.map((f) => f.id).filter(Boolean) as string[];
+        const eliminaciones = fincasOriginales
+          .filter((f) => !fincasFormIds.includes(f.id))
+          .map((f) => deleteFincaMutation.mutateAsync({ clienteId: editing.id, id: f.id }));
+        const actualizaciones = form.fincas.flatMap((f) => {
+          if (f.id) {
+            return updateFincaMutation.mutateAsync({
+              clienteId: editing.id,
+              id: f.id,
+              data: { nombre: f.nombre.trim() },
+            });
+          }
+          if (f.nombre.trim()) {
+            return createFincaMutation.mutateAsync({
+              clienteId: editing.id,
+              data: { nombre: f.nombre.trim(), clienteId: editing.id, activo: true },
+            });
+          }
+          return [];
+        });
+        await Promise.all([...eliminaciones, ...actualizaciones]);
+      } catch {
+        return;
+      }
     } else {
       // Para crear, no podemos crear fincas hasta tener el clienteId
       // Por simplicidad, solo creamos el cliente y las fincas se agregan después editando
@@ -144,13 +164,13 @@ export function ClientesTab() {
     setEditing(c);
     const fincasCliente = (c.fincas ?? fincasExistentes)
       .filter((f) => f.clienteId === c.id)
-      .map((f) => ({ id: f.id, nombre: f.nombre }));
+    setFincasOriginales(fincasCliente);
     setForm({
       nombre: c.nombre,
       tipo: c.tipo,
       retencionPorcentaje: c.retencionPorcentaje.toString(),
       activo: c.activo,
-      fincas: fincasCliente,
+      fincas: fincasCliente.map((f) => ({ id: f.id, nombre: f.nombre })),
       nuevaFinca: '',
     });
     setOpen(true);

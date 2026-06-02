@@ -54,7 +54,7 @@ interface AppContextType {
   removeComisionistaFromItem: (itemId: string, comisionistaId: string) => void;
 
   liquidaciones: Liquidacion[];
-  saveLiquidacion: (nombre: string) => void;
+  saveLiquidacion: (nombre: string, ordenItemIds?: string[]) => void;
   deleteLiquidacion: (id: string) => void;
   restoreLiquidacion: (id: string) => void;
   resetDemoData: () => void;
@@ -255,10 +255,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const createLiquidacionMutation = useMutation({
     mutationFn: ({ nombre, ordenItemIds }: { nombre: string; ordenItemIds: string[] }) =>
       createLiquidacion({ nombre, ordenItemIds }),
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ['ordenes'] });
       queryClient.invalidateQueries({ queryKey: ['liquidaciones'] });
-      toast.success('Liquidación guardada');
+      if (data.omitidos && data.omitidos.length > 0) {
+        toast.success(`Liquidación guardada. Se omitieron ${data.omitidos.length} ítem(s) que ya no están activos.`);
+      } else {
+        toast.success('Liquidación guardada');
+      }
     },
     onError: (err: any) => {
       toast.error(err?.response?.data?.detail || 'Error al guardar liquidación');
@@ -473,13 +477,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   );
 
   const saveLiquidacion = useCallback(
-    (nombre: string) => {
-      const itemsActivos = ordenItems.filter((o) => o.estado !== 'liquidado' && o.estado !== 'anulado');
-      if (itemsActivos.length === 0) {
+    (nombre: string, ordenItemIds?: string[]) => {
+      const ids = ordenItemIds ?? ordenItems.filter((o) => o.estado !== 'liquidado').map((o) => o.id);
+      if (ids.length === 0) {
         toast.error('No hay órdenes para guardar');
         return;
       }
-      const ids = itemsActivos.map((o) => o.id);
       createLiquidacionMutation.mutate({ nombre, ordenItemIds: ids });
     },
     [createLiquidacionMutation, ordenItems]

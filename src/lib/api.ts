@@ -211,12 +211,7 @@ function normalizarLiquidacionConItems(data: any): Liquidacion {
 export async function fetchLiquidaciones() {
   const res = await api.get('/api/v1/liquidaciones/');
   const liquidaciones = toCamelCase<any[]>(res.data);
-  return Promise.all(
-    liquidaciones.map(async (liquidacion) => {
-      const detalle = await api.get(`/api/v1/liquidaciones/${liquidacion.id}`);
-      return normalizarLiquidacionConItems(toCamelCase(detalle.data));
-    })
-  );
+  return liquidaciones.map(normalizarLiquidacionConItems);
 }
 
 export async function fetchLiquidacion(id: string) {

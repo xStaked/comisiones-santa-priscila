@@ -5,7 +5,9 @@ from uuid import uuid4
 import pytest
 
 from app.models.cliente import Cliente, Finca
+from app.models.comisionista import Comisionista, TipoTarifa
 from app.models.producto import Producto
+from app.models.tarifa_cliente_producto import TarifaClienteProducto
 from app.routers.upload import ItemExtraido
 from app.services.order_extraction_models import OrdenExtraidaIA, OrdenItemExtraidoIA
 from app.services.ocr_extractor import extraer_orden_de_imagen
@@ -165,6 +167,58 @@ def test_imagen_con_ia_deshabilitada_usa_fallback_easyocr(monkeypatch):
 
     assert resultado["numeroOrden"] == "2199"
     assert resultado["items"][0]["producto"] == "ECUBACILLUS TH"
+
+
+def test_imagen_easyocr_normaliza_comisionistas_por_cliente_producto_y_finca(
+    monkeypatch,
+    db_session,
+):
+    cliente = Cliente(nombre="FILACAS SA", tipo="grupo")
+    finca = Finca(nombre="EL MORRO", cliente=cliente)
+    producto = Producto(nombre="ECUBACILLUS TH", unidad_comision="kg")
+    comisionista = Comisionista(nombre="COMISIONISTA UNO")
+    db_session.add_all([cliente, finca, producto, comisionista])
+    db_session.flush()
+    db_session.add(
+        TarifaClienteProducto(
+            comisionista_id=comisionista.id,
+            cliente_id=cliente.id,
+            producto_id=producto.id,
+            finca_id=finca.id,
+            tipo=TipoTarifa.fijo_kg,
+            valor=Decimal("1"),
+        )
+    )
+    db_session.commit()
+
+    class ReaderFake:
+        def readtext(self, _img_array):
+            return [
+                ([(0, 90), (100, 90), (100, 120), (0, 120)], "EL MORRO", 0.99),
+                (
+                    [(0, 120), (300, 120), (300, 140), (0, 140)],
+                    "100 ECUBACILLUS TH 20.00 65.0000 1300.0000",
+                    0.99,
+                ),
+            ]
+
+    monkeypatch.setattr("app.services.pdf_extractor.settings.AI_EXTRACTION_ENABLED", False)
+    monkeypatch.setattr("app.services.ocr_extractor._obtener_reader", lambda: ReaderFake())
+    monkeypatch.setattr("app.services.ocr_extractor._preprocesar_imagen", lambda _contenido: object())
+
+    resultado = extraer_orden_de_imagen(
+        b"imagen",
+        nombre_archivo="orden.png",
+        db=db_session,
+        cliente_id=str(cliente.id),
+    )
+
+    assert resultado["items"][0]["clienteId"] == str(cliente.id)
+    assert resultado["items"][0]["fincaId"] == str(finca.id)
+    assert resultado["items"][0]["productoId"] == str(producto.id)
+    assert resultado["items"][0]["comisionistas"] == [
+        {"comisionistaId": str(comisionista.id)}
+    ]
 
 
 def test_imagen_con_ia_normaliza_usando_db(monkeypatch, db_session):

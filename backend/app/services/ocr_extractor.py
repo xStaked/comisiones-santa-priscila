@@ -12,7 +12,11 @@ from app.config import settings
 from app.services.order_extraction_models import EntradaExtraccion
 from app.services.order_extraction_normalizer import normalizar_orden_extraida
 from app.services.order_extraction_validator import validar_orden_extraida
-from app.services.pdf_extractor import _orden_validada_a_respuesta, obtener_extractor_configurado
+from app.services.pdf_extractor import (
+    _normalizar_respuesta_posicional,
+    _orden_validada_a_respuesta,
+    obtener_extractor_configurado,
+)
 
 _reader = None
 
@@ -280,13 +284,13 @@ def extraer_orden_de_imagen(
             "comisionistas": [],
         })
 
-    return {
+    return _normalizar_respuesta_posicional(db, {
         "fecha": date.fromisoformat(fecha),
         "numeroOrden": numero_orden or f"OC-{fecha}",
         "proveedor": proveedor or "",
         "semana": semana,
         "items": orden_items,
-    }
+    }, cliente_id=cliente_id)
 
 
 def inferir_unidad(descripcion: str) -> str:

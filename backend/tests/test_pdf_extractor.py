@@ -1,6 +1,19 @@
+from datetime import date
 from decimal import Decimal
+from pathlib import Path
 
-from app.services.pdf_extractor import _extraer_items_santa_priscila_desde_filas
+import pytest
+
+from app.models.cliente import Cliente, Finca
+from app.models.comisionista import Comisionista, TipoTarifa
+from app.models.producto import Producto
+from app.models.tarifa_cliente_producto import TarifaClienteProducto
+from app.services.order_extraction_models import OrdenItemValidado, OrdenValidada
+from app.services.pdf_extractor import (
+    _extraer_items_santa_priscila_desde_filas,
+    _orden_validada_a_respuesta,
+    extraer_orden_de_pdf,
+)
 
 
 def _celda(texto: str, x: int) -> dict:
@@ -57,3 +70,112 @@ def test_extrae_items_santa_priscila_con_cantidad_y_precio_correctos():
     assert items[1]["precioUnitario"] == Decimal("1700.00")
     assert items[1]["total"] == Decimal("45050.00")
     assert items[1]["unidad"] == "kg"
+
+
+def test_serializa_comisionistas_resueltos_por_normalizador():
+    orden = OrdenValidada(
+        fecha=date(2026, 4, 7),
+        numeroOrden="93133",
+        proveedor="DINACUAMAR",
+        semana="15",
+        items=[
+            OrdenItemValidado(
+                fecha=date(2026, 4, 7),
+                numeroOrden="93133",
+                finca="TAURA ADM D",
+                producto="ECU-BACILLUS SUELO-PASTILLA TH",
+                cantidad=Decimal("20"),
+                unidad="kg",
+                precioUnitario=Decimal("685"),
+                total=Decimal("13700"),
+                comisionistas=[{"comisionistaId": "comisionista-uno"}],
+            )
+        ],
+    )
+
+    respuesta = _orden_validada_a_respuesta(orden)
+
+    assert respuesta["items"][0]["comisionistas"] == [
+        {"comisionistaId": "comisionista-uno"}
+    ]
+
+
+def test_pdf_real_asigna_comisionistas_por_cliente_producto_y_finca(db_session):
+    ruta_pdf = Path("/Users/xstaked/Downloads/ordenes/93133 SEM 15 ECU-BACILLUS.pdf")
+    if not ruta_pdf.exists():
+        pytest.skip("No existe el PDF real 93133 SEM 15 ECU-BACILLUS.pdf")
+
+    cliente = Cliente(nombre="Santa Priscila", tipo="grupo")
+    finca_taura_d = Finca(nombre="TAURA ADM D", cliente=cliente)
+    finca_golfo = Finca(nombre="GOLFO", cliente=cliente)
+    producto_pastilla = Producto(
+        nombre="ECU-BACILLUS SUELO-PASTILLA TH",
+        unidad_comision="kg",
+    )
+    producto_salud = Producto(nombre="ECU-BACILLUS SALUD", unidad_comision="kg")
+    comisionista_uno = Comisionista(nombre="COMISIONISTA UNO")
+    comisionista_dos = Comisionista(nombre="COMISIONISTA DOS")
+    db_session.add_all(
+        [
+            cliente,
+            finca_taura_d,
+            finca_golfo,
+            producto_pastilla,
+            producto_salud,
+            comisionista_uno,
+            comisionista_dos,
+        ]
+    )
+    db_session.flush()
+    db_session.add_all(
+        [
+            TarifaClienteProducto(
+                comisionista_id=comisionista_uno.id,
+                cliente_id=cliente.id,
+                producto_id=producto_pastilla.id,
+                finca_id=finca_taura_d.id,
+                tipo=TipoTarifa.fijo_kg,
+                valor=Decimal("1"),
+            ),
+            TarifaClienteProducto(
+                comisionista_id=comisionista_dos.id,
+                cliente_id=cliente.id,
+                producto_id=producto_pastilla.id,
+                finca_id=finca_taura_d.id,
+                tipo=TipoTarifa.fijo_kg,
+                valor=Decimal("2"),
+            ),
+            TarifaClienteProducto(
+                comisionista_id=comisionista_dos.id,
+                cliente_id=cliente.id,
+                producto_id=producto_salud.id,
+                finca_id=finca_golfo.id,
+                tipo=TipoTarifa.fijo_kg,
+                valor=Decimal("3"),
+            ),
+        ]
+    )
+    db_session.commit()
+
+    respuesta = extraer_orden_de_pdf(
+        ruta_pdf.read_bytes(),
+        nombre_archivo=ruta_pdf.name,
+        db=db_session,
+        cliente_id=str(cliente.id),
+    )
+
+    items_por_combinacion = {
+        (item["finca"], item["producto"]): item
+        for item in respuesta["items"]
+    }
+    assert items_por_combinacion[
+        ("TAURA ADM D", "ECU-BACILLUS SUELO-PASTILLA TH")
+    ]["comisionistas"] == [
+        {"comisionistaId": str(comisionista_uno.id)},
+        {"comisionistaId": str(comisionista_dos.id)},
+    ]
+    assert items_por_combinacion[
+        ("GOLFO", "ECU-BACILLUS SALUD")
+    ]["comisionistas"] == [
+        {"comisionistaId": str(comisionista_dos.id)},
+    ]

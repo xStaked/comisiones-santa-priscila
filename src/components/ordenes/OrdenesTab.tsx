@@ -299,7 +299,10 @@ export function OrdenesTab() {
         numeroOrden: result.numeroOrden,
         proveedor: result.proveedor,
         semana: result.semana,
-        items: result.items,
+        items: result.items.map((item: any, idx: number) => ({
+          ...item,
+          id: item.id || `preview-${Date.now()}-${idx}`,
+        })),
       });
       toast.success(`${result.items.length} productos extraídos del ${isPdf ? 'PDF' : 'imagen'}`);
     } catch (err) {

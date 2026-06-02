@@ -4,7 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { Calendar, FileText, FileSpreadsheet, Trash2, Search, Eye, Loader2 } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
-import { exportarPDF, exportarExcel } from '@/lib/export-utils';
+import { exportarPDF, exportarExcel, getTarifaLabel } from '@/lib/export-utils';
 import { fetchLiquidacion } from '@/lib/api';
 import { OrdenItem, Comisionista } from '@/types';
 import { Button } from '@/components/ui/button';
@@ -66,11 +66,28 @@ export function HistorialTab() {
       const detail = await fetchLiquidacion(liq.id);
       const items: OrdenItem[] = (detail.items || []).map(snapshotItemToOrdenItem);
       const comisionistas = buildComisionistasFromSnapshot(detail.items || []);
+
+      const comisionesSnapshot = new Map<string, { comision: number; tarifasLabel: string }>();
+      for (const rawItem of detail.items || []) {
+        for (const t of rawItem.tarifas || []) {
+          const key = `${rawItem.id}|${t.comisionistaId}`;
+          const label = t.tipoSnapshot === 'sin_tarifa'
+            ? '—'
+            : getTarifaLabel({ tipo: t.tipoSnapshot, valor: Number(t.valorSnapshot) });
+          const existing = comisionesSnapshot.get(key);
+          if (existing) {
+            existing.comision += Number(t.comisionCalculada) || 0;
+          } else {
+            comisionesSnapshot.set(key, { comision: Number(t.comisionCalculada) || 0, tarifasLabel: label });
+          }
+        }
+      }
+
       if (type === 'pdf') {
-        exportarPDF(items, comisionistas, liq.nombre);
+        exportarPDF(items, comisionistas, liq.nombre, undefined, [], comisionesSnapshot);
         toast.success('PDF generado');
       } else {
-        exportarExcel(items, comisionistas, liq.nombre);
+        exportarExcel(items, comisionistas, liq.nombre, undefined, [], comisionesSnapshot);
         toast.success('Excel generado');
       }
     } catch (err: any) {

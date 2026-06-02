@@ -26,8 +26,8 @@ import {
   UserCheck,
 } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
-import { OrdenItem, Cliente } from '@/types';
-import { fetchOrdenes } from '@/lib/api';
+import { OrdenItem, Cliente, TarifaClienteProducto } from '@/types';
+import { fetchOrdenes, fetchTarifasClienteProducto } from '@/lib/api';
 import {
   filtrarItems,
   agruparPorFinca,
@@ -119,7 +119,13 @@ export function ReportesTab() {
     }),
   });
 
+  const { data: tarifasData } = useQuery({
+    queryKey: ['tarifas-cliente-producto', 'reportes'],
+    queryFn: () => fetchTarifasClienteProducto(),
+  });
+
   const ordenItems: OrdenItem[] = ordenesData ?? [];
+  const tarifasEspecificas: TarifaClienteProducto[] = tarifasData ?? [];
 
   const fincasUnicas = useMemo(() =>
     Array.from(new Set(ordenItems.map(i => i.fincaRel?.nombre || i.finca).filter(Boolean))).sort(),
@@ -153,13 +159,13 @@ export function ReportesTab() {
     [ordenItems, filtros]
   );
 
-  const resumenFincas = useMemo(() => agruparPorFinca(itemsFiltrados, comisionistas), [itemsFiltrados, comisionistas]);
-  const resumenProductos = useMemo(() => agruparPorProducto(itemsFiltrados, comisionistas), [itemsFiltrados, comisionistas]);
-  const resumenComisionistas = useMemo(() => agruparPorComisionista(itemsFiltrados, comisionistas), [itemsFiltrados, comisionistas]);
-  const resumenClientes = useMemo(() => agruparPorCliente(itemsFiltrados, comisionistas), [itemsFiltrados, comisionistas]);
+  const resumenFincas = useMemo(() => agruparPorFinca(itemsFiltrados, comisionistas, tarifasEspecificas), [itemsFiltrados, comisionistas, tarifasEspecificas]);
+  const resumenProductos = useMemo(() => agruparPorProducto(itemsFiltrados, comisionistas, tarifasEspecificas), [itemsFiltrados, comisionistas, tarifasEspecificas]);
+  const resumenComisionistas = useMemo(() => agruparPorComisionista(itemsFiltrados, comisionistas, tarifasEspecificas), [itemsFiltrados, comisionistas, tarifasEspecificas]);
+  const resumenClientes = useMemo(() => agruparPorCliente(itemsFiltrados, comisionistas, tarifasEspecificas), [itemsFiltrados, comisionistas, tarifasEspecificas]);
 
   const totalOrden = itemsFiltrados.reduce((s, i) => s + i.total, 0);
-  const totalComision = itemsFiltrados.reduce((s, i) => s + calcularComisionTotalItem(i, comisionistas), 0);
+  const totalComision = itemsFiltrados.reduce((s, i) => s + calcularComisionTotalItem(i, comisionistas, tarifasEspecificas), 0);
   const totalCantidad = itemsFiltrados.reduce((s, i) => s + i.cantidad, 0);
   const comisionistasInvolucrados = new Set(
     itemsFiltrados.flatMap(i => i.comisionistas.map(a => a.comisionistaId))
@@ -170,7 +176,7 @@ export function ReportesTab() {
       toast.error('No hay datos para exportar');
       return;
     }
-    exportarReportePDF(itemsFiltrados, comisionistas, 'Reporte_Comisiones', filtros);
+    exportarReportePDF(itemsFiltrados, comisionistas, 'Reporte_Comisiones', filtros, tarifasEspecificas);
     toast.success('PDF generado');
   };
 
@@ -179,7 +185,7 @@ export function ReportesTab() {
       toast.error('No hay datos para exportar');
       return;
     }
-    exportarReporteExcel(itemsFiltrados, comisionistas, 'Reporte_Comisiones', filtros);
+    exportarReporteExcel(itemsFiltrados, comisionistas, 'Reporte_Comisiones', filtros, tarifasEspecificas);
     toast.success('Excel generado');
   };
 

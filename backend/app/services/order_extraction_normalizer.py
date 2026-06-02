@@ -5,6 +5,11 @@ from sqlalchemy.orm import Session
 
 from app.models.cliente import Cliente, Finca
 from app.models.producto import Producto, ProductoAlias
+from app.models.tarifa_cliente_producto import TarifaClienteProducto
+from app.services.catalog_normalization import (
+    normalizar_nombre_finca,
+    normalizar_nombre_producto,
+)
 from app.services.order_extraction_models import OrdenValidada
 
 
@@ -23,11 +28,16 @@ def _buscar_finca(db: Session, nombre: str, cliente: Cliente | None) -> Finca | 
     limpio = _limpiar(nombre)
     if not limpio or limpio == "-":
         return None
-    query = db.query(Finca).filter(func.lower(Finca.nombre) == limpio.lower())
+    fincas = db.query(Finca)
     if cliente:
-        return query.filter(Finca.cliente_id == cliente.id).first()
+        fincas = fincas.filter(Finca.cliente_id == cliente.id)
 
-    coincidencias = query.limit(2).all()
+    nombre_normalizado = normalizar_nombre_finca(limpio)
+    coincidencias = [
+        finca
+        for finca in fincas.all()
+        if normalizar_nombre_finca(finca.nombre) == nombre_normalizado
+    ]
     if len(coincidencias) != 1:
         return None
     return coincidencias[0]
@@ -37,11 +47,23 @@ def _buscar_producto(db: Session, nombre: str) -> Producto | None:
     limpio = _limpiar(nombre)
     if not limpio:
         return None
+    nombre_normalizado = normalizar_nombre_producto(limpio)
     # 1. Buscar por nombre exacto
     producto = db.query(Producto).filter(func.lower(Producto.nombre) == limpio.lower()).first()
     if producto:
         return producto
-    # 2. Buscar por alias exacto
+    # 2. Buscar por nombre normalizado
+    producto = next(
+        (
+            producto
+            for producto in db.query(Producto).all()
+            if normalizar_nombre_producto(producto.nombre) == nombre_normalizado
+        ),
+        None,
+    )
+    if producto:
+        return producto
+    # 3. Buscar por alias exacto
     alias = (
         db.query(ProductoAlias)
         .filter(func.lower(ProductoAlias.alias) == limpio.lower())
@@ -49,7 +71,11 @@ def _buscar_producto(db: Session, nombre: str) -> Producto | None:
     )
     if alias:
         return alias.producto
-    # 3. Buscar por alias contenido (el alias del producto está contenido en el texto extraído)
+    # 4. Buscar por alias normalizado
+    for alias_row in db.query(ProductoAlias).all():
+        if normalizar_nombre_producto(alias_row.alias) == nombre_normalizado:
+            return alias_row.producto
+    # 5. Buscar por alias contenido (el alias del producto está contenido en el texto extraído)
     alias_contenido = (
         db.query(ProductoAlias)
         .filter(func.lower(ProductoAlias.alias).in_(limpio.lower().split()))
@@ -58,6 +84,35 @@ def _buscar_producto(db: Session, nombre: str) -> Producto | None:
     if alias_contenido:
         return alias_contenido.producto
     return None
+
+
+def _buscar_comisionistas_aplicables(
+    db: Session,
+    cliente: Cliente | None,
+    producto: Producto | None,
+    finca: Finca | None,
+) -> list[dict[str, str]]:
+    if not cliente or not producto:
+        return []
+
+    tarifas = db.query(TarifaClienteProducto).filter(
+        TarifaClienteProducto.cliente_id == cliente.id,
+        TarifaClienteProducto.producto_id == producto.id,
+        TarifaClienteProducto.activo.is_(True),
+    )
+    if cliente.fincas:
+        if not finca:
+            return []
+        tarifas = tarifas.filter(TarifaClienteProducto.finca_id == finca.id)
+    else:
+        tarifas = tarifas.filter(TarifaClienteProducto.finca_id.is_(None))
+
+    return [
+        {"comisionistaId": str(comisionista_id)}
+        for comisionista_id in dict.fromkeys(
+            tarifa.comisionista_id for tarifa in tarifas.all()
+        )
+    ]
 
 
 def normalizar_orden_extraida(db: Session | None, orden: OrdenValidada, cliente_id: str | None = None) -> OrdenValidada:
@@ -86,5 +141,11 @@ def normalizar_orden_extraida(db: Session | None, orden: OrdenValidada, cliente_
         if producto:
             item.productoId = str(producto.id)
             item.producto = producto.nombre
+        item.comisionistas = _buscar_comisionistas_aplicables(
+            db,
+            item_cliente or (finca.cliente if finca else None),
+            producto,
+            finca,
+        )
 
     return orden

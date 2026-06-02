@@ -16,7 +16,6 @@ from app.models.base import BaseModel
 class EstadoOrden(str, enum.Enum):
     activo = "activo"
     liquidado = "liquidado"
-    anulado = "anulado"
 
 
 class Orden(BaseModel):

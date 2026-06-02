@@ -6,10 +6,16 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from app.models.cliente import Finca
 from app.models.comisionista import Tarifa, TipoTarifa
 from app.models.liquidacion import Liquidacion, LiquidacionItem, LiquidacionItemTarifa
 from app.models.orden import Asignacion, EstadoOrden, Orden, OrdenItem
+from app.models.producto import Producto
 from app.models.tarifa_cliente_producto import TarifaClienteProducto
+from app.services.catalog_normalization import (
+    normalizar_nombre_finca,
+    normalizar_nombre_producto,
+)
 
 LIBRA_A_KG = Decimal("0.453592")
 
@@ -18,18 +24,53 @@ def _buscar_tarifa_especifica(
     db: Session, orden_item: OrdenItem, comisionista_id: UUID
 ) -> TarifaClienteProducto | None:
     """Busca tarifa específica Comisionista+Cliente+Producto+Finca, luego sin Finca."""
-    if not orden_item.cliente_id or not orden_item.producto_id:
+    cliente_id = orden_item.cliente_id
+    producto_id = orden_item.producto_id
+    finca_id = orden_item.finca_id
+
+    if not producto_id and orden_item.producto:
+        nombre_producto = normalizar_nombre_producto(orden_item.producto)
+        producto = next(
+            (
+                producto
+                for producto in db.query(Producto).all()
+                if normalizar_nombre_producto(producto.nombre) == nombre_producto
+            ),
+            None,
+        )
+        producto_id = producto.id if producto else None
+
+    nombre_finca_orden = (
+        orden_item.finca
+        if orden_item.finca and orden_item.finca != "-"
+        else orden_item.sector
+    )
+    if not finca_id and nombre_finca_orden:
+        fincas_query = db.query(Finca)
+        if cliente_id:
+            fincas_query = fincas_query.filter(Finca.cliente_id == cliente_id)
+        nombre_finca = normalizar_nombre_finca(nombre_finca_orden)
+        fincas = [
+            finca
+            for finca in fincas_query.all()
+            if normalizar_nombre_finca(finca.nombre) == nombre_finca
+        ]
+        if len(fincas) == 1:
+            finca_id = fincas[0].id
+            cliente_id = cliente_id or fincas[0].cliente_id
+
+    if not cliente_id or not producto_id:
         return None
 
     # 1. Con finca
-    if orden_item.finca_id:
+    if finca_id:
         tarifa = (
             db.query(TarifaClienteProducto)
             .filter(
                 TarifaClienteProducto.comisionista_id == comisionista_id,
-                TarifaClienteProducto.cliente_id == orden_item.cliente_id,
-                TarifaClienteProducto.producto_id == orden_item.producto_id,
-                TarifaClienteProducto.finca_id == orden_item.finca_id,
+                TarifaClienteProducto.cliente_id == cliente_id,
+                TarifaClienteProducto.producto_id == producto_id,
+                TarifaClienteProducto.finca_id == finca_id,
                 TarifaClienteProducto.activo.is_(True),
             )
             .first()
@@ -42,8 +83,8 @@ def _buscar_tarifa_especifica(
         db.query(TarifaClienteProducto)
         .filter(
             TarifaClienteProducto.comisionista_id == comisionista_id,
-            TarifaClienteProducto.cliente_id == orden_item.cliente_id,
-            TarifaClienteProducto.producto_id == orden_item.producto_id,
+            TarifaClienteProducto.cliente_id == cliente_id,
+            TarifaClienteProducto.producto_id == producto_id,
             TarifaClienteProducto.finca_id.is_(None),
             TarifaClienteProducto.activo.is_(True),
         )
@@ -65,6 +106,21 @@ def _calcular_comision_con_tarifa(
             cantidad_kg = orden_item.cantidad
         return cantidad_kg * tarifa.valor
     return Decimal("0")
+
+
+def _tiene_tarifas_especificas(
+    db: Session, comisionista_id: UUID
+) -> bool:
+    """Devuelve True si el comisionista tiene al menos una tarifa específica activa."""
+    return (
+        db.query(TarifaClienteProducto)
+        .filter(
+            TarifaClienteProducto.comisionista_id == comisionista_id,
+            TarifaClienteProducto.activo.is_(True),
+        )
+        .first()
+        is not None
+    )
 
 
 def _calcular_comision_especifica(
@@ -96,7 +152,7 @@ def _calcular_comision_especifica(
 
 def crear_liquidacion(
     db: Session, nombre: str, orden_item_ids: list[UUID]
-) -> Liquidacion:
+) -> tuple[Liquidacion, list[dict]]:
     from sqlalchemy.orm import selectinload
 
     orden_items = (
@@ -116,11 +172,21 @@ def crear_liquidacion(
     if missing:
         raise ValueError(f"OrdenItems no encontrados: {missing}")
 
+    # Filtrar ítems no activos: se omiten en lugar de fallar
+    omitidos: list[dict] = []
+    orden_items_activos: list[OrdenItem] = []
     for oi in orden_items:
         if oi.estado != EstadoOrden.activo:
-            raise ValueError(
-                f"OrdenItem {oi.id} no está activo (estado={oi.estado.value})"
-            )
+            omitidos.append({
+                "id": str(oi.id),
+                "estado": oi.estado.value,
+                "motivo": "no está activo",
+            })
+        else:
+            orden_items_activos.append(oi)
+
+    if not orden_items_activos:
+        raise ValueError("Ninguno de los ítems seleccionados está activo")
 
     now = datetime.now()
     mes = now.strftime("%Y-%m")
@@ -133,7 +199,7 @@ def crear_liquidacion(
     db.add(liquidacion)
     db.flush()
 
-    for oi in orden_items:
+    for oi in orden_items_activos:
         li = LiquidacionItem(
             liquidacion_id=liquidacion.id,
             orden_item_id=oi.id,
@@ -172,25 +238,38 @@ def crear_liquidacion(
                 )
                 db.add(lit)
             else:
-                # Fallback a tarifas globales del comisionista
-                for tarifa in comisionista.tarifas:
-                    comision = _calcular_comision_con_tarifa(oi, tarifa)
+                # Si el comisionista tiene tarifas específicas configuradas pero
+                # ninguna aplica a este item, no debe hacer fallback a globales.
+                if _tiene_tarifas_especificas(db, comisionista.id):
                     lit = LiquidacionItemTarifa(
                         liquidacion_item_id=li.id,
                         comisionista_id=comisionista.id,
                         comisionista_nombre_snapshot=comisionista.nombre,
-                        tipo_snapshot=tarifa.tipo.value,
-                        valor_snapshot=tarifa.valor,
-                        comision_calculada=comision,
+                        tipo_snapshot="sin_tarifa",
+                        valor_snapshot=Decimal("0"),
+                        comision_calculada=Decimal("0"),
                     )
                     db.add(lit)
+                else:
+                    # Fallback a tarifas globales del comisionista
+                    for tarifa in comisionista.tarifas:
+                        comision = _calcular_comision_con_tarifa(oi, tarifa)
+                        lit = LiquidacionItemTarifa(
+                            liquidacion_item_id=li.id,
+                            comisionista_id=comisionista.id,
+                            comisionista_nombre_snapshot=comisionista.nombre,
+                            tipo_snapshot=tarifa.tipo.value,
+                            valor_snapshot=tarifa.valor,
+                            comision_calculada=comision,
+                        )
+                        db.add(lit)
 
-    for oi in orden_items:
+    for oi in orden_items_activos:
         oi.estado = EstadoOrden.liquidado
 
     db.flush()
 
-    orden_ids = {oi.orden_id for oi in orden_items if oi.orden_id is not None}
+    orden_ids = {oi.orden_id for oi in orden_items_activos if oi.orden_id is not None}
     for orden_id in orden_ids:
         pendientes = (
             db.query(OrdenItem)
@@ -207,7 +286,7 @@ def crear_liquidacion(
 
     db.commit()
     db.refresh(liquidacion)
-    return liquidacion
+    return liquidacion, omitidos
 
 
 def eliminar_liquidacion(db: Session, liquidacion_id: UUID) -> bool:

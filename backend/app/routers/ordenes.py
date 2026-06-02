@@ -50,7 +50,7 @@ def listar_ordenes(
             selectinload(OrdenItem.finca_obj),
             selectinload(OrdenItem.orden).selectinload(Orden.items),
         )
-        .filter(OrdenItem.estado != EstadoOrden.anulado)
+        # Se eliminan físicamente; no hay soft-delete
     )
 
     if finca:
@@ -178,7 +178,7 @@ def _serializar_item(item: OrdenItem) -> dict[str, Any]:
 
 
 def _serializar_orden(orden: Orden) -> dict[str, Any]:
-    items = [item for item in orden.items if item.estado != EstadoOrden.anulado]
+    items = orden.items
     return {
         "id": orden.id,
         "fecha": orden.fecha,
@@ -232,16 +232,12 @@ def _serializar_ordenes_agrupadas(items: list[OrdenItem]) -> list[dict[str, Any]
 @router.post("/limpiar")
 def limpiar_ordenes(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     try:
-        count = (
-            db.query(OrdenItem)
-            .filter(OrdenItem.estado == EstadoOrden.activo)
-            .update({OrdenItem.estado: EstadoOrden.anulado}, synchronize_session=False)
-        )
-        db.query(Orden).filter(Orden.estado == EstadoOrden.activo).update(
-            {Orden.estado: EstadoOrden.anulado}, synchronize_session=False
-        )
+        # Eliminar ítems sueltos (sin orden padre)
+        count_items = db.query(OrdenItem).filter(OrdenItem.orden_id.is_(None)).delete(synchronize_session=False)
+        # Eliminar órdenes (cascade borra sus ítems automáticamente)
+        count_ordenes = db.query(Orden).delete(synchronize_session=False)
         db.commit()
-        return {"message": f"{count} orden(es) anulada(s)"}
+        return {"message": f"{count_ordenes} orden(es) y {count_items} ítem(s) eliminado(s)"}
     except Exception as exc:
         db.rollback()
         raise HTTPException(
@@ -331,22 +327,16 @@ def eliminar_orden(id: UUID, db: Session = Depends(get_db), current_user: User =
             status_code=status.HTTP_404_NOT_FOUND, detail="Orden no encontrada"
         )
 
-    oi.estado = EstadoOrden.anulado
     try:
+        orden_id = oi.orden_id
+        db.delete(oi)
         db.flush()
-        if oi.orden_id:
-            activos = (
-                db.query(OrdenItem)
-                .filter(
-                    OrdenItem.orden_id == oi.orden_id,
-                    OrdenItem.estado != EstadoOrden.anulado,
-                )
-                .count()
-            )
-            if activos == 0:
-                orden = db.query(Orden).filter(Orden.id == oi.orden_id).first()
+        if orden_id:
+            quedan = db.query(OrdenItem).filter(OrdenItem.orden_id == orden_id).count()
+            if quedan == 0:
+                orden = db.query(Orden).filter(Orden.id == orden_id).first()
                 if orden:
-                    orden.estado = EstadoOrden.anulado
+                    db.delete(orden)
         db.commit()
     except Exception as exc:
         db.rollback()
