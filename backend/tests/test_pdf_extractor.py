@@ -64,12 +64,12 @@ def test_extrae_items_santa_priscila_con_cantidad_y_precio_correctos():
     assert items[0]["cantidad"] == Decimal("110.00000")
     assert items[0]["precioUnitario"] == Decimal("15.00")
     assert items[0]["total"] == Decimal("1650.00")
-    assert items[0]["unidad"] == "litros"
+    assert items[0]["unidad"] == "canecas"
     assert items[1]["producto"] == "NITRATO DE CALCIO"
     assert items[1]["cantidad"] == Decimal("26.50000")
     assert items[1]["precioUnitario"] == Decimal("1700.00")
     assert items[1]["total"] == Decimal("45050.00")
-    assert items[1]["unidad"] == "kg"
+    assert items[1]["unidad"] == "sacos"
 
 
 def test_serializa_comisionistas_resueltos_por_normalizador():

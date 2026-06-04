@@ -465,7 +465,7 @@ def extraer_orden_de_pdf(
         for f in fincas:
             # La finca debe estar arriba del ítem (f["y"] < item["y"])
             diff = item["y"] - f["y"]
-            if 0 < diff <= 25:
+            if 0 < diff <= 35:
                 if (
                     finca_cercana is None
                     or diff < min_diff
@@ -501,22 +501,46 @@ def extraer_orden_de_pdf(
 
 
 def inferir_unidad(descripcion: str) -> str:
-    """Infiere la unidad de medida a partir de la descripción del producto."""
+    """Infiere la unidad de medida a partir de la descripción del producto.
+
+    Regla: si la descripción contiene UNA palabra de presentación (caja, caneca,
+    saco, tacho, unidad) Y también contiene un peso/volumen (kg, litros, lts,
+    galon), la unidad debe ser la presentación, no el peso.
+    """
     lower = descripcion.lower()
+
+    presentaciones = {
+        "caneca": "canecas",
+        "saco": "sacos",
+        "tacho": "tachos",
+        "caja": "cajas",
+        "unidad": "unidades",
+    }
+
+    tiene_peso_volumen = (
+        "kg" in lower
+        or "litros" in lower
+        or "lts" in lower
+        or "galon" in lower
+        or "galón" in lower
+    )
+
+    # Detectar presentación primero
+    for clave, valor in presentaciones.items():
+        if clave in lower:
+            # Si también hay peso/volumen, priorizamos la presentación
+            if tiene_peso_volumen:
+                return valor
+            # Si no hay peso, simplemente devolvemos la presentación
+            return valor
+
+    # Sin presentación: usar peso/volumen directamente
     if "kg" in lower:
         return "kg"
     if "litros" in lower or "lts" in lower:
         return "litros"
     if "galon" in lower or "galón" in lower:
         return "galones"
-    if "caneca" in lower:
-        return "canecas"
-    if "saco" in lower:
-        return "sacos"
-    if "tacho" in lower:
-        return "tachos"
-    if "caja" in lower:
-        return "cajas"
     if "unidad" in lower:
         return "unidades"
     return "unidades"

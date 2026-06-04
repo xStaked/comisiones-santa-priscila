@@ -40,9 +40,9 @@ def normalizar_nombre_producto(nombre: str) -> str:
     )
 
     if es_ecu_bacillus:
-        if "PASTILLA" in normalizado and "TH" in normalizado:
+        if re.search(r"\bPASTILLA\b", normalizado) and "TH" in normalizado:
             return "PAST TH"
-        if "PASTILLAS" in normalizado and "GRANDES" in normalizado:
+        if re.search(r"\bPASTILLAS\b", normalizado) and "GRANDES" in normalizado:
             return "PAST GRAN"
         if "ALIMENTACION" in normalizado or "ALIM" in normalizado:
             return "PAST ALIM"
