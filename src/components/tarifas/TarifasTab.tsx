@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import {
   Select,
@@ -90,12 +90,14 @@ export function TarifasTab() {
 
   const [editing, setEditing] = useState<TarifaClienteProducto | null>(null);
   const [open, setOpen] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [tarifaToDelete, setTarifaToDelete] = useState<TarifaClienteProducto | null>(null);
   const [form, setForm] = useState<{
     comisionistaId: string;
     clienteId: string;
     productoId: string;
     fincaId: string;
-    tipo: 'porcentaje' | 'fijo_kg';
+    tipo: 'porcentaje' | 'fijo_kg' | 'fijo_unidad';
     valor: string;
     activo: boolean;
   }>({
@@ -254,10 +256,17 @@ export function TarifasTab() {
     setOpen(true);
   };
 
-  const handleDelete = (id: string) => {
-    if (confirm('¿Eliminar esta tarifa?')) {
-      deleteTarifa(id);
+  const handleDelete = (t: TarifaClienteProducto) => {
+    setTarifaToDelete(t);
+    setDeleteConfirmOpen(true);
+  };
+
+  const handleConfirmDelete = () => {
+    if (tarifaToDelete) {
+      deleteTarifa(tarifaToDelete.id);
     }
+    setDeleteConfirmOpen(false);
+    setTarifaToDelete(null);
   };
 
   const handleImportarExcel = () => {
@@ -269,7 +278,10 @@ export function TarifasTab() {
     if (t.tipo === 'porcentaje') {
       return `${valor}%`;
     }
-    return `$${valor.toFixed(3)}/kg`;
+    if (t.tipo === 'fijo_kg') {
+      return `$${valor.toFixed(3)}/kg`;
+    }
+    return `$${valor.toFixed(3)}/unidad`;
   };
 
   const clienteSeleccionado = clientes.find((c) => c.id === form.clienteId);
@@ -285,7 +297,7 @@ export function TarifasTab() {
     : 'Selecciona un comisionista';
   const etiquetaFormCliente = form.clienteId ? nombreCliente(form.clienteId) : 'Selecciona un cliente';
   const etiquetaFormProducto = form.productoId ? nombreProducto(form.productoId) : 'Selecciona un producto';
-  const etiquetaFormTipo = form.tipo === 'porcentaje' ? 'Porcentaje (%)' : 'Fijo por kg (USD)';
+  const etiquetaFormTipo = form.tipo === 'porcentaje' ? 'Porcentaje (%)' : form.tipo === 'fijo_kg' ? 'Fijo por kg (USD)' : 'Fijo por unidad (USD)';
 
   return (
     <div className="space-y-6">
@@ -463,7 +475,7 @@ export function TarifasTab() {
                 <Label htmlFor="tipo">Tipo</Label>
                 <Select
                   value={form.tipo}
-                  onValueChange={(value) => setForm({ ...form, tipo: value as 'porcentaje' | 'fijo_kg' })}
+                  onValueChange={(value) => setForm({ ...form, tipo: value as 'porcentaje' | 'fijo_kg' | 'fijo_unidad' })}
                 >
                   <SelectTrigger className="w-full rounded-xl border-slate-200 bg-white h-10 text-sm text-slate-900">
                     <span className="flex flex-1 truncate text-left">{etiquetaFormTipo}</span>
@@ -471,6 +483,7 @@ export function TarifasTab() {
                   <SelectContent>
                     <SelectItem value="porcentaje">Porcentaje (%)</SelectItem>
                     <SelectItem value="fijo_kg">Fijo por kg (USD)</SelectItem>
+                    <SelectItem value="fijo_unidad">Fijo por unidad (USD)</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -484,7 +497,7 @@ export function TarifasTab() {
                   min="0"
                   value={form.valor}
                   onChange={(e) => setForm({ ...form, valor: e.target.value })}
-                  placeholder={form.tipo === 'porcentaje' ? 'Ej: 2.5' : 'Ej: 0.05'}
+                  placeholder={form.tipo === 'porcentaje' ? 'Ej: 2.5' : form.tipo === 'fijo_kg' ? 'Ej: 0.05' : 'Ej: 1.00'}
                   className="bg-white border-slate-200 rounded-xl focus:border-slate-900 focus:ring-slate-900/10"
                 />
               </div>
@@ -520,6 +533,45 @@ export function TarifasTab() {
               </Button>
             </div>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog de confirmación para eliminar */}
+      <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+        <DialogContent className="sm:max-w-md bg-white border-slate-200">
+          <DialogHeader>
+            <DialogTitle>¿Eliminar tarifa?</DialogTitle>
+            <DialogDescription>
+              Esta acción no se puede deshacer. Se eliminará permanentemente la tarifa de{' '}
+              <span className="font-medium text-slate-900">
+                {tarifaToDelete ? getComisionistaTarifa(tarifaToDelete) : ''}
+              </span>{' '}
+              para el producto{' '}
+              <span className="font-medium text-slate-900">
+                {tarifaToDelete ? getProductoTarifa(tarifaToDelete) : ''}
+              </span>
+              .
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setDeleteConfirmOpen(false);
+                setTarifaToDelete(null);
+              }}
+              className="rounded-xl border-slate-200"
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleConfirmDelete}
+              className="rounded-xl"
+            >
+              Eliminar
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
@@ -565,7 +617,7 @@ export function TarifasTab() {
                         ) : (
                           <Weight className="h-3 w-3" />
                         )}
-                        {t.tipo === 'porcentaje' ? 'Porcentaje' : 'Fijo/kg'}
+                        {t.tipo === 'porcentaje' ? 'Porcentaje' : t.tipo === 'fijo_kg' ? 'Fijo/kg' : 'Fijo/unidad'}
                       </Badge>
                     </TableCell>
                     <TableCell className="text-slate-900 font-medium">{formatValor(t)}</TableCell>
@@ -594,7 +646,7 @@ export function TarifasTab() {
                           variant="ghost"
                           size="icon"
                           className="h-8 w-8 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg"
-                          onClick={() => handleDelete(t.id)}
+                          onClick={() => handleDelete(t)}
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>

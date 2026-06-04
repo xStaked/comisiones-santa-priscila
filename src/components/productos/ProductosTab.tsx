@@ -23,14 +23,30 @@ const unidadLabels: Record<string, string> = {
   kg: 'Kilogramo',
   litro: 'Litro',
   tacho: 'Tacho',
+  saco: 'Saco',
   unidad: 'Unidad',
+  caneca: 'Caneca',
+  galon: 'Galón',
 };
 
 const unidadIcons: Record<string, React.ReactNode> = {
   kg: <Weight className="h-3 w-3" />,
   litro: <Droplets className="h-3 w-3" />,
   tacho: <Box className="h-3 w-3" />,
+  saco: <Box className="h-3 w-3" />,
   unidad: <Package className="h-3 w-3" />,
+  caneca: <Box className="h-3 w-3" />,
+  galon: <Droplets className="h-3 w-3" />,
+};
+
+const unidadPesoLabels: Record<string, string> = {
+  kg: 'kg',
+  litro: 'kg',
+  tacho: 'kg',
+  saco: 'kg',
+  unidad: 'kg',
+  caneca: 'lt',
+  galon: 'lt',
 };
 
 export function ProductosTab() {
@@ -41,14 +57,18 @@ export function ProductosTab() {
   const [aliasInput, setAliasInput] = useState('');
   const [form, setForm] = useState<{
     nombre: string;
-    unidadComision: 'kg' | 'litro' | 'tacho' | 'unidad';
+    unidadComision: 'kg' | 'litro' | 'tacho' | 'saco' | 'unidad' | 'caneca' | 'galon';
     tachoKilos: string;
+    sacoKilos: string;
+    pesoPorUnidad: string;
     activo: boolean;
     alias: string[];
   }>({
     nombre: '',
     unidadComision: 'kg',
     tachoKilos: '',
+    sacoKilos: '',
+    pesoPorUnidad: '',
     activo: true,
     alias: [],
   });
@@ -63,6 +83,8 @@ export function ProductosTab() {
       nombre: '',
       unidadComision: 'kg',
       tachoKilos: '',
+      sacoKilos: '',
+      pesoPorUnidad: '',
       activo: true,
       alias: [],
     });
@@ -81,6 +103,8 @@ export function ProductosTab() {
       nombre: form.nombre.trim(),
       unidadComision: form.unidadComision,
       tachoKilos: form.unidadComision === 'tacho' && form.tachoKilos ? parseFloat(form.tachoKilos) : undefined,
+      sacoKilos: form.unidadComision === 'saco' && form.sacoKilos ? parseFloat(form.sacoKilos) : undefined,
+      pesoPorUnidad: form.pesoPorUnidad ? parseFloat(form.pesoPorUnidad) : undefined,
       activo: form.activo,
       alias: form.alias.filter((a) => a.trim() !== ''),
     };
@@ -100,6 +124,8 @@ export function ProductosTab() {
       nombre: p.nombre,
       unidadComision: p.unidadComision,
       tachoKilos: p.tachoKilos?.toString() ?? '',
+      sacoKilos: p.sacoKilos?.toString() ?? '',
+      pesoPorUnidad: p.pesoPorUnidad?.toString() ?? '',
       activo: p.activo,
       alias: p.alias || [],
     });
@@ -156,7 +182,7 @@ export function ProductosTab() {
                 <Select
                   value={form.unidadComision}
                   onValueChange={(value) =>
-                    setForm({ ...form, unidadComision: value as 'kg' | 'litro' | 'tacho' | 'unidad', tachoKilos: '' })
+                    setForm({ ...form, unidadComision: value as 'kg' | 'litro' | 'tacho' | 'saco' | 'unidad' | 'caneca' | 'galon', tachoKilos: '', sacoKilos: '' })
                   }
                 >
                   <SelectTrigger className="w-full rounded-xl border-slate-200 bg-white h-10 text-sm text-slate-900">
@@ -166,7 +192,10 @@ export function ProductosTab() {
                     <SelectItem value="kg">Kilogramo (kg)</SelectItem>
                     <SelectItem value="litro">Litro</SelectItem>
                     <SelectItem value="tacho">Tacho</SelectItem>
+                    <SelectItem value="saco">Saco</SelectItem>
                     <SelectItem value="unidad">Unidad</SelectItem>
+                    <SelectItem value="caneca">Caneca</SelectItem>
+                    <SelectItem value="galon">Galón</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -186,6 +215,41 @@ export function ProductosTab() {
                   />
                 </div>
               )}
+
+              {form.unidadComision === 'saco' && (
+                <div className="space-y-2">
+                  <Label htmlFor="sacoKilos">Kilos por saco</Label>
+                  <Input
+                    id="sacoKilos"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={form.sacoKilos}
+                    onChange={(e) => setForm({ ...form, sacoKilos: e.target.value })}
+                    placeholder="Ej: 25"
+                    className="bg-white border-slate-200 rounded-xl focus:border-slate-900 focus:ring-slate-900/10"
+                  />
+                </div>
+              )}
+
+              <div className="space-y-2">
+                <Label htmlFor="pesoPorUnidad">Peso por unidad ({unidadPesoLabels[form.unidadComision]})</Label>
+                <Input
+                  id="pesoPorUnidad"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={form.pesoPorUnidad}
+                  onChange={(e) => setForm({ ...form, pesoPorUnidad: e.target.value })}
+                  placeholder={form.unidadComision === 'caneca' ? 'Ej: 20 (litros por caneca)' : form.unidadComision === 'galon' ? 'Ej: 3.785 (litros por galón)' : 'Ej: 10 (para cajas de 10kg)'}
+                  className="bg-white border-slate-200 rounded-xl focus:border-slate-900 focus:ring-slate-900/10"
+                />
+                <p className="text-xs text-slate-500">
+                  {form.unidadComision === 'caneca' || form.unidadComision === 'galon'
+                    ? 'Opcional. Define cuántos litros contiene cada unidad para la conversión a kg.'
+                    : 'Opcional. Usar cuando la cantidad en órdenes viene en unidades/cajas/sacas pero la comisión es por kg.'}
+                </p>
+              </div>
 
               <div className="space-y-2">
                 <Label htmlFor="alias">Alias (nombres en órdenes de compra)</Label>
@@ -322,6 +386,18 @@ export function ProductosTab() {
                     <Badge variant="secondary" className="flex items-center gap-1 bg-slate-100 text-slate-700 border-0">
                       <Weight className="h-3 w-3" />
                       {p.tachoKilos} kg/tacho
+                    </Badge>
+                  )}
+                  {p.unidadComision === 'saco' && p.sacoKilos !== undefined && (
+                    <Badge variant="secondary" className="flex items-center gap-1 bg-slate-100 text-slate-700 border-0">
+                      <Weight className="h-3 w-3" />
+                      {p.sacoKilos} kg/saco
+                    </Badge>
+                  )}
+                  {p.pesoPorUnidad !== undefined && (
+                    <Badge variant="secondary" className="flex items-center gap-1 bg-slate-100 text-slate-700 border-0">
+                      <Weight className="h-3 w-3" />
+                      {p.pesoPorUnidad} {unidadPesoLabels[p.unidadComision]}/unidad
                     </Badge>
                   )}
                 </div>

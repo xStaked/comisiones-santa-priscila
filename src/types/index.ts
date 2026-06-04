@@ -1,5 +1,5 @@
 export interface TarifaComision {
-  tipo: 'porcentaje' | 'fijo_kg';
+  tipo: 'porcentaje' | 'fijo_kg' | 'fijo_unidad';
   valor: number;
 }
 
@@ -33,7 +33,7 @@ export interface OrdenItem {
   fincaId?: string;
   // Relaciones populadas por backend
   cliente?: { id: string; nombre: string; retencionPorcentaje: number };
-  productoRel?: { id: string; nombre: string; unidadComision: string; tachoKilos?: number };
+  productoRel?: { id: string; nombre: string; unidadComision: string; tachoKilos?: number; sacoKilos?: number; pesoPorUnidad?: number };
   fincaRel?: { id: string; nombre: string };
 }
 
@@ -60,7 +60,7 @@ export interface Liquidacion {
   nombre: string;
 }
 
-export type Unidad = 'kg' | 'unidades' | 'libras' | 'cajas';
+export type Unidad = 'kg' | 'unidades' | 'libras' | 'cajas' | 'litros' | 'tachos' | 'sacos' | 'canecas' | 'galones';
 
 export interface Cliente {
   id: string;
@@ -83,8 +83,10 @@ export interface Finca {
 export interface Producto {
   id: string;
   nombre: string;
-  unidadComision: 'kg' | 'litro' | 'tacho' | 'unidad';
+  unidadComision: 'kg' | 'litro' | 'tacho' | 'unidad' | 'caneca' | 'galon' | 'saco';
   tachoKilos?: number;
+  sacoKilos?: number;
+  pesoPorUnidad?: number;
   activo: boolean;
   createdAt: string;
   alias: string[];
@@ -96,7 +98,7 @@ export interface TarifaClienteProducto {
   clienteId: string;
   productoId: string;
   fincaId?: string;
-  tipo: 'porcentaje' | 'fijo_kg';
+  tipo: 'porcentaje' | 'fijo_kg' | 'fijo_unidad';
   valor: number;
   activo: boolean;
   createdAt: string;
@@ -111,7 +113,7 @@ export interface TarifaClienteProducto {
 export interface LegacyComisionista {
   id: string;
   nombre: string;
-  tipo: 'porcentaje' | 'fijo_kg';
+  tipo: 'porcentaje' | 'fijo_kg' | 'fijo_unidad';
   valor: number;
 }
 

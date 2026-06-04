@@ -43,6 +43,8 @@ const NUMERIC_RESPONSE_KEYS = new Set([
   'retencionPorcentaje',
   'retencionPorcentajeSnapshot',
   'tachoKilos',
+  'sacoKilos',
+  'pesoPorUnidad',
 ]);
 
 function maybeParseNumericField(key: string, value: unknown): unknown {

@@ -24,7 +24,7 @@ export function ComisionistasTab() {
   const { comisionistas, addComisionista, updateComisionista, deleteComisionista, ordenItems, liquidaciones } = useApp();
   const [search, setSearch] = useState('');
   const [editing, setEditing] = useState<Comisionista | null>(null);
-  const [form, setForm] = useState<{ nombre: string; tarifas: { tipo: 'porcentaje' | 'fijo_kg'; valor: string }[] }>({
+  const [form, setForm] = useState<{ nombre: string; tarifas: { tipo: 'porcentaje' | 'fijo_kg' | 'fijo_unidad'; valor: string }[] }>({
     nombre: '',
     tarifas: [{ tipo: 'porcentaje', valor: '' }],
   });
@@ -146,7 +146,7 @@ export function ComisionistasTab() {
                   <div key={idx} className="flex items-center gap-2">
                     <Select
                       value={tarifa.tipo}
-                      onValueChange={(value) => updateTarifa(idx, 'tipo', value as 'porcentaje' | 'fijo_kg')}
+                      onValueChange={(value) => updateTarifa(idx, 'tipo', value as 'porcentaje' | 'fijo_kg' | 'fijo_unidad')}
                     >
                       <SelectTrigger className="w-40 rounded-xl border-slate-200 bg-white h-10 text-sm text-slate-900">
                         <SelectValue placeholder="Tipo" />
@@ -154,6 +154,7 @@ export function ComisionistasTab() {
                       <SelectContent>
                         <SelectItem value="porcentaje">Porcentaje (%)</SelectItem>
                         <SelectItem value="fijo_kg">USD/kg</SelectItem>
+                        <SelectItem value="fijo_unidad">USD/unidad</SelectItem>
                       </SelectContent>
                     </Select>
                     <Input
@@ -162,7 +163,7 @@ export function ComisionistasTab() {
                       min="0"
                       value={tarifa.valor}
                       onChange={e => updateTarifa(idx, 'valor', e.target.value)}
-                      placeholder={tarifa.tipo === 'porcentaje' ? 'Ej: 2.5' : 'Ej: 0.05'}
+                      placeholder={tarifa.tipo === 'porcentaje' ? 'Ej: 2.5' : tarifa.tipo === 'fijo_kg' ? 'Ej: 0.05' : 'Ej: 1.00'}
                       className="bg-white border-slate-200 rounded-xl flex-1"
                     />
                     {form.tarifas.length > 1 && (
@@ -219,7 +220,7 @@ export function ComisionistasTab() {
                   {c.tarifas.map((t, idx) => (
                     <Badge key={idx} variant="secondary" className="flex items-center gap-1 bg-slate-100 text-slate-700 border-0">
                       {t.tipo === 'porcentaje' ? <Percent className="h-3 w-3" /> : <Weight className="h-3 w-3" />}
-                      {t.tipo === 'porcentaje' ? `${typeof t.valor === 'string' ? parseFloat(t.valor) : t.valor}%` : `$${typeof t.valor === 'string' ? parseFloat(t.valor).toFixed(3) : t.valor.toFixed(3)}/kg`}
+                      {t.tipo === 'porcentaje' ? `${typeof t.valor === 'string' ? parseFloat(t.valor) : t.valor}%` : `$${typeof t.valor === 'string' ? parseFloat(t.valor).toFixed(3) : t.valor.toFixed(3)}/${t.tipo === 'fijo_kg' ? 'kg' : 'unidad'}`}
                     </Badge>
                   ))}
                 </div>

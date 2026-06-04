@@ -478,6 +478,11 @@ export function OrdenesTab() {
                     <SelectItem value="libras">libras</SelectItem>
                     <SelectItem value="unidades">unidades</SelectItem>
                     <SelectItem value="cajas">cajas</SelectItem>
+                    <SelectItem value="litros">litros</SelectItem>
+                    <SelectItem value="tachos">tachos</SelectItem>
+                    <SelectItem value="sacos">sacos</SelectItem>
+                    <SelectItem value="canecas">canecas</SelectItem>
+                    <SelectItem value="galones">galones</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -892,6 +897,11 @@ export function OrdenesTab() {
                     <SelectItem value="libras">libras</SelectItem>
                     <SelectItem value="unidades">unidades</SelectItem>
                     <SelectItem value="cajas">cajas</SelectItem>
+                    <SelectItem value="litros">litros</SelectItem>
+                    <SelectItem value="tachos">tachos</SelectItem>
+                    <SelectItem value="sacos">sacos</SelectItem>
+                    <SelectItem value="canecas">canecas</SelectItem>
+                    <SelectItem value="galones">galones</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
