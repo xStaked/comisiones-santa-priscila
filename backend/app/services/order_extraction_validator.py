@@ -28,6 +28,11 @@ UNIDADES_NORMALIZADAS = {
     "tachos": "tachos",
     "saco": "sacos",
     "sacos": "sacos",
+    "caneca": "canecas",
+    "canecas": "canecas",
+    "galon": "galones",
+    "galón": "galones",
+    "galones": "galones",
 }
 
 

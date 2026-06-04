@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
@@ -18,6 +19,61 @@ from app.services.catalog_normalization import (
 )
 
 LIBRA_A_KG = Decimal("0.453592")
+
+
+def _extraer_kg_por_tacho(unidad: str | None) -> Decimal | None:
+    if not unidad:
+        return None
+
+    unidad_normalizada = unidad.lower().replace(",", ".")
+    if "tacho" not in unidad_normalizada:
+        return None
+
+    match = re.search(r"(\d+(?:\.\d+)?)\s*k(?:g|ilo|ilos)?\b", unidad_normalizada)
+    if not match:
+        return None
+
+    return Decimal(match.group(1))
+
+
+def _cantidad_para_tarifa_kg(orden_item: OrdenItem) -> Decimal:
+    cantidad = orden_item.cantidad
+    unidad_lower = orden_item.unidad.lower() if orden_item.unidad else ""
+    producto = orden_item.producto_obj
+    kg_por_tacho = _extraer_kg_por_tacho(orden_item.unidad)
+
+    if kg_por_tacho is not None:
+        return cantidad * kg_por_tacho
+
+    if unidad_lower == "libras":
+        return cantidad * LIBRA_A_KG
+
+    if "caneca" in unidad_lower:
+        return cantidad * Decimal("20")  # 1 caneca = 20 litros ≈ 20 kg
+
+    if "galon" in unidad_lower or "galón" in unidad_lower:
+        return cantidad * Decimal("3.78541")  # 1 galón ≈ 3.785 litros ≈ 3.785 kg
+
+    if producto and producto.unidad_comision == "tacho":
+        return cantidad * (producto.tacho_kilos or Decimal("15"))
+
+    if producto and producto.unidad_comision == "saco":
+        return cantidad * (producto.saco_kilos or Decimal("25"))
+
+    if producto and producto.unidad_comision == "caneca":
+        return cantidad * Decimal("20")  # 1 caneca = 20 litros ≈ 20 kg
+
+    if producto and producto.unidad_comision == "galon":
+        return cantidad * Decimal("3.78541")  # 1 galón ≈ 3.785 litros ≈ 3.785 kg
+
+    if (
+        producto
+        and producto.peso_por_unidad
+        and unidad_lower not in ("kg", "libras", "litros")
+    ):
+        return cantidad * producto.peso_por_unidad
+
+    return cantidad
 
 
 def _buscar_tarifa_especifica(
@@ -62,7 +118,7 @@ def _buscar_tarifa_especifica(
     if not cliente_id or not producto_id:
         return None
 
-    # 1. Con finca
+    # 1. Con finca exacta (por ID)
     if finca_id:
         tarifa = (
             db.query(TarifaClienteProducto)
@@ -78,7 +134,25 @@ def _buscar_tarifa_especifica(
         if tarifa:
             return tarifa
 
-    # 2. Sin finca (finca_id IS NULL)
+    # 2. Buscar tarifa con finca por nombre (cuando la orden no tiene finca_id)
+    if not finca_id and nombre_finca_orden:
+        nombre_finca = normalizar_nombre_finca(nombre_finca_orden)
+        tarifas_con_finca = (
+            db.query(TarifaClienteProducto)
+            .filter(
+                TarifaClienteProducto.comisionista_id == comisionista_id,
+                TarifaClienteProducto.cliente_id == cliente_id,
+                TarifaClienteProducto.producto_id == producto_id,
+                TarifaClienteProducto.finca_id.isnot(None),
+                TarifaClienteProducto.activo.is_(True),
+            )
+            .all()
+        )
+        for t in tarifas_con_finca:
+            if t.finca and normalizar_nombre_finca(t.finca.nombre) == nombre_finca:
+                return t
+
+    # 3. Sin finca (finca_id IS NULL) - fallback
     tarifa = (
         db.query(TarifaClienteProducto)
         .filter(
@@ -100,11 +174,26 @@ def _calcular_comision_con_tarifa(
     if tarifa.tipo == TipoTarifa.porcentaje:
         return orden_item.total * (tarifa.valor / Decimal("100"))
     elif tarifa.tipo == TipoTarifa.fijo_kg:
-        if orden_item.unidad.lower() == "libras":
-            cantidad_kg = orden_item.cantidad * LIBRA_A_KG
-        else:
-            cantidad_kg = orden_item.cantidad
-        return cantidad_kg * tarifa.valor
+        return _cantidad_para_tarifa_kg(orden_item) * tarifa.valor
+    elif tarifa.tipo == TipoTarifa.fijo_unidad:
+        cantidad = orden_item.cantidad
+        if (
+            orden_item.producto_obj
+            and orden_item.producto_obj.peso_por_unidad
+            and orden_item.unidad
+            and orden_item.unidad.lower() in ("kg", "litros")
+        ):
+            cantidad = orden_item.cantidad / orden_item.producto_obj.peso_por_unidad
+        elif (
+            orden_item.producto_obj
+            and orden_item.producto_obj.peso_por_unidad
+            and orden_item.unidad
+            and orden_item.unidad.lower() not in ("kg", "libras", "litros")
+        ):
+            # Ya está en unidades, usar directamente
+            pass
+        # Si no hay peso_por_unidad, usar cantidad directa
+        return cantidad * tarifa.valor
     return Decimal("0")
 
 
@@ -136,16 +225,26 @@ def _calcular_comision_especifica(
         base = orden_item.total * (Decimal("1") - retencion / Decimal("100"))
         return base * (tarifa.valor / Decimal("100"))
     elif tarifa.tipo == TipoTarifa.fijo_kg:
+        return _cantidad_para_tarifa_kg(orden_item) * tarifa.valor
+    elif tarifa.tipo == TipoTarifa.fijo_unidad:
         producto = orden_item.producto_obj
-        if producto and producto.unidad_comision == "litro":
-            cantidad = orden_item.cantidad
-        elif producto and producto.unidad_comision == "tacho":
-            cantidad = orden_item.cantidad * (producto.tacho_kilos or Decimal("15"))
-        else:
-            if orden_item.unidad and orden_item.unidad.lower() == "libras":
-                cantidad = orden_item.cantidad * LIBRA_A_KG
-            else:
-                cantidad = orden_item.cantidad
+        cantidad = orden_item.cantidad
+        if (
+            producto
+            and producto.peso_por_unidad
+            and orden_item.unidad
+            and orden_item.unidad.lower() in ("kg", "litros")
+        ):
+            cantidad = orden_item.cantidad / producto.peso_por_unidad
+        elif (
+            producto
+            and producto.peso_por_unidad
+            and orden_item.unidad
+            and orden_item.unidad.lower() not in ("kg", "libras", "litros")
+        ):
+            # Ya está en unidades, usar directamente
+            pass
+        # Si no hay peso_por_unidad, usar cantidad directa
         return cantidad * tarifa.valor
     return Decimal("0")
 
