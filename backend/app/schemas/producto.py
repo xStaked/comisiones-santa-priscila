@@ -26,6 +26,8 @@ class ProductoBase(BaseModel):
     nombre: str
     unidad_comision: str = Field(default="kg", alias="unidadComision")
     tacho_kilos: Optional[Decimal] = Field(default=None, alias="tachoKilos")
+    saco_kilos: Optional[Decimal] = Field(default=None, alias="sacoKilos")
+    peso_por_unidad: Optional[Decimal] = Field(default=None, alias="pesoPorUnidad")
     alias: list[str] = Field(default_factory=list)
 
     model_config = ConfigDict(populate_by_name=True)
@@ -44,6 +46,8 @@ class ProductoResponse(BaseModel):
     nombre: str
     unidad_comision: str = Field(alias="unidadComision")
     tacho_kilos: Optional[Decimal] = Field(alias="tachoKilos")
+    saco_kilos: Optional[Decimal] = Field(alias="sacoKilos")
+    peso_por_unidad: Optional[Decimal] = Field(alias="pesoPorUnidad")
     activo: bool
     alias: list[str] = Field(default_factory=list)
 

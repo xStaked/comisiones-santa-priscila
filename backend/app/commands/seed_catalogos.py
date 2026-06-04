@@ -77,6 +77,7 @@ PRODUCTOS_DATA = [
     {"nombre": "SUELO / POLVO", "unidad_comision": "kg", "tacho_kilos": None},
     {"nombre": "CITRIUS", "unidad_comision": "litro", "tacho_kilos": None},
     {"nombre": "NATUXTRACT", "unidad_comision": "tacho", "tacho_kilos": Decimal("15")},
+    {"nombre": "SACO TEST", "unidad_comision": "saco", "saco_kilos": Decimal("25")},
     {"nombre": "CALCINIT", "unidad_comision": "kg", "tacho_kilos": None},
     {"nombre": "MORTAL C", "unidad_comision": "litro", "tacho_kilos": None},
     {"nombre": "ECULÁCTICAS", "unidad_comision": "kg", "tacho_kilos": None},
@@ -125,7 +126,8 @@ def seed_productos(db):
             Producto(
                 nombre=data["nombre"],
                 unidad_comision=data["unidad_comision"],
-                tacho_kilos=data["tacho_kilos"],
+                tacho_kilos=data.get("tacho_kilos"),
+                saco_kilos=data.get("saco_kilos"),
             )
         )
     db.commit()

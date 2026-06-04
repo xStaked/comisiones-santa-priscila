@@ -9,6 +9,8 @@ class Producto(BaseModel):
     nombre = Column(String, nullable=False, unique=True)
     unidad_comision = Column(String(20), nullable=False, default="kg")
     tacho_kilos = Column(Numeric(5, 2), nullable=True)
+    saco_kilos = Column(Numeric(5, 2), nullable=True)
+    peso_por_unidad = Column(Numeric(8, 2), nullable=True)
     activo = Column(Boolean, nullable=False, default=True)
 
     alias = relationship("ProductoAlias", back_populates="producto", cascade="all, delete-orphan")

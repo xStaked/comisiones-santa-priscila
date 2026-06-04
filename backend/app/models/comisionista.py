@@ -7,6 +7,7 @@ from app.models.base import BaseModel
 class TipoTarifa(str, enum.Enum):
     porcentaje = "porcentaje"
     fijo_kg = "fijo_kg"
+    fijo_unidad = "fijo_unidad"
 
 
 class Comisionista(BaseModel):

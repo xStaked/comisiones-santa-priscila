@@ -27,6 +27,8 @@ def _producto_a_respuesta(producto: Producto) -> dict:
         "nombre": producto.nombre,
         "unidad_comision": producto.unidad_comision,
         "tacho_kilos": producto.tacho_kilos,
+        "saco_kilos": producto.saco_kilos,
+        "peso_por_unidad": producto.peso_por_unidad,
         "activo": producto.activo,
         "alias": [a.alias for a in producto.alias],
     }
@@ -53,6 +55,8 @@ def crear_producto(
         nombre=data.nombre,
         unidad_comision=data.unidad_comision,
         tacho_kilos=data.tacho_kilos,
+        saco_kilos=data.saco_kilos,
+        peso_por_unidad=data.peso_por_unidad,
     )
     db.add(producto)
     try:
@@ -91,6 +95,8 @@ def actualizar_producto(
     producto.nombre = data.nombre
     producto.unidad_comision = data.unidad_comision
     producto.tacho_kilos = data.tacho_kilos
+    producto.saco_kilos = data.saco_kilos
+    producto.peso_por_unidad = data.peso_por_unidad
 
     try:
         db.commit()
