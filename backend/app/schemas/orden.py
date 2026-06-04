@@ -67,8 +67,8 @@ class OrdenItemResponse(OrdenItemBase):
     producto_id: Optional[UUID] = None
     finca_id: Optional[UUID] = None
     cliente: Optional[ClienteResponse] = None
-    producto_obj: Optional[ProductoResponse] = Field(default=None, alias="productoEntidad")
-    finca_obj: Optional[FincaResponse] = Field(default=None, alias="fincaEntidad")
+    producto_obj: Optional[ProductoResponse] = Field(default=None, alias="productoRel")
+    finca_obj: Optional[FincaResponse] = Field(default=None, alias="fincaRel")
 
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
