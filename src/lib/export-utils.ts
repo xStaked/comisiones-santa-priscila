@@ -8,40 +8,128 @@ import {
   normalizarNombreProducto,
 } from './normalization';
 
-export function calcularComisionPorTarifa(item: OrdenItem, tarifa: { tipo: 'porcentaje' | 'fijo_kg'; valor: number }): number {
+export function calcularComisionPorTarifa(item: OrdenItem, tarifa: { tipo: 'porcentaje' | 'fijo_kg' | 'fijo_unidad'; valor: number }): number {
   if (tarifa.tipo === 'porcentaje') {
     return item.total * (tarifa.valor / 100);
   }
-  // fijo_kg
-  let cantidadKg = item.cantidad;
-  if (item.unidad === 'libras') {
-    cantidadKg = item.cantidad * 0.453592;
-  } else if (item.unidad !== 'kg') {
-    cantidadKg = item.cantidad;
+
+  const unidadLower = item.unidad?.toLowerCase() || '';
+
+  if (tarifa.tipo === 'fijo_kg') {
+    return getCantidadParaTarifaKg(item) * tarifa.valor;
   }
-  return cantidadKg * tarifa.valor;
+
+  if (tarifa.tipo === 'fijo_unidad') {
+    let cantidad = item.cantidad;
+    if (
+      item.productoRel?.pesoPorUnidad &&
+      ['kg', 'litros'].includes(unidadLower)
+    ) {
+      cantidad = item.cantidad / item.productoRel.pesoPorUnidad;
+    } else if (
+      item.productoRel?.pesoPorUnidad &&
+      !['kg', 'libras', 'litros'].includes(unidadLower)
+    ) {
+      // Ya está en unidades, usar directamente
+    }
+    // Si no hay pesoPorUnidad, usar cantidad directa
+    return cantidad * tarifa.valor;
+  }
+
+  return 0;
+}
+
+function getKgPorTachoDesdeUnidad(unidad?: string): number | undefined {
+  const unidadNormalizada = unidad?.toLowerCase().replace(',', '.') || '';
+  if (!unidadNormalizada.includes('tacho')) return undefined;
+
+  const match = unidadNormalizada.match(/(\d+(?:\.\d+)?)\s*k(?:g|ilo|ilos)?\b/);
+  if (!match) return undefined;
+
+  return Number(match[1]);
+}
+
+function getCantidadParaTarifaKg(item: OrdenItem): number {
+  const unidadLower = item.unidad?.toLowerCase() || '';
+  const producto = item.productoRel;
+  const kgPorTacho = getKgPorTachoDesdeUnidad(item.unidad);
+
+  if (kgPorTacho !== undefined) {
+    return item.cantidad * kgPorTacho;
+  }
+
+  if (unidadLower === 'libras') {
+    return item.cantidad * 0.453592;
+  }
+
+  if (unidadLower.includes('caneca')) {
+    return item.cantidad * 20; // 1 caneca = 20 litros ≈ 20 kg
+  }
+
+  if (unidadLower.includes('galon') || unidadLower.includes('galón')) {
+    return item.cantidad * 3.78541; // 1 galón ≈ 3.785 litros ≈ 3.785 kg
+  }
+
+  if (producto?.unidadComision === 'tacho') {
+    return item.cantidad * (producto.tachoKilos || 15);
+  }
+
+  if (producto?.unidadComision === 'saco') {
+    return item.cantidad * (producto.sacoKilos || 25);
+  }
+
+  if (producto?.unidadComision === 'caneca') {
+    return item.cantidad * 20; // 1 caneca = 20 litros ≈ 20 kg
+  }
+
+  if (producto?.unidadComision === 'galon') {
+    return item.cantidad * 3.78541; // 1 galón ≈ 3.785 litros ≈ 3.785 kg
+  }
+
+  if (
+    producto?.pesoPorUnidad &&
+    !['kg', 'libras', 'litros'].includes(unidadLower)
+  ) {
+    return item.cantidad * producto.pesoPorUnidad;
+  }
+
+  return item.cantidad;
 }
 
 export function calcularComisionPorTarifaEspecifica(
   item: OrdenItem,
   tarifa: TarifaClienteProducto
 ): number {
+  const unidadLower = item.unidad?.toLowerCase() || '';
+
   if (tarifa.tipo === 'porcentaje') {
     const retencion = item.cliente?.retencionPorcentaje ?? 1.75;
     const base = item.total * (1 - retencion / 100);
     return base * (tarifa.valor / 100);
-  } else if (tarifa.tipo === 'fijo_kg') {
+  }
+
+  if (tarifa.tipo === 'fijo_kg') {
+    return getCantidadParaTarifaKg(item) * tarifa.valor;
+  }
+
+  if (tarifa.tipo === 'fijo_unidad') {
     const producto = item.productoRel;
     let cantidad = item.cantidad;
-    if (item.unidad === 'libras') {
-      cantidad = item.cantidad * 0.453592;
+    if (
+      producto?.pesoPorUnidad &&
+      ['kg', 'litros'].includes(unidadLower)
+    ) {
+      cantidad = item.cantidad / producto.pesoPorUnidad;
+    } else if (
+      producto?.pesoPorUnidad &&
+      !['kg', 'libras', 'litros'].includes(unidadLower)
+    ) {
+      // Ya está en unidades, usar directamente
     }
-    if (producto?.unidadComision === 'tacho') {
-      cantidad = item.cantidad * (producto.tachoKilos || 15);
-    }
-    // litro: asume que cantidad ya está en litros
+    // Si no hay pesoPorUnidad, usar cantidad directa
     return cantidad * tarifa.valor;
   }
+
   return 0;
 }
 
@@ -55,15 +143,30 @@ export function encontrarTarifaEspecifica(
   const nombreClienteItem = item.cliente?.nombre;
   const sinClienteIdentificado = !item.clienteId && !nombreClienteItem;
   const nombreFincaItem = item.fincaRel?.nombre || (item.finca !== '-' ? item.finca : item.sector);
-  const coincideCliente = (tarifa: TarifaClienteProducto) =>
-    tarifa.clienteId === item.clienteId ||
-    normalizarTexto(nombreRelacion(tarifa.cliente)) === normalizarTexto(nombreClienteItem);
-  const coincideProducto = (tarifa: TarifaClienteProducto) =>
-    tarifa.productoId === item.productoId ||
-    normalizarNombreProducto(nombreRelacion(tarifa.producto)) === normalizarNombreProducto(item.productoRel?.nombre || item.producto);
-  const coincideFinca = (tarifa: TarifaClienteProducto) =>
-    tarifa.fincaId === item.fincaId ||
-    normalizarNombreFinca(nombreRelacion(tarifa.finca)) === normalizarNombreFinca(nombreFincaItem);
+
+  const coincideCliente = (tarifa: TarifaClienteProducto) => {
+    if (tarifa.clienteId && item.clienteId && tarifa.clienteId === item.clienteId) return true;
+    const nt = normalizarTexto(nombreRelacion(tarifa.cliente));
+    const ni = normalizarTexto(nombreClienteItem);
+    return !!nt && !!ni && nt === ni;
+  };
+
+  const coincideProducto = (tarifa: TarifaClienteProducto) => {
+    // Solo coincidir por ID si ambos están definidos; de lo contrario usar matching por nombre
+    if (tarifa.productoId && item.productoId && tarifa.productoId === item.productoId) return true;
+    const nt = normalizarNombreProducto(nombreRelacion(tarifa.producto));
+    const ni = normalizarNombreProducto(item.productoRel?.nombre || item.producto);
+    return !!nt && !!ni && nt === ni;
+  };
+
+  const coincideFinca = (tarifa: TarifaClienteProducto) => {
+    if (!tarifa.fincaId) return true; // tarifa sin finca aplica a cualquier finca
+    if (tarifa.fincaId && item.fincaId && tarifa.fincaId === item.fincaId) return true;
+    const nt = normalizarNombreFinca(nombreRelacion(tarifa.finca));
+    const ni = normalizarNombreFinca(nombreFincaItem);
+    return !!nt && !!ni && nt === ni;
+  };
+
   const candidatas = tarifas.filter(
     (tarifa) =>
       tarifa.comisionistaId === comisionistaId &&
@@ -71,8 +174,26 @@ export function encontrarTarifaEspecifica(
       coincideProducto(tarifa)
   );
 
-  return candidatas.find((tarifa) => tarifa.fincaId && coincideFinca(tarifa)) ||
-    candidatas.find((tarifa) => !tarifa.fincaId && coincideCliente(tarifa));
+  // 1. Tarifa con finca exacta (por ID o por nombre)
+  const conFinca = candidatas.find((tarifa) => tarifa.fincaId && coincideFinca(tarifa));
+  if (conFinca) {
+    return conFinca;
+  }
+
+  // 2. Tarifa sin finca (aplica a todas las fincas de ese cliente+producto)
+  const sinFinca = candidatas.find((tarifa) => !tarifa.fincaId);
+  if (sinFinca) {
+    return sinFinca;
+  }
+
+  // 3. Fallback: si la orden no tiene finca identificada, buscar cualquier tarifa
+  //    del mismo comisionista+cliente+producto cuya finca coincida por nombre
+  if (!item.fincaId && !nombreFincaItem) {
+    return undefined;
+  }
+
+  const fallback = candidatas.find((tarifa) => coincideFinca(tarifa));
+  return fallback;
 }
 
 export function calcularComision(item: OrdenItem, comisionista: Comisionista | undefined): number {
@@ -100,9 +221,15 @@ export function getNombresComisionistas(item: OrdenItem, comisionistas: Comision
     .join(', ');
 }
 
-export function getTarifaLabel(tarifa: { tipo: 'porcentaje' | 'fijo_kg'; valor: number | string }): string {
+export function getTarifaLabel(tarifa: { tipo: 'porcentaje' | 'fijo_kg' | 'fijo_unidad'; valor: number | string }): string {
   const valor = typeof tarifa.valor === 'string' ? parseFloat(tarifa.valor) : tarifa.valor;
-  return tarifa.tipo === 'porcentaje' ? `${valor}%` : `$${valor.toFixed(3)}/kg`;
+  if (tarifa.tipo === 'porcentaje') {
+    return `${valor}%`;
+  }
+  if (tarifa.tipo === 'fijo_kg') {
+    return `$${valor.toFixed(3)}/kg`;
+  }
+  return `$${valor.toFixed(3)}/unidad`;
 }
 
 export function getTarifasLabel(comisionista: Comisionista): string {

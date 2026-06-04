@@ -23,6 +23,7 @@ import { toast } from 'sonner';
 export function LiquidacionTab() {
   const { comisionistas, ordenItems, saveLiquidacion, tarifasClienteProducto } = useApp();
   const [filterComisionista, setFilterComisionista] = useState('');
+  const [filterFactura, setFilterFactura] = useState('');
   const [nombreLiquidacion, setNombreLiquidacion] = useState('');
   const [previewOpen, setPreviewOpen] = useState(false);
 
@@ -36,15 +37,20 @@ export function LiquidacionTab() {
     [ordenItems]
   );
 
-  const cantidadOrdenes = useMemo(() => {
-    const ids = new Set(ordenItemsActivos.map(item => item.ordenId || `${item.fecha}-${item.numeroOrden}-${item.clienteId || ''}`));
-    return ids.size;
-  }, [ordenItemsActivos]);
-
   const filteredItems = useMemo(() => {
-    if (!filterComisionista) return ordenItemsActivos;
-    return ordenItemsActivos.filter(i => i.comisionistas.some(a => a.comisionistaId === filterComisionista));
-  }, [ordenItemsActivos, filterComisionista]);
+    return ordenItemsActivos.filter(i => {
+      const matchComisionista = !filterComisionista || i.comisionistas.some(a => a.comisionistaId === filterComisionista);
+      const matchFactura = !filterFactura || i.numeroOrden.toLowerCase().includes(filterFactura.toLowerCase());
+      return matchComisionista && matchFactura;
+    });
+  }, [ordenItemsActivos, filterComisionista, filterFactura]);
+
+  const cantidadOrdenes = useMemo(() => {
+    const ids = new Set(filteredItems.map(item => item.ordenId || `${item.fecha}-${item.numeroOrden}-${item.clienteId || ''}`));
+    return ids.size;
+  }, [filteredItems]);
+
+
 
   const itemsConComision = useMemo(() => {
     return filteredItems.map(item => {
@@ -119,7 +125,11 @@ export function LiquidacionTab() {
     // Reconstruir IDs a partir de los datos actualizados
     const ids = ordenItems
       .filter(item => item.estado !== 'liquidado')
-      .filter(i => !filterComisionista || i.comisionistas.some(a => a.comisionistaId === filterComisionista))
+      .filter(i => {
+        const matchComisionista = !filterComisionista || i.comisionistas.some(a => a.comisionistaId === filterComisionista);
+        const matchFactura = !filterFactura || i.numeroOrden.toLowerCase().includes(filterFactura.toLowerCase());
+        return matchComisionista && matchFactura;
+      })
       .map((i) => i.id);
     if (ids.length === 0) {
       toast.error('No hay órdenes activas para guardar');
@@ -131,7 +141,7 @@ export function LiquidacionTab() {
   };
 
   const handlePreviewSave = () => {
-    if (ordenItemsActivos.length === 0) {
+    if (filteredItems.length === 0) {
       toast.error('No hay órdenes para guardar');
       return;
     }
@@ -152,21 +162,32 @@ export function LiquidacionTab() {
   return (
     <div className="space-y-6">
       <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-        <div className="flex items-center gap-3">
-          <Filter className="h-5 w-5 text-slate-400" />
+        <div className="flex items-center gap-4 flex-wrap">
+          <div className="flex items-center gap-3">
+            <Filter className="h-5 w-5 text-slate-400" />
+            <div>
+              <Label className="text-xs text-slate-500">Filtrar por comisionista</Label>
+              <Select value={filterComisionista} onValueChange={(value) => setFilterComisionista(value ?? '')}>
+                <SelectTrigger className="mt-1 h-10 rounded-xl border-slate-200 bg-white text-sm text-slate-900 w-64">
+                  <SelectValue placeholder="Todos los comisionistas" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">Todos los comisionistas</SelectItem>
+                  {comisionistas.map(c => (
+                    <SelectItem key={c.id} value={c.id}>{c.nombre}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
           <div>
-            <Label className="text-xs text-slate-500">Filtrar por comisionista</Label>
-            <Select value={filterComisionista} onValueChange={(value) => setFilterComisionista(value ?? '')}>
-              <SelectTrigger className="mt-1 h-10 rounded-xl border-slate-200 bg-white text-sm text-slate-900 w-64">
-                <SelectValue placeholder="Todos los comisionistas" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="">Todos los comisionistas</SelectItem>
-                {comisionistas.map(c => (
-                  <SelectItem key={c.id} value={c.id}>{c.nombre}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Label className="text-xs text-slate-500">Filtrar por factura</Label>
+            <Input
+              placeholder="Número de factura..."
+              value={filterFactura}
+              onChange={e => setFilterFactura(e.target.value)}
+              className="mt-1 h-10 rounded-xl border-slate-200 bg-white text-sm text-slate-900 w-64"
+            />
           </div>
         </div>
         <div className="flex gap-2">
@@ -196,7 +217,7 @@ export function LiquidacionTab() {
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-sm text-slate-500">Productos a liquidar</span>
-                    <span className="text-sm font-semibold text-slate-900">{ordenItemsActivos.length}</span>
+                    <span className="text-sm font-semibold text-slate-900">{filteredItems.length}</span>
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-sm text-slate-500">Total vendido</span>

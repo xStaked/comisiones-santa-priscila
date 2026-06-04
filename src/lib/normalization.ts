@@ -40,10 +40,10 @@ export function normalizarNombreProducto(valor?: string): string | undefined {
       normalizado.includes('ECU B'));
 
   if (esEcuBacillus) {
-    if (normalizado.includes('PASTILLA') && normalizado.includes('TH')) {
+    if (/\bPASTILLA\b/.test(normalizado) && /\bTH\b/.test(normalizado)) {
       return 'PAST TH';
     }
-    if (normalizado.includes('PASTILLAS') && normalizado.includes('GRANDES')) {
+    if (/\bPASTILLAS\b/.test(normalizado) && /\bGRANDES\b/.test(normalizado)) {
       return 'PAST GRAN';
     }
     if (normalizado.includes('ALIMENTACION') || normalizado.includes('ALIM')) {
