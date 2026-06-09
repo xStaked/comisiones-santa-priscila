@@ -45,6 +45,10 @@ def _cantidad_para_tarifa_kg(orden_item: OrdenItem) -> Decimal:
     if kg_por_tacho is not None:
         return cantidad * kg_por_tacho
 
+    if "tacho" in unidad_lower:
+        tacho_kilos = producto.tacho_kilos if producto and producto.tacho_kilos else Decimal("15")
+        return cantidad * tacho_kilos
+
     if unidad_lower == "libras":
         return cantidad * LIBRA_A_KG
 

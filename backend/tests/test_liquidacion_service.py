@@ -116,6 +116,32 @@ def test_calcula_tarifa_fija_kg_desde_tachos_con_peso_en_unidad(db_session):
     assert comision == Decimal("307.50")
 
 
+def test_calcula_tarifa_fija_kg_desde_tachos_sin_peso_explicitado(db_session):
+    producto = Producto(nombre="PAST TH", unidad_comision="kg")
+    db_session.add(producto)
+    db_session.flush()
+
+    orden_item = OrdenItem(
+        fecha=date.today(),
+        numero_orden="93488",
+        finca="-",
+        sector="taura d",
+        producto="ECU-BACILLUS SUELO PASTILLA TH",
+        producto_id=producto.id,
+        cantidad=Decimal("40"),
+        unidad="tachos",
+        precio_unitario=Decimal("685"),
+        total=Decimal("27400"),
+    )
+    tarifa = Tarifa(tipo=TipoTarifa.fijo_kg, valor=Decimal("1.00"))
+    db_session.add(orden_item)
+    db_session.commit()
+
+    comision = _calcular_comision_con_tarifa(orden_item, tarifa)
+
+    assert comision == Decimal("600.00")
+
+
 def test_calcula_tarifa_especifica_fija_kg_desde_tachos_con_peso_en_unidad(db_session):
     cliente = Cliente(nombre="Santa Priscila", tipo="grupo")
     comisionista = Comisionista(nombre="PINEDA")

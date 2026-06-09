@@ -58,6 +58,10 @@ function getCantidadParaTarifaKg(item: OrdenItem): number {
     return item.cantidad * kgPorTacho;
   }
 
+  if (unidadLower.includes('tacho')) {
+    return item.cantidad * (producto?.tachoKilos || 15);
+  }
+
   if (unidadLower === 'libras') {
     return item.cantidad * 0.453592;
   }
