@@ -130,7 +130,7 @@ def seed_ordenes(db, comisionistas):
         total = cant * data["precio"]
 
         in_liquidacion = any(i in liq["orden_indices"] for liq in LIQUIDACIONES_DATA)
-        estado = EstadoOrden.liquidada if in_liquidacion else EstadoOrden.pendiente
+        estado = EstadoOrden.liquidada if in_liquidacion else EstadoOrden.pagada
 
         oid = make_uuid(f"orden-{i}")
         cabecera = Orden(

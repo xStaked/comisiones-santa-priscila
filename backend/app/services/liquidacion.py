@@ -349,21 +349,21 @@ def crear_liquidacion(
     if missing:
         raise ValueError(f"OrdenItems no encontrados: {missing}")
 
-    # Filtrar ítems pendientes: se omiten en lugar de fallar
+    # Filtrar ítems no pagados: se omiten en lugar de fallar
     omitidos: list[dict] = []
-    orden_items_pendientes: list[OrdenItem] = []
+    orden_items_pagados: list[OrdenItem] = []
     for oi in orden_items:
-        if oi.estado != EstadoOrden.pendiente:
+        if oi.estado != EstadoOrden.pagada:
             omitidos.append({
                 "id": str(oi.id),
                 "estado": oi.estado.value,
-                "motivo": "no está pendiente",
+                "motivo": "no está pagada",
             })
         else:
-            orden_items_pendientes.append(oi)
+            orden_items_pagados.append(oi)
 
-    if not orden_items_pendientes:
-        raise ValueError("Ninguno de los ítems seleccionados está pendiente")
+    if not orden_items_pagados:
+        raise ValueError("Ninguno de los ítems seleccionados está pagado")
 
     now = datetime.now()
     mes = now.strftime("%Y-%m")
@@ -376,7 +376,7 @@ def crear_liquidacion(
     db.add(liquidacion)
     db.flush()
 
-    for oi in orden_items_pendientes:
+    for oi in orden_items_pagados:
         li = LiquidacionItem(
             liquidacion_id=liquidacion.id,
             orden_item_id=oi.id,
@@ -450,18 +450,18 @@ def crear_liquidacion(
                         )
                         db.add(lit)
 
-    for oi in orden_items_pendientes:
+    for oi in orden_items_pagados:
         oi.estado = EstadoOrden.liquidada
 
     db.flush()
 
-    orden_ids = {oi.orden_id for oi in orden_items_pendientes if oi.orden_id is not None}
+    orden_ids = {oi.orden_id for oi in orden_items_pagados if oi.orden_id is not None}
     for orden_id in orden_ids:
         pendientes = (
             db.query(OrdenItem)
             .filter(
                 OrdenItem.orden_id == orden_id,
-                OrdenItem.estado == EstadoOrden.pendiente,
+                OrdenItem.estado == EstadoOrden.pagada,
             )
             .count()
         )
@@ -490,7 +490,7 @@ def eliminar_liquidacion(db: Session, liquidacion_id: UUID) -> bool:
 
     if orden_item_ids:
         db.query(OrdenItem).filter(OrdenItem.id.in_(orden_item_ids)).update(
-            {OrdenItem.estado: EstadoOrden.pendiente},
+            {OrdenItem.estado: EstadoOrden.pagada},
             synchronize_session=False,
         )
 
@@ -501,7 +501,7 @@ def eliminar_liquidacion(db: Session, liquidacion_id: UUID) -> bool:
     ]
     if orden_ids:
         db.query(Orden).filter(Orden.id.in_(orden_ids)).update(
-            {Orden.estado: EstadoOrden.pendiente},
+            {Orden.estado: EstadoOrden.pagada},
             synchronize_session=False,
         )
 
@@ -528,7 +528,7 @@ def restaurar_liquidacion(db: Session, liquidacion_id: UUID) -> list[UUID]:
                 fecha=li.fecha_snapshot,
                 numero_orden=li.numero_orden_snapshot,
                 origen="manual",
-                estado=EstadoOrden.pendiente,
+                estado=EstadoOrden.pagada,
             )
             db.add(orden)
             db.flush()
@@ -545,7 +545,7 @@ def restaurar_liquidacion(db: Session, liquidacion_id: UUID) -> list[UUID]:
             precio_unitario=li.precio_unitario_snapshot,
             total=li.total_snapshot,
             sector=li.sector_snapshot,
-            estado=EstadoOrden.pendiente,
+            estado=EstadoOrden.pagada,
         )
         db.add(nuevo_oi)
         db.flush()
