@@ -1,6 +1,12 @@
+export interface Proveedor {
+  id: string;
+  nombre: string;
+}
+
 export interface TarifaComision {
   tipo: 'porcentaje' | 'fijo_kg' | 'fijo_unidad';
   valor: number;
+  proveedoresExcluidos?: string[];
 }
 
 export interface Comisionista {
@@ -31,6 +37,7 @@ export interface OrdenItem {
   clienteId?: string;
   productoId?: string;
   fincaId?: string;
+  proveedor?: string;
   // Relaciones populadas por backend
   cliente?: { id: string; nombre: string; retencionPorcentaje: number };
   productoRel?: { id: string; nombre: string; unidadComision: string; tachoKilos?: number; sacoKilos?: number; pesoPorUnidad?: number };
@@ -98,6 +105,8 @@ export interface TarifaClienteProducto {
   clienteId: string;
   productoId: string;
   fincaId?: string;
+  proveedor: string;
+  proveedoresExcluidos?: string[];
   tipo: 'porcentaje' | 'fijo_kg' | 'fijo_unidad';
   valor: number;
   activo: boolean;

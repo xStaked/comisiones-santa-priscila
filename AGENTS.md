@@ -4,20 +4,22 @@
 
 ## Visión General del Proyecto
 
-**Dinacuamar — Sistema de Liquidación de Comisiones** es una aplicación web interna para INDUSTRIAL ACUICOLA OCHOA & BARCIA DINACUAMAR CIA.LTDA. Su propósito es gestionar la liquidación de comisiones a comisionistas por órdenes de compra de productos acuícolas (camarón, tilapia, etc.).
+**Dinacuamar — Sistema de Liquidación de Comisiones** es una aplicación web interna para INDUSTRIAL ACUICOLA OCHOA & BARCIA DINACUAMAR CIA.LTDA. Su propósito es gestionar la liquidación de comisiones a comisionistas por órdenes de compra de productos acuícolas (camarón, tilapia, insumos, etc.).
 
 La aplicación es **full-stack**: un frontend en Next.js (App Router) se comunica con un backend en FastAPI que persiste los datos en PostgreSQL. La autenticación es requerida para acceder a cualquier funcionalidad.
 
 ### Funcionalidades clave
-- Autenticación con JWT (access token en localStorage, refresh token en cookie httpOnly).
-- CRUD de comisionistas con tarifas múltiples (porcentaje y/o fijo por kg).
-- Carga de órdenes de compra desde **PDF** o **imagen** (formato específico de la empresa) mediante el backend, con edición manual.
+- Autenticación con JWT (access token en `localStorage`, refresh token en cookie httpOnly).
+- CRUD de comisionistas con tarifas globales múltiples (porcentaje, fijo por kg, fijo por unidad).
+- Catálogos normalizados de **clientes** (con fincas) y **productos** (con alias para matching OCR/PDF).
+- Tarifas específicas por comisionista + cliente + producto + finca, con fallback inteligente.
+- Carga de órdenes de compra desde **PDF** o **imagen** mediante extracción posicional (PyMuPDF/easyocr) y extracción asistida por **IA (OpenAI)** con previsualización obligatoria antes de guardar.
 - Asignación de comisionistas a ítems de orden (múltiples comisionistas por ítem).
-- Cálculo automático de comisiones según tarifas.
-- Guardado de liquidaciones mensuales en historial.
+- Cálculo automático de comisiones según tarifas específicas (prioritarias) o tarifas globales (fallback).
+- Guardado de liquidaciones mensuales en historial, con restauración a órdenes activas.
 - Exportación de liquidaciones a **PDF** y **Excel** (generados en el frontend).
 - Dashboard con KPIs y gráficos (barras, pie).
-- Reportes filtrados por fecha, finca, producto y comisionista.
+- Reportes filtrados por fecha, finca, producto, comisionista y cliente.
 
 ---
 
@@ -39,6 +41,8 @@ La aplicación es **full-stack**: un frontend en Next.js (App Router) se comunic
 | PDF (generación) | jspdf + jspdf-autotable | ^4.2.1 / ^5.0.7 |
 | Excel | xlsx | ^0.18.5 |
 | Toast | sonner | ^2.0.7 |
+| Fechas | date-fns | ^4.1.0 |
+| Temas | next-themes | ^0.4.6 |
 | Gestor de paquetes | pnpm | 11.2.2 |
 | Node requerido | >= 22.13.0 | — |
 
@@ -57,8 +61,11 @@ La aplicación es **full-stack**: un frontend en Next.js (App Router) se comunic
 | Hash passwords | passlib[bcrypt] | 1.7.4 |
 | PDF extracción | PyMuPDF | 1.24.14 |
 | OCR (imágenes) | easyocr + pillow | 1.7.2 / 11.0.0 |
+| Extracción IA | openai | 2.38.0 |
+| Excel (seed) | openpyxl | 3.1.5 |
 | Testing | pytest | 8.3.5 |
 | HTTP test client | httpx | 0.28.1 |
+| Email validation | email-validator | 2.3.0 |
 
 ### Infraestructura / DevOps
 
@@ -67,6 +74,7 @@ La aplicación es **full-stack**: un frontend en Next.js (App Router) se comunic
 | Contenedores | Docker + Docker Compose |
 | Reverse proxy | nginx |
 | E2E Testing | Playwright (@playwright/test ^1.52.0) |
+| CI/CD | GitHub Actions (`.github/workflows/ci.yml`) |
 
 **Nota importante sobre Next.js:** esta versión (16.x) tiene cambios significativos respecto a versiones anteriores. Antes de escribir código, consulta la guía en `node_modules/next/dist/docs/` y respeta los avisos de deprecación.
 
@@ -82,6 +90,9 @@ src/                          # Frontend Next.js
 │   ├── globals.css           # Tailwind v4 + variables CSS + utilidades custom
 │   ├── login/page.tsx        # Página de inicio de sesión
 │   ├── comisionistas/page.tsx
+│   ├── clientes/page.tsx     # Gestión de clientes y fincas
+│   ├── productos/page.tsx    # Gestión de productos y alias
+│   ├── tarifas/page.tsx      # Tarifas específicas cliente-producto
 │   ├── ordenes/page.tsx
 │   ├── liquidacion/page.tsx
 │   ├── historial/page.tsx
@@ -94,6 +105,9 @@ src/                          # Frontend Next.js
 │   ├── QueryProvider.tsx     # Proveedor de React Query
 │   ├── dashboard/DashboardTab.tsx
 │   ├── comisionistas/ComisionistasTab.tsx
+│   ├── clientes/ClientesTab.tsx
+│   ├── productos/ProductosTab.tsx
+│   ├── tarifas/TarifasTab.tsx
 │   ├── ordenes/OrdenesTab.tsx
 │   ├── liquidacion/LiquidacionTab.tsx
 │   ├── historial/HistorialTab.tsx
@@ -108,8 +122,9 @@ src/                          # Frontend Next.js
 │   ├── utils.ts              # `cn()` para merge de clases Tailwind
 │   ├── id.ts                 # `generarId()` — crypto.randomUUID o fallback
 │   ├── demo-data.ts          # Datos de demostración precargados
-│   ├── pdf-extractor.ts      # Parser de PDFs de órdenes (cliente)
+│   ├── pdf-extractor.ts      # Parser de PDFs de órdenes (cliente, legacy)
 │   ├── export-utils.ts       # Cálculo de comisiones + export PDF/Excel + reportes
+│   ├── normalization.ts      # Normalización de texto para matching entidades
 │   ├── api.ts                # Cliente axios + endpoints de la API REST
 │   └── transform.ts          # Conversión snake_case ↔ camelCase recursiva
 └── types/
@@ -127,27 +142,63 @@ backend/                      # Backend FastAPI
 │   │   ├── base.py           # BaseModel abstracto (id UUID, created_at)
 │   │   ├── user.py
 │   │   ├── refresh_token.py
-│   │   ├── comisionista.py   # Comisionista + Tarifa
-│   │   ├── orden.py          # OrdenItem + Asignacion + EstadoOrden
+│   │   ├── comisionista.py   # Comisionista + Tarifa (globales)
+│   │   ├── cliente.py        # Cliente + Finca
+│   │   ├── producto.py       # Producto + ProductoAlias
+│   │   ├── tarifa_cliente_producto.py  # Tarifas específicas
+│   │   ├── orden.py          # Orden + OrdenItem + Asignacion + EstadoOrden
 │   │   └── liquidacion.py    # Liquidacion + LiquidacionItem + LiquidacionItemTarifa
 │   ├── routers/              # FastAPI routers (API endpoints)
 │   │   ├── auth.py           # Login, refresh, logout, register, me
 │   │   ├── comisionistas.py
+│   │   ├── clientes.py       # CRUD clientes + fincas anidadas
+│   │   ├── productos.py      # CRUD productos + alias anidados
+│   │   ├── tarifas_cliente_producto.py
 │   │   ├── ordenes.py
 │   │   ├── liquidaciones.py
 │   │   ├── reportes.py
-│   │   ├── upload.py         # Subida de PDF e imagen para extracción OCR
-│   │   └── admin.py          # Seed demo, utilidades admin
-│   ├── services/             # Lógica de negocio (extracción PDF/OCR)
-│   └── commands/             # Comandos CLI (create_superuser, seed_demo)
+│   │   ├── upload.py         # Subida PDF/imagen + extracción posicional
+│   │   └── admin.py          # Seed real (catálogos + Excel), seed demo
+│   ├── schemas/              # Pydantic schemas (validación + serialización)
+│   │   ├── auth.py
+│   │   ├── comisionista.py
+│   │   ├── cliente.py
+│   │   ├── producto.py
+│   │   ├── tarifa_cliente_producto.py
+│   │   ├── orden.py
+│   │   └── liquidacion.py
+│   ├── services/             # Lógica de negocio
+│   │   ├── pdf_extractor.py           # Extracción posicional PDF (PyMuPDF)
+│   │   ├── ocr_extractor.py           # Extracción imagen (easyocr)
+│   │   ├── ai_extractor.py            # Abstracción de extracción IA
+│   │   ├── openai_extractor.py        # Implementación OpenAI (gpt-4.1-mini)
+│   │   ├── order_extraction_models.py # Modelos Pydantic para extracción
+│   │   ├── order_extraction_normalizer.py
+│   │   ├── order_extraction_validator.py
+│   │   ├── catalog_normalization.py   # Normalización de nombres (debe sincronizarse con frontend)
+│   │   └── liquidacion.py             # Cálculo y persistencia de liquidaciones
+│   └── commands/             # Comandos CLI
+│       ├── create_superuser.py
+│       ├── seed_catalogos.py
+│       ├── seed_demo.py
+│       └── seed_tarifas_excel.py
 ├── tests/                    # Tests pytest
 │   ├── conftest.py
 │   ├── test_auth.py
 │   ├── test_comisionistas.py
-│   └── test_ordenes.py
+│   ├── test_clientes.py
+│   ├── test_ordenes.py
+│   ├── test_liquidacion_service.py
+│   ├── test_pdf_extractor.py
+│   ├── test_ai_config.py
+│   ├── test_ai_extractor.py
+│   ├── test_ai_upload.py
+│   ├── test_order_extraction_normalizer.py
+│   └── test_order_extraction_validator.py
 ├── alembic/                  # Migraciones de base de datos
 ├── requirements.txt
 ├── Dockerfile
+├── entrypoint.sh             # Arranque: alembic upgrade head + uvicorn
 └── .env.example
 
 e2e/                          # Tests End-to-End con Playwright
@@ -178,8 +229,11 @@ nginx/
 El estado ya no vive en `localStorage` (salvo el `access_token` JWT). En su lugar, el frontend usa **@tanstack/react-query** para sincronizar datos con el backend:
 
 1. **`comisionistas`** — se obtienen vía `fetchComisionistas()` (GET `/api/v1/comisionistas`).
-2. **`ordenItems`** — se obtienen vía `fetchOrdenes()` (GET `/api/v1/ordenes`).
-3. **`liquidaciones`** — se obtienen vía `fetchLiquidaciones()` (GET `/api/v1/liquidaciones`).
+2. **`clientes`** — se obtienen vía `fetchClientes()` (GET `/api/v1/clientes`).
+3. **`productos`** — se obtienen vía `fetchProductos()` (GET `/api/v1/productos`).
+4. **`tarifasClienteProducto`** — se obtienen vía `fetchTarifasClienteProducto()` (GET `/api/v1/tarifas-cliente-producto`).
+5. **`ordenItems`** — se obtienen vía `fetchOrdenes()` (GET `/api/v1/ordenes`).
+6. **`liquidaciones`** — se obtienen vía `fetchLiquidaciones()` (GET `/api/v1/liquidaciones`).
 
 `AppContext.tsx` expone funciones (add, update, delete, assign) que internamente ejecutan **mutaciones** de React Query. Tras una mutación exitosa, se invalidan las queries correspondientes para refrescar la UI.
 
@@ -187,14 +241,21 @@ El estado ya no vive en `localStorage` (salvo el `access_token` JWT). En su luga
 
 El backend persiste todo en PostgreSQL mediante SQLAlchemy ORM:
 
-- **Comisionista** → `comisionistas` (1:N con `tarifas`).
-- **OrdenItem** → `orden_items` (1:N con `asignaciones` que vinculan comisionistas).
+- **Comisionista** → `comisionistas` (1:N con `tarifas` globales).
+- **Cliente** → `clientes` (1:N con `fincas`).
+- **Producto** → `productos` (1:N con `producto_alias`).
+- **TarifaClienteProducto** → `tarifas_cliente_producto` (tarifas específicas por comisionista-cliente-producto-finca).
+- **Orden** → `ordenes` (1:N con `items`, que a su vez tienen `asignaciones`).
+- **OrdenItem** → `orden_items` (con campos nullable `cliente_id`, `producto_id`, `finca_id` para normalización progresiva).
 - **Liquidacion** → `liquidaciones` (1:N con `liquidacion_items`, cada uno con snapshot de datos y tarifas aplicadas).
 - **User** → `users` (autenticación local).
 - **RefreshToken** → `refresh_tokens` (rotación de tokens, almacenados como hash SHA-256).
 
-### Datos de demo
-Si la base de datos está vacía, se puede ejecutar el seed de demo vía el endpoint `POST /api/v1/admin/seed-demo` o mediante el comando CLI en el backend.
+### Datos de demo / reales
+Si la base de datos está vacía, se puede ejecutar el seed de catálogos y tarifas reales vía el endpoint `POST /api/v1/admin/seed-real` (requiere superusuario). Este endpoint:
+1. Limpia todas las tablas.
+2. Inserta clientes y productos desde `backend/app/commands/seed_catalogos.py`.
+3. Lee el archivo `Copia de COMISIONES GENERAL.xlsx` para crear comisionistas, fincas y tarifas específicas.
 
 ---
 
@@ -220,12 +281,50 @@ El endpoint `POST /api/v1/auth/register` requiere que el usuario autenticado sea
 
 ## Cálculo de Comisiones
 
-Las comisiones se calculan en `src/lib/export-utils.ts` (frontend) y se validan/replican en el backend al guardar liquidaciones:
+Las comisiones se calculan en `src/lib/export-utils.ts` (frontend) y se validan/replican en el backend al guardar liquidaciones (`backend/app/services/liquidacion.py`):
 
-- **Porcentaje:** `total * (valor / 100)`
-- **Fijo por kg:** `cantidad_en_kg * valor` (con conversión automática de libras a kg)
-- **Múltiples tarifas:** un comisionista puede tener varias tarifas; se suman.
-- **Múltiples comisionistas:** un ítem puede tener varios comisionistas asignados; cada uno cobra su comisión independiente.
+### Tipos de tarifa
+- **porcentaje:** `total * (valor / 100)`
+- **fijo_kg:** `cantidad_en_kg * valor` (con conversión automática de libras, canecas, galones, tachos, sacos, etc.)
+- **fijo_unidad:** `cantidad_en_unidades * valor` (respeta `peso_por_unidad` del producto cuando la orden viene en kg/litros)
+
+### Jerarquía de tarifas (prioridad descendente)
+1. **Tarifa específica** (`TarifaClienteProducto`) que coincida por comisionista + cliente + producto + finca exacta.
+2. **Tarifa específica** sin finca (`finca_id IS NULL`) para el mismo comisionista + cliente + producto.
+3. **Tarifas globales** del comisionista (`Tarifa`) solo si el comisionista **no tiene ninguna tarifa específica configurada**.
+4. Si el comisionista tiene tarifas específicas pero ninguna aplica al ítem actual, la comisión es **0** (no hay fallback a globales).
+
+### Retención en tarifas específicas por porcentaje
+Cuando una tarifa específica es de tipo `porcentaje`, se aplica sobre el total **después** de la retención del cliente:
+```
+base = total * (1 - retencion_porcentaje / 100)
+comision = base * (valor / 100)
+```
+El `retencion_porcentaje` por defecto es `1.75` y se configura por cliente.
+
+### Unidades y conversiones (frontend y backend deben coincidir)
+- **Libras → kg:** × 0.453592
+- **Caneca → kg:** × 20
+- **Galón → kg:** × 3.78541
+- **Tacho → kg:** usa `producto.tacho_kilos` (default 15)
+- **Saco → kg:** usa `producto.saco_kilos` (default 25)
+- **Peso por unidad:** si el producto tiene `peso_por_unidad` y la unidad de la orden no es kg/libras/litros, multiplica `cantidad * peso_por_unidad`
+
+---
+
+## Normalización de Texto para Matching
+
+Tanto el frontend como el backend realizan matching de entidades (cliente, producto, finca) por nombre normalizado. **La lógica debe mantenerse sincronizada** en ambos lados:
+
+- **Frontend:** `src/lib/normalization.ts`
+- **Backend:** `backend/app/services/catalog_normalization.py`
+
+Funciones clave:
+- `normalizarTexto()` — quita tildes, pasa a mayúsculas, elimina caracteres no alfanuméricos.
+- `normalizarNombreFinca()` — elimina tokens `ADM` / `ADMINISTRACION`; corrige `GOLDO` → `GOLFO`.
+- `normalizarNombreProducto()` — maneja familias de producto (ECU-BACILLUS → `PAST TH`, `PAST GRAN`, etc.), abreviaturas sueltas (`NATUXTRACT`, `CITRIUS`, `CALCINIT`, `MORTAL C`).
+
+Si modificas una, **debes replicar el cambio en la otra** para evitar inconsistencias entre la vista previa de comisiones y el cálculo persistido en liquidaciones.
 
 ---
 
@@ -233,10 +332,26 @@ Las comisiones se calculan en `src/lib/export-utils.ts` (frontend) y se validan/
 
 El backend (`backend/app/services/`) contiene la lógica principal de extracción:
 
+### Extracción posicional (sin IA)
 - **PDF:** usa `PyMuPDF` para extraer texto posicional de órdenes de compra DINACUAMAR.
 - **Imágenes:** usa `easyocr` (OCR) para extraer datos de órdenes en formato imagen.
+- Los endpoints son `POST /api/v1/upload/pdf` e `POST /api/v1/upload/imagen`. Aceptan un parámetro de query opcional `cliente_id` para vincular fincas durante la extracción.
 
-El frontend aún conserva `src/lib/pdf-extractor.ts` (basado en `pdfjs-dist`) para extracción cliente-side, pero la carga de archivos reales se realiza contra los endpoints del backend (`POST /api/v1/upload/pdf` e `POST /api/v1/upload/imagen`).
+### Extracción asistida por IA (OpenAI)
+- Se activa con las variables de entorno:
+  ```
+  AI_EXTRACTION_ENABLED=true
+  AI_EXTRACTION_PROVIDER=openai
+  OPENAI_API_KEY=sk-...
+  OPENAI_EXTRACTION_MODEL=gpt-4.1-mini
+  AI_EXTRACTION_TIMEOUT_SECONDS=45
+  AI_EXTRACTION_MAX_FILE_MB=10
+  ```
+- Usa la API de respuestas de OpenAI con `json_schema` en modo estricto.
+- La IA **solo propone** datos estructurados; el usuario debe revisar la previsualización antes de guardar.
+- **Nunca registres** PDFs, imágenes ni texto completo extraído en logs o almacenamiento persistente.
+
+El frontend aún conserva `src/lib/pdf-extractor.ts` (basado en `pdfjs-dist`) para extracción cliente-side, pero la carga de archivos reales se realiza contra los endpoints del backend.
 
 ---
 
@@ -283,7 +398,7 @@ alembic upgrade head
 # Crear superusuario
 python -m app.commands.create_superuser
 
-# Seed de datos de demo
+# Seed de datos de demo / reales
 python -m app.commands.seed_demo
 
 # Tests del backend
@@ -314,7 +429,7 @@ docker-compose up --build
 docker-compose -f docker-compose.prod.yml up --build -d
 ```
 
-La imagen del frontend usa `output: "standalone"` y el usuario `nextjs` (no root). El backend usa Python 3.12-slim. Nginx actúa como reverse proxy, sirviendo el frontend en `/` y el backend en `/api/`.
+La imagen del frontend usa `output: "standalone"` y el usuario `nextjs` (no root). El backend usa Python 3.12-slim e instala `torch` CPU-only **antes** que `easyocr` para evitar dependencias CUDA. Nginx actúa como reverse proxy, sirviendo el frontend en `/` y el backend en `/api/`. El `entrypoint.sh` del backend ejecuta `alembic upgrade head` antes de iniciar Uvicorn.
 
 ---
 
@@ -333,20 +448,35 @@ La imagen del frontend usa `output: "standalone"` y el usuario `nextjs` (no root
 - Archivos:
   - `test_auth.py` — login, refresh, logout, register protegido
   - `test_comisionistas.py` — CRUD de comisionistas
+  - `test_clientes.py` — CRUD de clientes y fincas
   - `test_ordenes.py` — CRUD de órdenes y asignaciones
+  - `test_liquidacion_service.py` — cálculo y persistencia de liquidaciones
+  - `test_pdf_extractor.py` — extracción posicional de PDFs
+  - `test_ai_config.py` — validación de configuración IA
+  - `test_ai_extractor.py` — contrato y comportamiento del extractor IA
+  - `test_ai_upload.py` — endpoints de subida con IA
+  - `test_order_extraction_normalizer.py` — normalización de extracciones
+  - `test_order_extraction_validator.py` — validación de extracciones
+
+### CI/CD (GitHub Actions)
+El workflow `.github/workflows/ci.yml` ejecuta tres jobs en paralelo:
+1. **backend-test** — instala dependencias Python y corre `pytest` contra PostgreSQL 16.
+2. **frontend-build** — instala pnpm + dependencias y ejecuta `pnpm run build`.
+3. **frontend-lint** — instala pnpm + dependencias y ejecuta `pnpm run lint`.
 
 ---
 
 ## Seguridad y Consideraciones
 
 - **Autenticación obligatoria:** todas las rutas protegidas requieren JWT válido. El endpoint de login tiene rate limiting.
-- **JWT en producción:** `JWT_SECRET_KEY` debe tener al menos 32 caracteres. Los orígenes wildcard (`*`) en `CORS_ORIGINS` están prohibidos en producción.
+- **JWT en producción:** `JWT_SECRET_KEY` debe tener al menos 32 caracteres. Los orígenes wildcard (`*`) en `CORS_ORIGINS` están prohibidos en producción (levanta `RuntimeError` en startup).
 - **Refresh tokens:** se almacenan como hash SHA-256 en la base de datos y se rotan en cada uso. La cookie es httpOnly y secure en producción.
-- **Headers de seguridad:** tanto el backend (middleware) como nginx agregan headers de seguridad (X-Content-Type-Options, X-Frame-Options, CSP-like, etc.).
+- **Headers de seguridad:** tanto el backend (middleware `SecurityHeadersMiddleware`) como nginx agregan headers de seguridad (X-Content-Type-Options, X-Frame-Options, CSP-like, etc.).
 - **Rate limiting:** configurado vía `RATE_LIMIT_PER_MINUTE` (default 60 req/min).
 - **Validación de inputs:** el backend valida todos los inputs con Pydantic; en el frontend se usan formularios controlados y toasts de error.
 - **Acciones destructivas:** se usa `confirm()` del navegador para eliminar liquidaciones, restaurar demo, etc.
 - **Datos sensibles:** nunca se exponen contraseñas en texto plano; todos los hashes usan bcrypt.
+- **Extracción IA:** nunca almacenes ni registres en logs el contenido de archivos subidos ni el texto completo extraído.
 
 ---
 
@@ -356,11 +486,14 @@ La imagen del frontend usa `output: "standalone"` y el usuario `nextjs` (no root
 - Si agregas un nuevo campo a los tipos (`src/types/index.ts`), revisa si necesitas:
   1. Actualizar el modelo SQLAlchemy correspondiente en `backend/app/models/`.
   2. Actualizar el schema Pydantic en `backend/app/schemas/` (si existe).
-  3. Actualizar la transformación camelCase/snakeCase en `src/lib/transform.ts` si es necesario.
+  3. Actualizar la serialización en el router correspondiente si expone relaciones.
+  4. Actualizar la transformación camelCase/snakeCase en `src/lib/transform.ts` si es necesario.
 - Al trabajar con fechas, usa el formato ISO (`YYYY-MM-DD`) internamente y `toLocaleDateString('es-ES')` para mostrar al usuario.
 - El formato numérico visible al usuario usa locale español: `1.234,56`.
 - Para nuevas páginas, sigue el patrón: `page.tsx` envuelve `<Shell><MiTab /></Shell>` y debe estar protegida por `AuthGuard` si es privada.
 - Las rutas de API en el backend deben seguir el prefijo `/api/v1/` y usar kebab-case.
 - Los modelos SQLAlchemy usan snake_case; los schemas Pydantic expuestos al frontend usan camelCase para consistencia con TypeScript.
 - No modifiques la lógica de extracción de PDF del backend (`backend/app/services/pdf_extractor.py`) sin entender el impacto en órdenes reales de la empresa.
+- Si modificas la normalización de texto (`src/lib/normalization.ts` o `backend/app/services/catalog_normalization.py`), **sincroniza el cambio en ambos archivos**.
 - Siempre que agregues una dependencia nueva en el backend, actualiza `backend/requirements.txt`.
+- El archivo `Copia de COMISIONES GENERAL.xlsx` en la raíz del backend es la fuente de datos real para el seed de tarifas; no lo muevas ni renombres sin actualizar `backend/app/commands/seed_tarifas_excel.py`.

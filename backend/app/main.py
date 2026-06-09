@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -5,10 +7,12 @@ from starlette.requests import Request
 
 from app.config import settings
 
+logger = logging.getLogger(__name__)
+
 # Import models so routers know about them
 from app.models import user, refresh_token, comisionista, orden, liquidacion, cliente, producto, tarifa_cliente_producto  # noqa: F401
 
-from app.routers import admin, auth, comisionistas, liquidaciones, ordenes, reportes, upload, clientes, productos, tarifas_cliente_producto
+from app.routers import admin, auth, comisionistas, liquidaciones, ordenes, reportes, upload, clientes, productos, tarifas_cliente_producto, proveedores
 
 app = FastAPI(
     title="Dinacuamar — Sistema de Liquidación de Comisiones",
@@ -38,13 +42,33 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 app.add_middleware(SecurityHeadersMiddleware)
 
 # CORS middleware
-origins = [origin.strip() for origin in settings.CORS_ORIGINS.split(",")]
+origins = {
+    origin.strip()
+    for origin in settings.CORS_ORIGINS.split(",")
+    if origin.strip()
+}
+if settings.ENV == "development":
+    origins.update([
+        "http://localhost:3000",
+        "http://localhost:3001",
+        "http://localhost:3002",
+        "http://localhost:5173",
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:3001",
+        "http://127.0.0.1:3002",
+        "http://127.0.0.1:5173",
+    ])
+
+origins = list(origins)
+logger.info("CORS allow_origins: %s", origins)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
 
 # Routers
@@ -97,6 +121,11 @@ app.include_router(
     tarifas_cliente_producto.router,
     prefix="/api/v1/tarifas-cliente-producto",
     tags=["tarifas-cliente-producto"],
+)
+app.include_router(
+    proveedores.router,
+    prefix="/api/v1/proveedores",
+    tags=["proveedores"],
 )
 
 

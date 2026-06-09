@@ -40,6 +40,7 @@ class OrdenItemCreate(OrdenItemBase):
     cliente_id: Optional[UUID] = None
     producto_id: Optional[UUID] = None
     finca_id: Optional[UUID] = None
+    proveedor: Optional[str] = None
 
 
 class OrdenItemUpdate(BaseModel):
@@ -66,6 +67,7 @@ class OrdenItemResponse(OrdenItemBase):
     cliente_id: Optional[UUID] = None
     producto_id: Optional[UUID] = None
     finca_id: Optional[UUID] = None
+    proveedor: Optional[str] = None
     cliente: Optional[ClienteResponse] = None
     producto_obj: Optional[ProductoResponse] = Field(default=None, alias="productoRel")
     finca_obj: Optional[FincaResponse] = Field(default=None, alias="fincaRel")

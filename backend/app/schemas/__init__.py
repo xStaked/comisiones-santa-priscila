@@ -44,6 +44,7 @@ from app.schemas.producto import (
     ProductoResponse,
     ProductoUpdate,
 )
+from app.schemas.proveedor import ProveedorResponse
 
 __all__ = [
     "ResponseBase",

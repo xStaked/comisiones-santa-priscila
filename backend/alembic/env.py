@@ -13,7 +13,7 @@ from app.database import Base
 from app.config import settings
 
 # Import all models so autogenerate detects them
-from app.models import user, comisionista, orden, liquidacion, cliente, producto, tarifa_cliente_producto  # noqa: F401
+from app.models import user, comisionista, orden, liquidacion, cliente, producto, tarifa_cliente_producto, proveedor  # noqa: F401
 
 target_metadata = Base.metadata
 

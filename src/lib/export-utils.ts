@@ -147,6 +147,7 @@ export function encontrarTarifaEspecifica(
   const nombreClienteItem = item.cliente?.nombre;
   const sinClienteIdentificado = !item.clienteId && !nombreClienteItem;
   const nombreFincaItem = item.fincaRel?.nombre || (item.finca !== '-' ? item.finca : item.sector);
+  const proveedorOrden = normalizarTexto(item.proveedor || '');
 
   const coincideCliente = (tarifa: TarifaClienteProducto) => {
     if (tarifa.clienteId && item.clienteId && tarifa.clienteId === item.clienteId) return true;
@@ -171,6 +172,15 @@ export function encontrarTarifaEspecifica(
     return !!nt && !!ni && nt === ni;
   };
 
+  const tarifaAplicaParaProveedor = (tarifa: TarifaClienteProducto) => {
+    if (tarifa.proveedoresExcluidos?.length) {
+      const excluidos = tarifa.proveedoresExcluidos.map(normalizarTexto);
+      if (excluidos.includes(proveedorOrden)) return false;
+    }
+    if (!tarifa.proveedor) return true;
+    return normalizarTexto(tarifa.proveedor) === proveedorOrden;
+  };
+
   const candidatas = tarifas.filter(
     (tarifa) =>
       tarifa.comisionistaId === comisionistaId &&
@@ -178,19 +188,39 @@ export function encontrarTarifaEspecifica(
       coincideProducto(tarifa)
   );
 
-  // 1. Tarifa con finca exacta (por ID o por nombre)
-  const conFinca = candidatas.find((tarifa) => tarifa.fincaId && coincideFinca(tarifa));
-  if (conFinca) {
-    return conFinca;
+  // 1. Tarifa con finca exacta + proveedor específico
+  const conFincaYProv = candidatas.find(
+    (tarifa) => tarifa.fincaId && coincideFinca(tarifa) && tarifa.proveedor && tarifaAplicaParaProveedor(tarifa)
+  );
+  if (conFincaYProv) {
+    return conFincaYProv;
   }
 
-  // 2. Tarifa sin finca (aplica a todas las fincas de ese cliente+producto)
-  const sinFinca = candidatas.find((tarifa) => !tarifa.fincaId);
-  if (sinFinca) {
-    return sinFinca;
+  // 2. Tarifa con finca exacta + sin proveedor (wildcard)
+  const conFincaSinProv = candidatas.find(
+    (tarifa) => tarifa.fincaId && coincideFinca(tarifa) && !tarifa.proveedor
+  );
+  if (conFincaSinProv) {
+    return conFincaSinProv;
   }
 
-  // 3. Fallback: si la orden no tiene finca identificada, buscar cualquier tarifa
+  // 3. Tarifa sin finca + proveedor específico
+  const sinFincaYProv = candidatas.find(
+    (tarifa) => !tarifa.fincaId && tarifa.proveedor && tarifaAplicaParaProveedor(tarifa)
+  );
+  if (sinFincaYProv) {
+    return sinFincaYProv;
+  }
+
+  // 4. Tarifa sin finca + sin proveedor (wildcard)
+  const sinFincaSinProv = candidatas.find(
+    (tarifa) => !tarifa.fincaId && !tarifa.proveedor
+  );
+  if (sinFincaSinProv) {
+    return sinFincaSinProv;
+  }
+
+  // 5. Fallback: si la orden no tiene finca identificada, buscar cualquier tarifa
   //    del mismo comisionista+cliente+producto cuya finca coincida por nombre
   if (!item.fincaId && !nombreFincaItem) {
     return undefined;
@@ -202,7 +232,16 @@ export function encontrarTarifaEspecifica(
 
 export function calcularComision(item: OrdenItem, comisionista: Comisionista | undefined): number {
   if (!comisionista) return 0;
-  return comisionista.tarifas.reduce((sum, tarifa) => sum + calcularComisionPorTarifa(item, tarifa), 0);
+  const proveedorOrden = normalizarTexto(item.proveedor || '');
+  return comisionista.tarifas.reduce((sum, tarifa) => {
+    if (tarifa.proveedoresExcluidos?.length) {
+      const excluidos = tarifa.proveedoresExcluidos.map(normalizarTexto);
+      if (excluidos.includes(proveedorOrden)) {
+        return sum;
+      }
+    }
+    return sum + calcularComisionPorTarifa(item, tarifa);
+  }, 0);
 }
 
 export function calcularComisionTotalItem(

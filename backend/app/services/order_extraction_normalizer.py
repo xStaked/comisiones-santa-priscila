@@ -7,6 +7,7 @@ from app.models.cliente import Cliente, Finca
 from app.models.producto import Producto, ProductoAlias
 from app.models.tarifa_cliente_producto import TarifaClienteProducto
 from app.services.catalog_normalization import (
+    _normalizar_texto,
     normalizar_nombre_finca,
     normalizar_nombre_producto,
 )
@@ -91,11 +92,14 @@ def _buscar_comisionistas_aplicables(
     cliente: Cliente | None,
     producto: Producto | None,
     finca: Finca | None,
+    proveedor: str = "",
 ) -> list[dict[str, str]]:
     if not cliente or not producto:
         return []
 
-    tarifas = db.query(TarifaClienteProducto).filter(
+    proveedor_normalizado = _normalizar_texto(proveedor)
+
+    query = db.query(TarifaClienteProducto).filter(
         TarifaClienteProducto.cliente_id == cliente.id,
         TarifaClienteProducto.producto_id == producto.id,
         TarifaClienteProducto.activo.is_(True),
@@ -103,16 +107,35 @@ def _buscar_comisionistas_aplicables(
     if cliente.fincas:
         if not finca:
             return []
-        tarifas = tarifas.filter(TarifaClienteProducto.finca_id == finca.id)
+        query = query.filter(TarifaClienteProducto.finca_id == finca.id)
     else:
-        tarifas = tarifas.filter(TarifaClienteProducto.finca_id.is_(None))
+        query = query.filter(TarifaClienteProducto.finca_id.is_(None))
 
-    return [
-        {"comisionistaId": str(comisionista_id)}
-        for comisionista_id in dict.fromkeys(
-            tarifa.comisionista_id for tarifa in tarifas.all()
-        )
-    ]
+    tarifas = query.all()
+
+    # Priorizar tarifas con proveedor específico que coincida
+    comisionistas_con_prov: dict[str, bool] = {}
+    comisionistas_sin_prov: dict[str, bool] = {}
+
+    for tarifa in tarifas:
+        com_id = str(tarifa.comisionista_id)
+        if tarifa.proveedor:
+            if _normalizar_texto(tarifa.proveedor) == proveedor_normalizado:
+                comisionistas_con_prov[com_id] = True
+        else:
+            comisionistas_sin_prov[com_id] = True
+
+    # Si un comisionista tiene tarifa con proveedor coincidente, usar esa.
+    # Si no, usar la tarifa sin proveedor (wildcard).
+    resultado: list[str] = []
+    for com_id in dict.fromkeys(t.comisionista_id for t in tarifas):
+        com_id_str = str(com_id)
+        if com_id_str in comisionistas_con_prov:
+            resultado.append(com_id_str)
+        elif com_id_str in comisionistas_sin_prov:
+            resultado.append(com_id_str)
+
+    return [{"comisionistaId": cid} for cid in resultado]
 
 
 def normalizar_orden_extraida(db: Session | None, orden: OrdenValidada, cliente_id: str | None = None) -> OrdenValidada:
@@ -146,6 +169,7 @@ def normalizar_orden_extraida(db: Session | None, orden: OrdenValidada, cliente_
             item_cliente or (finca.cliente if finca else None),
             producto,
             finca,
+            orden.proveedor or "",
         )
 
     return orden

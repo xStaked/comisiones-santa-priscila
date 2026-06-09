@@ -3,8 +3,10 @@ from sqlalchemy import (
     ForeignKey,
     Boolean,
     Numeric,
+    String,
     UniqueConstraint,
     Uuid,
+    JSON,
     Enum as SAEnum,
 )
 from sqlalchemy.orm import relationship
@@ -35,6 +37,8 @@ class TarifaClienteProducto(BaseModel):
         ForeignKey("fincas.id", ondelete="CASCADE"),
         nullable=True,
     )
+    proveedor = Column(String, nullable=False, default="")
+    proveedores_excluidos = Column(JSON, nullable=False, default=list)
     tipo = Column(
         SAEnum(TipoTarifa, name="tipo_tarifa"),
         nullable=False,
@@ -53,6 +57,7 @@ class TarifaClienteProducto(BaseModel):
             "cliente_id",
             "producto_id",
             "finca_id",
-            name="uq_tarifa_com_cli_prod_finca",
+            "proveedor",
+            name="uq_tarifa_com_cli_prod_finca_prov",
         ),
     )

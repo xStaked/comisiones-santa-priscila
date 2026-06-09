@@ -92,6 +92,7 @@ function ordenItemToCreatePayload(item: OrdenItem) {
     clienteId: item.clienteId,
     productoId: item.productoId,
     fincaId: item.fincaId,
+    proveedor: item.proveedor,
     comisionistaIds: item.comisionistas.map((c) => c.comisionistaId),
   };
 }

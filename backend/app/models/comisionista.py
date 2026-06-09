@@ -1,5 +1,5 @@
 import enum
-from sqlalchemy import Column, String, Numeric, ForeignKey, Enum as SAEnum, Uuid
+from sqlalchemy import Column, String, Numeric, ForeignKey, Enum as SAEnum, Uuid, JSON
 from sqlalchemy.orm import relationship
 from app.models.base import BaseModel
 
@@ -33,5 +33,6 @@ class Tarifa(BaseModel):
     )
     tipo = Column(SAEnum(TipoTarifa, name="tipo_tarifa"), nullable=False)
     valor = Column(Numeric(10, 4), nullable=False)
+    proveedores_excluidos = Column(JSON, nullable=False, default=list)
 
     comisionista = relationship("Comisionista", back_populates="tarifas")

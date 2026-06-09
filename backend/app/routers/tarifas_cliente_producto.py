@@ -30,6 +30,8 @@ def _enriquecer_respuesta(
         clienteId=tarifa.cliente_id,
         productoId=tarifa.producto_id,
         fincaId=tarifa.finca_id,
+        proveedor=tarifa.proveedor,
+        proveedoresExcluidos=tarifa.proveedores_excluidos or [],
         tipo=tarifa.tipo.value if hasattr(tarifa.tipo, "value") else tarifa.tipo,
         valor=tarifa.valor,
         activo=tarifa.activo,
@@ -88,6 +90,8 @@ def crear_tarifa_cliente_producto(
         cliente_id=data.cliente_id,
         producto_id=data.producto_id,
         finca_id=data.finca_id,
+        proveedor=data.proveedor,
+        proveedores_excluidos=data.proveedores_excluidos or [],
         tipo=data.tipo,
         valor=data.valor,
     )
@@ -102,7 +106,7 @@ def crear_tarifa_cliente_producto(
         db.rollback()
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Ya existe una tarifa para esta combinación de comisionista, cliente, producto y finca",
+            detail="Ya existe una tarifa para esta combinación de comisionista, cliente, producto, finca y proveedor",
         ) from exc
     except Exception as exc:
         db.rollback()
@@ -139,6 +143,8 @@ def actualizar_tarifa_cliente_producto(
     tarifa.cliente_id = data.cliente_id
     tarifa.producto_id = data.producto_id
     tarifa.finca_id = data.finca_id
+    tarifa.proveedor = data.proveedor
+    tarifa.proveedores_excluidos = data.proveedores_excluidos or []
     tarifa.tipo = data.tipo
     tarifa.valor = data.valor
 
@@ -150,7 +156,7 @@ def actualizar_tarifa_cliente_producto(
         db.rollback()
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Ya existe una tarifa para esta combinación de comisionista, cliente y producto",
+            detail="Ya existe una tarifa para esta combinación de comisionista, cliente, producto, finca y proveedor",
         ) from exc
     except Exception as exc:
         db.rollback()

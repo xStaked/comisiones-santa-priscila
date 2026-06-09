@@ -4,8 +4,8 @@ import { useMemo, useState } from 'react';
 import { Plus, Pencil, Trash2, Percent, Weight, Search, FileSpreadsheet } from 'lucide-react';
 import { useQueries, useQuery } from '@tanstack/react-query';
 import { useApp } from '@/context/AppContext';
-import { TarifaClienteProducto, Finca } from '@/types';
-import { fetchFincas } from '@/lib/api';
+import { TarifaClienteProducto, Finca, Proveedor } from '@/types';
+import { fetchFincas, fetchProveedores } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -92,11 +92,19 @@ export function TarifasTab() {
   const [open, setOpen] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [tarifaToDelete, setTarifaToDelete] = useState<TarifaClienteProducto | null>(null);
+  const [proveedoresSeleccionados, setProveedoresSeleccionados] = useState<string[]>([]);
+
+  const { data: proveedores = [] } = useQuery<Proveedor[]>({
+    queryKey: ['proveedores'],
+    queryFn: fetchProveedores,
+  });
+
   const [form, setForm] = useState<{
     comisionistaId: string;
     clienteId: string;
     productoId: string;
     fincaId: string;
+    proveedor: string;
     tipo: 'porcentaje' | 'fijo_kg' | 'fijo_unidad';
     valor: string;
     activo: boolean;
@@ -105,6 +113,7 @@ export function TarifasTab() {
     clienteId: '',
     productoId: '',
     fincaId: '',
+    proveedor: '',
     tipo: 'porcentaje',
     valor: '',
     activo: true,
@@ -166,6 +175,10 @@ export function TarifasTab() {
     nombreRelacion(t.producto) || nombreProducto(t.productoId);
   const getFincaTarifa = (t: TarifaClienteProducto) =>
     nombreRelacion(t.finca) || nombreFinca(t.fincaId);
+  const getProveedorTarifa = (t: TarifaClienteProducto) =>
+    t.proveedor || 'Cualquier proveedor';
+  const getExcluidosTarifa = (t: TarifaClienteProducto) =>
+    (t.proveedoresExcluidos || []).join(', ');
 
   const filtered = tarifasClienteProducto.filter((t) => {
     const textoBusqueda = [
@@ -173,6 +186,8 @@ export function TarifasTab() {
       getClienteTarifa(t),
       getProductoTarifa(t),
       getFincaTarifa(t),
+      getProveedorTarifa(t),
+      getExcluidosTarifa(t),
     ].join(' ').toLowerCase();
 
     const matchSearch =
@@ -196,10 +211,12 @@ export function TarifasTab() {
       clienteId: '',
       productoId: '',
       fincaId: '',
+      proveedor: '',
       tipo: 'porcentaje',
       valor: '',
       activo: true,
     });
+    setProveedoresSeleccionados([]);
     setEditing(null);
   };
 
@@ -228,6 +245,8 @@ export function TarifasTab() {
       clienteId: form.clienteId,
       productoId: form.productoId,
       fincaId: form.fincaId || undefined,
+      proveedor: form.proveedor || '',
+      proveedoresExcluidos: proveedoresSeleccionados,
       tipo: form.tipo,
       valor: parseFloat(form.valor),
       activo: form.activo,
@@ -249,10 +268,12 @@ export function TarifasTab() {
       clienteId: t.clienteId,
       productoId: t.productoId,
       fincaId: t.fincaId || '',
+      proveedor: t.proveedor || '',
       tipo: t.tipo,
       valor: t.valor.toString(),
       activo: t.activo,
     });
+    setProveedoresSeleccionados(t.proveedoresExcluidos || []);
     setOpen(true);
   };
 
@@ -470,6 +491,47 @@ export function TarifasTab() {
               />
             )}
 
+            <div className="space-y-2">
+              <Label htmlFor="proveedor">Proveedor (opcional)</Label>
+              <Input
+                id="proveedor"
+                type="text"
+                value={form.proveedor}
+                onChange={(e) => setForm({ ...form, proveedor: e.target.value })}
+                placeholder="Ej: INDUSTRIAL ACUICOLA OCHOA & BARCIA DINACUAMAR"
+                className="bg-white border-slate-200 rounded-xl focus:border-slate-900 focus:ring-slate-900/10"
+              />
+              <p className="text-xs text-slate-500">
+                Dejar en blanco para aplicar a cualquier proveedor.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Proveedores excluidos</Label>
+              <div className="space-y-2 max-h-40 overflow-y-auto rounded-xl border border-slate-200 bg-white p-3">
+                {proveedores.map((p) => (
+                  <label key={p.id} className="flex items-center gap-2 text-sm cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={proveedoresSeleccionados.includes(p.nombre)}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setProveedoresSeleccionados([...proveedoresSeleccionados, p.nombre]);
+                        } else {
+                          setProveedoresSeleccionados(proveedoresSeleccionados.filter((n) => n !== p.nombre));
+                        }
+                      }}
+                      className="h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-900"
+                    />
+                    <span className="text-slate-700">{p.nombre}</span>
+                  </label>
+                ))}
+              </div>
+              <p className="text-xs text-slate-500">
+                Estos proveedores no cobrarán comisión con esta tarifa.
+              </p>
+            </div>
+
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="tipo">Tipo</Label>
@@ -592,6 +654,8 @@ export function TarifasTab() {
                   <TableHead className="text-slate-500 font-medium">Cliente</TableHead>
                   <TableHead className="text-slate-500 font-medium">Finca</TableHead>
                   <TableHead className="text-slate-500 font-medium">Producto</TableHead>
+                  <TableHead className="text-slate-500 font-medium">Proveedor</TableHead>
+                  <TableHead className="text-slate-500 font-medium">Excluidos</TableHead>
                   <TableHead className="text-slate-500 font-medium">Tipo</TableHead>
                   <TableHead className="text-slate-500 font-medium">Valor</TableHead>
                   <TableHead className="text-slate-500 font-medium">Estado</TableHead>
@@ -607,6 +671,12 @@ export function TarifasTab() {
                     <TableCell className="text-slate-700">{getClienteTarifa(t)}</TableCell>
                     <TableCell className="text-slate-700">{getFincaTarifa(t)}</TableCell>
                     <TableCell className="text-slate-700">{getProductoTarifa(t)}</TableCell>
+                    <TableCell className="text-slate-700 text-xs max-w-[180px] truncate" title={getProveedorTarifa(t)}>
+                      {getProveedorTarifa(t)}
+                    </TableCell>
+                    <TableCell className="text-slate-700 text-xs max-w-[180px] truncate" title={(t.proveedoresExcluidos || []).join(', ')}>
+                      {(t.proveedoresExcluidos || []).join(', ') || '—'}
+                    </TableCell>
                     <TableCell>
                       <Badge
                         variant="secondary"

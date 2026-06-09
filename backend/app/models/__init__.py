@@ -7,6 +7,7 @@ from app.models.liquidacion import Liquidacion, LiquidacionItem, LiquidacionItem
 from app.models.cliente import Cliente, Finca
 from app.models.producto import Producto
 from app.models.tarifa_cliente_producto import TarifaClienteProducto
+from app.models.proveedor import Proveedor
 
 __all__ = [
     "BaseModel",
@@ -26,4 +27,5 @@ __all__ = [
     "Finca",
     "Producto",
     "TarifaClienteProducto",
+    "Proveedor",
 ]

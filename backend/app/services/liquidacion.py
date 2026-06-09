@@ -14,6 +14,7 @@ from app.models.orden import Asignacion, EstadoOrden, Orden, OrdenItem
 from app.models.producto import Producto
 from app.models.tarifa_cliente_producto import TarifaClienteProducto
 from app.services.catalog_normalization import (
+    _normalizar_texto,
     normalizar_nombre_finca,
     normalizar_nombre_producto,
 )
@@ -83,10 +84,13 @@ def _cantidad_para_tarifa_kg(orden_item: OrdenItem) -> Decimal:
 def _buscar_tarifa_especifica(
     db: Session, orden_item: OrdenItem, comisionista_id: UUID
 ) -> TarifaClienteProducto | None:
-    """Busca tarifa específica Comisionista+Cliente+Producto+Finca, luego sin Finca."""
+    """Busca tarifa específica considerando Cliente, Producto, Finca y Proveedor."""
     cliente_id = orden_item.cliente_id
     producto_id = orden_item.producto_id
     finca_id = orden_item.finca_id
+    proveedor_orden = _normalizar_texto(
+        orden_item.orden.proveedor if orden_item.orden else ""
+    )
 
     if not producto_id and orden_item.producto:
         nombre_producto = normalizar_nombre_producto(orden_item.producto)
@@ -122,7 +126,19 @@ def _buscar_tarifa_especifica(
     if not cliente_id or not producto_id:
         return None
 
-    # 1. Con finca exacta (por ID)
+    def _tarifa_aplica_para_proveedor(tarifa: TarifaClienteProducto) -> bool:
+        # 1. Si tiene proveedores excluidos y el proveedor de la orden está en la lista, NO aplica
+        if tarifa.proveedores_excluidos:
+            excluidos = [_normalizar_texto(p) for p in tarifa.proveedores_excluidos]
+            if proveedor_orden in excluidos:
+                return False
+        # 2. Si tiene proveedor específico, solo aplica si coincide
+        if tarifa.proveedor:
+            return _normalizar_texto(tarifa.proveedor) == proveedor_orden
+        # 3. Sin proveedor ni exclusiones = aplica a cualquiera
+        return True
+
+    # 1. Con finca exacta (por ID) + proveedor específico
     if finca_id:
         tarifa = (
             db.query(TarifaClienteProducto)
@@ -131,14 +147,32 @@ def _buscar_tarifa_especifica(
                 TarifaClienteProducto.cliente_id == cliente_id,
                 TarifaClienteProducto.producto_id == producto_id,
                 TarifaClienteProducto.finca_id == finca_id,
+                TarifaClienteProducto.proveedor != "",
                 TarifaClienteProducto.activo.is_(True),
             )
             .first()
         )
-        if tarifa:
+        if tarifa and _tarifa_aplica_para_proveedor(tarifa):
             return tarifa
 
-    # 2. Buscar tarifa con finca por nombre (cuando la orden no tiene finca_id)
+    # 2. Con finca exacta (por ID) + sin proveedor (wildcard)
+    if finca_id:
+        tarifa = (
+            db.query(TarifaClienteProducto)
+            .filter(
+                TarifaClienteProducto.comisionista_id == comisionista_id,
+                TarifaClienteProducto.cliente_id == cliente_id,
+                TarifaClienteProducto.producto_id == producto_id,
+                TarifaClienteProducto.finca_id == finca_id,
+                TarifaClienteProducto.proveedor == "",
+                TarifaClienteProducto.activo.is_(True),
+            )
+            .first()
+        )
+        if tarifa and _tarifa_aplica_para_proveedor(tarifa):
+            return tarifa
+
+    # 3. Buscar tarifa con finca por nombre + proveedor específico
     if not finca_id and nombre_finca_orden:
         nombre_finca = normalizar_nombre_finca(nombre_finca_orden)
         tarifas_con_finca = (
@@ -148,15 +182,35 @@ def _buscar_tarifa_especifica(
                 TarifaClienteProducto.cliente_id == cliente_id,
                 TarifaClienteProducto.producto_id == producto_id,
                 TarifaClienteProducto.finca_id.isnot(None),
+                TarifaClienteProducto.proveedor != "",
                 TarifaClienteProducto.activo.is_(True),
             )
             .all()
         )
         for t in tarifas_con_finca:
-            if t.finca and normalizar_nombre_finca(t.finca.nombre) == nombre_finca:
+            if t.finca and normalizar_nombre_finca(t.finca.nombre) == nombre_finca and _tarifa_aplica_para_proveedor(t):
                 return t
 
-    # 3. Sin finca (finca_id IS NULL) - fallback
+    # 4. Buscar tarifa con finca por nombre + sin proveedor
+    if not finca_id and nombre_finca_orden:
+        nombre_finca = normalizar_nombre_finca(nombre_finca_orden)
+        tarifas_con_finca = (
+            db.query(TarifaClienteProducto)
+            .filter(
+                TarifaClienteProducto.comisionista_id == comisionista_id,
+                TarifaClienteProducto.cliente_id == cliente_id,
+                TarifaClienteProducto.producto_id == producto_id,
+                TarifaClienteProducto.finca_id.isnot(None),
+                TarifaClienteProducto.proveedor == "",
+                TarifaClienteProducto.activo.is_(True),
+            )
+            .all()
+        )
+        for t in tarifas_con_finca:
+            if t.finca and normalizar_nombre_finca(t.finca.nombre) == nombre_finca and _tarifa_aplica_para_proveedor(t):
+                return t
+
+    # 5. Sin finca (finca_id IS NULL) + proveedor específico
     tarifa = (
         db.query(TarifaClienteProducto)
         .filter(
@@ -164,11 +218,30 @@ def _buscar_tarifa_especifica(
             TarifaClienteProducto.cliente_id == cliente_id,
             TarifaClienteProducto.producto_id == producto_id,
             TarifaClienteProducto.finca_id.is_(None),
+            TarifaClienteProducto.proveedor != "",
             TarifaClienteProducto.activo.is_(True),
         )
         .first()
     )
-    return tarifa
+    if tarifa and _tarifa_aplica_para_proveedor(tarifa):
+        return tarifa
+
+    # 6. Sin finca (finca_id IS NULL) + sin proveedor (wildcard)
+    tarifa = (
+        db.query(TarifaClienteProducto)
+        .filter(
+            TarifaClienteProducto.comisionista_id == comisionista_id,
+            TarifaClienteProducto.cliente_id == cliente_id,
+            TarifaClienteProducto.producto_id == producto_id,
+            TarifaClienteProducto.finca_id.is_(None),
+            TarifaClienteProducto.proveedor == "",
+            TarifaClienteProducto.activo.is_(True),
+        )
+        .first()
+    )
+    if tarifa and _tarifa_aplica_para_proveedor(tarifa):
+        return tarifa
+    return None
 
 
 def _calcular_comision_con_tarifa(
@@ -266,6 +339,7 @@ def crear_liquidacion(
             selectinload(OrdenItem.cliente),
             selectinload(OrdenItem.producto_obj),
             selectinload(OrdenItem.finca_obj),
+            selectinload(OrdenItem.orden),
         )
         .all()
     )
@@ -355,7 +429,16 @@ def crear_liquidacion(
                     db.add(lit)
                 else:
                     # Fallback a tarifas globales del comisionista
+                    proveedor_orden = _normalizar_texto(
+                        oi.orden.proveedor if oi.orden else ""
+                    )
                     for tarifa in comisionista.tarifas:
+                        if tarifa.proveedores_excluidos:
+                            excluidos = [
+                                _normalizar_texto(p) for p in tarifa.proveedores_excluidos
+                            ]
+                            if proveedor_orden in excluidos:
+                                continue
                         comision = _calcular_comision_con_tarifa(oi, tarifa)
                         lit = LiquidacionItemTarifa(
                             liquidacion_item_id=li.id,

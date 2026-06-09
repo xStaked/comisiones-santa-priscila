@@ -24,9 +24,12 @@ export function ComisionistasTab() {
   const { comisionistas, addComisionista, updateComisionista, deleteComisionista, ordenItems, liquidaciones } = useApp();
   const [search, setSearch] = useState('');
   const [editing, setEditing] = useState<Comisionista | null>(null);
-  const [form, setForm] = useState<{ nombre: string; tarifas: { tipo: 'porcentaje' | 'fijo_kg' | 'fijo_unidad'; valor: string }[] }>({
+  const [form, setForm] = useState<{
+    nombre: string;
+    tarifas: { tipo: 'porcentaje' | 'fijo_kg' | 'fijo_unidad'; valor: string; proveedoresExcluidos: string }[]
+  }>({
     nombre: '',
-    tarifas: [{ tipo: 'porcentaje', valor: '' }],
+    tarifas: [{ tipo: 'porcentaje', valor: '', proveedoresExcluidos: '' }],
   });
   const [open, setOpen] = useState(false);
 
@@ -43,7 +46,7 @@ export function ComisionistasTab() {
   };
 
   const resetForm = () => {
-    setForm({ nombre: '', tarifas: [{ tipo: 'porcentaje', valor: '' }] });
+    setForm({ nombre: '', tarifas: [{ tipo: 'porcentaje', valor: '', proveedoresExcluidos: '' }] });
     setEditing(null);
   };
 
@@ -55,7 +58,14 @@ export function ComisionistasTab() {
     }
     const tarifas: TarifaComision[] = form.tarifas
       .filter(t => t.valor && parseFloat(t.valor) > 0)
-      .map(t => ({ tipo: t.tipo, valor: parseFloat(t.valor) }));
+      .map(t => ({
+        tipo: t.tipo,
+        valor: parseFloat(t.valor),
+        proveedoresExcluidos: t.proveedoresExcluidos
+          .split('\n')
+          .map(s => s.trim())
+          .filter(Boolean),
+      }));
 
     if (tarifas.length === 0) {
       toast.error('Agrega al menos una tarifa válida');
@@ -75,7 +85,11 @@ export function ComisionistasTab() {
     setEditing(c);
     setForm({
       nombre: c.nombre,
-      tarifas: c.tarifas.map(t => ({ tipo: t.tipo, valor: t.valor.toString() })),
+      tarifas: c.tarifas.map(t => ({
+        tipo: t.tipo,
+        valor: t.valor.toString(),
+        proveedoresExcluidos: (t.proveedoresExcluidos || []).join('\n'),
+      })),
     });
     setOpen(true);
   };
@@ -89,7 +103,7 @@ export function ComisionistasTab() {
   const addTarifa = () => {
     setForm(prev => ({
       ...prev,
-      tarifas: [...prev.tarifas, { tipo: 'porcentaje', valor: '' }],
+      tarifas: [...prev.tarifas, { tipo: 'porcentaje', valor: '', proveedoresExcluidos: '' }],
     }));
   };
 
@@ -100,7 +114,7 @@ export function ComisionistasTab() {
     }));
   };
 
-  const updateTarifa = (idx: number, field: 'tipo' | 'valor', value: string) => {
+  const updateTarifa = (idx: number, field: 'tipo' | 'valor' | 'proveedoresExcluidos', value: string) => {
     setForm(prev => ({
       ...prev,
       tarifas: prev.tarifas.map((t, i) => i === idx ? { ...t, [field]: value } : t),
@@ -143,34 +157,45 @@ export function ComisionistasTab() {
               <div className="space-y-3">
                 <Label>Tarifas de Comisión</Label>
                 {form.tarifas.map((tarifa, idx) => (
-                  <div key={idx} className="flex items-center gap-2">
-                    <Select
-                      value={tarifa.tipo}
-                      onValueChange={(value) => updateTarifa(idx, 'tipo', value as 'porcentaje' | 'fijo_kg' | 'fijo_unidad')}
-                    >
-                      <SelectTrigger className="w-40 rounded-xl border-slate-200 bg-white h-10 text-sm text-slate-900">
-                        <SelectValue placeholder="Tipo" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="porcentaje">Porcentaje (%)</SelectItem>
-                        <SelectItem value="fijo_kg">USD/kg</SelectItem>
-                        <SelectItem value="fijo_unidad">USD/unidad</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      value={tarifa.valor}
-                      onChange={e => updateTarifa(idx, 'valor', e.target.value)}
-                      placeholder={tarifa.tipo === 'porcentaje' ? 'Ej: 2.5' : tarifa.tipo === 'fijo_kg' ? 'Ej: 0.05' : 'Ej: 1.00'}
-                      className="bg-white border-slate-200 rounded-xl flex-1"
-                    />
-                    {form.tarifas.length > 1 && (
-                      <Button type="button" variant="ghost" size="icon" className="h-9 w-9 text-slate-400 hover:text-red-600" onClick={() => removeTarifa(idx)}>
-                        <X className="h-4 w-4" />
-                      </Button>
-                    )}
+                  <div key={idx} className="space-y-2 p-3 border border-slate-100 rounded-xl bg-slate-50/50">
+                    <div className="flex items-center gap-2">
+                      <Select
+                        value={tarifa.tipo}
+                        onValueChange={(value) => updateTarifa(idx, 'tipo', value as 'porcentaje' | 'fijo_kg' | 'fijo_unidad')}
+                      >
+                        <SelectTrigger className="w-40 rounded-xl border-slate-200 bg-white h-10 text-sm text-slate-900">
+                          <SelectValue placeholder="Tipo" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="porcentaje">Porcentaje (%)</SelectItem>
+                          <SelectItem value="fijo_kg">USD/kg</SelectItem>
+                          <SelectItem value="fijo_unidad">USD/unidad</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={tarifa.valor}
+                        onChange={e => updateTarifa(idx, 'valor', e.target.value)}
+                        placeholder={tarifa.tipo === 'porcentaje' ? 'Ej: 2.5' : tarifa.tipo === 'fijo_kg' ? 'Ej: 0.05' : 'Ej: 1.00'}
+                        className="bg-white border-slate-200 rounded-xl flex-1"
+                      />
+                      {form.tarifas.length > 1 && (
+                        <Button type="button" variant="ghost" size="icon" className="h-9 w-9 text-slate-400 hover:text-red-600" onClick={() => removeTarifa(idx)}>
+                          <X className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs text-slate-500">Proveedores excluidos (uno por línea)</Label>
+                      <textarea
+                        value={tarifa.proveedoresExcluidos}
+                        onChange={e => updateTarifa(idx, 'proveedoresExcluidos', e.target.value)}
+                        placeholder="Ej: OCHOA RECALDE ELIZABETH MERCEDES"
+                        className="w-full min-h-[60px] px-3 py-2 text-sm bg-white border border-slate-200 rounded-xl focus:border-slate-900 focus:ring-slate-900/10 resize-none"
+                      />
+                    </div>
                   </div>
                 ))}
                 <Button type="button" variant="outline" size="sm" onClick={addTarifa} className="rounded-xl border-slate-200 text-slate-600">
@@ -218,10 +243,17 @@ export function ComisionistasTab() {
               <CardContent className="pt-0 space-y-3">
                 <div className="flex flex-wrap gap-2">
                   {c.tarifas.map((t, idx) => (
-                    <Badge key={idx} variant="secondary" className="flex items-center gap-1 bg-slate-100 text-slate-700 border-0">
-                      {t.tipo === 'porcentaje' ? <Percent className="h-3 w-3" /> : <Weight className="h-3 w-3" />}
-                      {t.tipo === 'porcentaje' ? `${typeof t.valor === 'string' ? parseFloat(t.valor) : t.valor}%` : `$${typeof t.valor === 'string' ? parseFloat(t.valor).toFixed(3) : t.valor.toFixed(3)}/${t.tipo === 'fijo_kg' ? 'kg' : 'unidad'}`}
-                    </Badge>
+                    <div key={idx} className="flex flex-col gap-1">
+                      <Badge variant="secondary" className="flex items-center gap-1 bg-slate-100 text-slate-700 border-0 w-fit">
+                        {t.tipo === 'porcentaje' ? <Percent className="h-3 w-3" /> : <Weight className="h-3 w-3" />}
+                        {t.tipo === 'porcentaje' ? `${typeof t.valor === 'string' ? parseFloat(t.valor) : t.valor}%` : `$${typeof t.valor === 'string' ? parseFloat(t.valor).toFixed(3) : t.valor.toFixed(3)}/${t.tipo === 'fijo_kg' ? 'kg' : 'unidad'}`}
+                      </Badge>
+                      {t.proveedoresExcluidos && t.proveedoresExcluidos.length > 0 && (
+                        <span className="text-[10px] text-slate-500 truncate max-w-[200px]" title={t.proveedoresExcluidos.join(', ')}>
+                          Excluye: {t.proveedoresExcluidos.join(', ')}
+                        </span>
+                      )}
+                    </div>
                   ))}
                 </div>
                 <div className="grid grid-cols-2 gap-2 pt-3 border-t border-slate-100">

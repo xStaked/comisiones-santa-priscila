@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from decimal import Decimal
-from typing import Optional
+from typing import List, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, Field, ConfigDict
@@ -12,6 +12,8 @@ class TarifaClienteProductoBase(BaseModel):
     cliente_id: UUID = Field(alias="clienteId")
     producto_id: UUID = Field(alias="productoId")
     finca_id: Optional[UUID] = Field(default=None, alias="fincaId")
+    proveedor: str = Field(default="", alias="proveedor")
+    proveedores_excluidos: List[str] = Field(default=[], alias="proveedoresExcluidos")
     tipo: str
     valor: Decimal
 
@@ -32,6 +34,8 @@ class TarifaClienteProductoResponse(BaseModel):
     cliente_id: UUID = Field(alias="clienteId")
     producto_id: UUID = Field(alias="productoId")
     finca_id: Optional[UUID] = Field(default=None, alias="fincaId")
+    proveedor: str = Field(default="", alias="proveedor")
+    proveedores_excluidos: List[str] = Field(default=[], alias="proveedoresExcluidos")
     tipo: str
     valor: Decimal
     activo: bool

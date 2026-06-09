@@ -374,6 +374,12 @@ export async function deleteTarifaClienteProducto(id: string) {
   await api.delete(`/api/v1/tarifas-cliente-producto/${id}`);
 }
 
+// Proveedores
+export async function fetchProveedores() {
+  const res = await api.get('/api/v1/proveedores/');
+  return toCamelCase(res.data);
+}
+
 // Admin
 export async function seedDemo() {
   await api.post('/api/v1/admin/seed-real');

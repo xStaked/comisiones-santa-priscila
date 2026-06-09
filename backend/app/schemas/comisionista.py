@@ -10,6 +10,7 @@ from pydantic import BaseModel
 class TarifaBase(BaseModel):
     tipo: str
     valor: Decimal
+    proveedores_excluidos: List[str] = []
 
 
 class TarifaCreate(TarifaBase):

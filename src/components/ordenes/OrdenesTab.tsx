@@ -319,6 +319,7 @@ export function OrdenesTab() {
     const itemsConCliente = pdfPreview.items.map(item => ({
       ...item,
       clienteId: pdfClienteId || item.clienteId,
+      proveedor: pdfPreview.proveedor || item.proveedor,
     }));
     addOrdenItems(itemsConCliente);
     setPdfPreview(null);

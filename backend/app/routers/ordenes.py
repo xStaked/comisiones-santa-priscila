@@ -79,16 +79,17 @@ def crear_ordenes(
 
     try:
         if isinstance(payload, list):
-            ordenes_por_clave: dict[tuple[date, str], Orden] = {}
+            ordenes_por_clave: dict[tuple[date, str, str | None], Orden] = {}
             for raw_item in payload:
                 item = OrdenItemCreate.model_validate(raw_item)
-                clave = (item.fecha, item.numero_orden)
+                clave = (item.fecha, item.numero_orden, item.proveedor)
                 orden = ordenes_por_clave.get(clave)
                 if not orden:
                     orden = Orden(
                         fecha=item.fecha,
                         numero_orden=item.numero_orden,
                         cliente_id=None,
+                        proveedor=item.proveedor,
                         origen="manual",
                         estado=EstadoOrden.activo,
                     )
@@ -174,7 +175,9 @@ def _crear_orden_item(db: Session, item: OrdenItemCreate, orden_id: UUID) -> Ord
 
 
 def _serializar_item(item: OrdenItem) -> dict[str, Any]:
-    return OrdenItemResponse.model_validate(item).model_dump(by_alias=True)
+    data = OrdenItemResponse.model_validate(item).model_dump(by_alias=True)
+    data["proveedor"] = item.orden.proveedor if item.orden else None
+    return data
 
 
 def _serializar_orden(orden: Orden) -> dict[str, Any]:
