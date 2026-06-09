@@ -216,6 +216,12 @@ def test_liquidacion_preserva_orden_id_en_snapshots(authenticated_client):
     assert create_resp.status_code == 201
     orden = create_resp.json()
     item_ids = [item["id"] for item in orden["items"]]
+    for item_id in item_ids:
+        estado_resp = authenticated_client.put(
+            f"/api/v1/ordenes/{item_id}",
+            json={"estado": "pagada"},
+        )
+        assert estado_resp.status_code == 200
 
     liq_resp = authenticated_client.post(
         "/api/v1/liquidaciones/",
