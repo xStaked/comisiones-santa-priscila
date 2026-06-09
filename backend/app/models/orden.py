@@ -14,8 +14,10 @@ from app.models.base import BaseModel
 
 
 class EstadoOrden(str, enum.Enum):
-    activo = "activo"
-    liquidado = "liquidado"
+    pendiente = "pendiente"
+    parcialmente_pagada = "parcialmente_pagada"
+    pagada = "pagada"
+    liquidada = "liquidada"
 
 
 class Orden(BaseModel):
@@ -35,7 +37,7 @@ class Orden(BaseModel):
     estado = Column(
         SAEnum(EstadoOrden, name="estado_orden"),
         nullable=False,
-        default=EstadoOrden.activo,
+        default=EstadoOrden.pendiente,
     )
 
     cliente = relationship("Cliente")
@@ -87,7 +89,7 @@ class OrdenItem(BaseModel):
     estado = Column(
         SAEnum(EstadoOrden, name="estado_orden"),
         nullable=False,
-        default=EstadoOrden.activo,
+        default=EstadoOrden.pendiente,
     )
 
     # Relaciones con entidades normalizadas (nullable para compatibilidad)

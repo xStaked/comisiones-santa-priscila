@@ -91,7 +91,7 @@ def crear_ordenes(
                         cliente_id=None,
                         proveedor=item.proveedor,
                         origen="manual",
-                        estado=EstadoOrden.activo,
+                        estado=EstadoOrden.pendiente,
                     )
                     db.add(orden)
                     db.flush()
@@ -113,7 +113,7 @@ def crear_ordenes(
             semana=orden_data.semana,
             archivo_nombre=orden_data.archivo_nombre,
             origen=orden_data.origen,
-            estado=EstadoOrden.activo,
+            estado=EstadoOrden.pendiente,
         )
         db.add(orden)
         db.flush()
@@ -160,7 +160,7 @@ def _crear_orden_item(db: Session, item: OrdenItemCreate, orden_id: UUID) -> Ord
         precio_unitario=item.precio_unitario,
         total=item.total,
         sector=item.sector,
-        estado=EstadoOrden.activo,
+        estado=EstadoOrden.pendiente,
         cliente_id=item.cliente_id,
         producto_id=item.producto_id,
         finca_id=item.finca_id,
@@ -222,7 +222,7 @@ def _serializar_ordenes_agrupadas(items: list[OrdenItem]) -> list[dict[str, Any]
                 "semana": None,
                 "archivo_nombre": None,
                 "origen": "manual",
-                "estado": EstadoOrden.activo.value,
+                "estado": EstadoOrden.pendiente.value,
                 "total": sum((item.total for item in grupo_items), Decimal("0")),
                 "cantidad_productos": len(grupo_items),
                 "items": [_serializar_item(item) for item in grupo_items],

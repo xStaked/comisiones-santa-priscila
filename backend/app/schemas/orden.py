@@ -32,7 +32,7 @@ class OrdenItemBase(BaseModel):
     precio_unitario: Decimal
     total: Decimal
     sector: Optional[str] = None
-    estado: Optional[str] = "activo"
+    estado: Optional[str] = "pendiente"
 
 
 class OrdenItemCreate(OrdenItemBase):
@@ -83,7 +83,7 @@ class OrdenLineaCreate(BaseModel):
     precio_unitario: Decimal
     total: Decimal
     sector: Optional[str] = None
-    estado: Optional[str] = "activo"
+    estado: Optional[str] = "pendiente"
     comisionista_ids: List[UUID] = []
     cliente_id: Optional[UUID] = None
     producto_id: Optional[UUID] = None

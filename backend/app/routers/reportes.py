@@ -42,7 +42,7 @@ def _calcular_comision_orden(
 def resumen(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     total_ordenes = (
         db.query(OrdenItem)
-        .filter(OrdenItem.estado == EstadoOrden.activo)
+        .filter(OrdenItem.estado == EstadoOrden.pendiente)
         .count()
     )
     total_liquidaciones = db.query(Liquidacion).count()
@@ -71,7 +71,7 @@ def resumen(db: Session = Depends(get_db), current_user: User = Depends(get_curr
 def por_finca(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     ordenes = (
         db.query(OrdenItem)
-        .filter(OrdenItem.estado == EstadoOrden.activo)
+        .filter(OrdenItem.estado == EstadoOrden.pendiente)
         .options(
             selectinload(OrdenItem.asignaciones).selectinload(Asignacion.comisionista),
             selectinload(OrdenItem.cliente),
@@ -115,7 +115,7 @@ def por_finca(db: Session = Depends(get_db), current_user: User = Depends(get_cu
 def por_producto(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     ordenes = (
         db.query(OrdenItem)
-        .filter(OrdenItem.estado == EstadoOrden.activo)
+        .filter(OrdenItem.estado == EstadoOrden.pendiente)
         .options(
             selectinload(OrdenItem.asignaciones).selectinload(Asignacion.comisionista),
             selectinload(OrdenItem.cliente),
@@ -166,7 +166,7 @@ def por_comisionista(db: Session = Depends(get_db), current_user: User = Depends
             .join(Asignacion)
             .filter(
                 Asignacion.comisionista_id == c.id,
-                OrdenItem.estado == EstadoOrden.activo,
+                OrdenItem.estado == EstadoOrden.pendiente,
             )
             .options(
                 selectinload(OrdenItem.cliente),
@@ -203,7 +203,7 @@ def por_comisionista(db: Session = Depends(get_db), current_user: User = Depends
 def por_cliente(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     ordenes = (
         db.query(OrdenItem)
-        .filter(OrdenItem.estado == EstadoOrden.activo)
+        .filter(OrdenItem.estado == EstadoOrden.pendiente)
         .options(
             selectinload(OrdenItem.asignaciones).selectinload(Asignacion.comisionista),
             selectinload(OrdenItem.cliente),
@@ -245,7 +245,7 @@ def por_cliente(db: Session = Depends(get_db), current_user: User = Depends(get_
 
 @router.get("/global")
 def global_stats(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    total_ordenes_activas = db.query(OrdenItem).filter(OrdenItem.estado == EstadoOrden.activo).count()
+    total_ordenes_activas = db.query(OrdenItem).filter(OrdenItem.estado == EstadoOrden.pendiente).count()
     total_liquidaciones = db.query(Liquidacion).count()
 
     # Total comisionado histórico (todas las liquidaciones)
@@ -274,7 +274,7 @@ def global_stats(db: Session = Depends(get_db), current_user: User = Depends(get
     # Órdenes activas
     ordenes_activas = (
         db.query(OrdenItem)
-        .filter(OrdenItem.estado == EstadoOrden.activo)
+        .filter(OrdenItem.estado == EstadoOrden.pendiente)
         .options(
             selectinload(OrdenItem.asignaciones).selectinload(Asignacion.comisionista),
             selectinload(OrdenItem.cliente),
@@ -325,7 +325,7 @@ def tendencias(db: Session = Depends(get_db), current_user: User = Depends(get_c
     mes_actual = datetime.now().strftime("%Y-%m")
     ordenes_activas = (
         db.query(OrdenItem)
-        .filter(OrdenItem.estado == EstadoOrden.activo)
+        .filter(OrdenItem.estado == EstadoOrden.pendiente)
         .options(
             selectinload(OrdenItem.asignaciones).selectinload(Asignacion.comisionista),
             selectinload(OrdenItem.cliente),
