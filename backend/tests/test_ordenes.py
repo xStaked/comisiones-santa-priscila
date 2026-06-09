@@ -242,6 +242,72 @@ def test_liquidacion_preserva_orden_id_en_snapshots(authenticated_client):
     assert orden_liquidada["estado"] == "liquidada"
 
 
+def test_actualiza_estado_de_orden_agrupada_y_sus_items(authenticated_client):
+    payload = {
+        "fecha": str(date.today()),
+        "numero_orden": "ORD-PAGO-001",
+        "origen": "manual",
+        "items": [
+            {
+                "finca": "Finca A",
+                "producto": "Camarón",
+                "cantidad": "10.00",
+                "unidad": "kg",
+                "precio_unitario": "5.00",
+                "total": "50.00",
+                "comisionista_ids": [],
+            },
+            {
+                "finca": "Finca B",
+                "producto": "Tilapia",
+                "cantidad": "20.00",
+                "unidad": "kg",
+                "precio_unitario": "3.00",
+                "total": "60.00",
+                "comisionista_ids": [],
+            },
+        ],
+    }
+    create_resp = authenticated_client.post("/api/v1/ordenes/", json=payload)
+    assert create_resp.status_code == 201
+    orden_id = create_resp.json()["id"]
+
+    update_resp = authenticated_client.put(
+        f"/api/v1/ordenes/grupos/{orden_id}/estado",
+        json={"estado": "pagada"},
+    )
+
+    assert update_resp.status_code == 200
+    data = update_resp.json()
+    assert data["estado"] == "pagada"
+    assert {item["estado"] for item in data["items"]} == {"pagada"}
+
+
+def test_rechaza_estado_de_orden_desconocido(authenticated_client):
+    payload = [{
+        "fecha": str(date.today()),
+        "numero_orden": "ORD-PAGO-INVALIDO-001",
+        "finca": "Finca Test",
+        "producto": "Camarón",
+        "cantidad": "100.00",
+        "unidad": "kg",
+        "precio_unitario": "5.50",
+        "total": "550.00",
+        "comisionista_ids": [],
+    }]
+    create_resp = authenticated_client.post("/api/v1/ordenes/", json=payload)
+    assert create_resp.status_code == 201
+    orden_id = create_resp.json()[0]["orden_id"]
+
+    update_resp = authenticated_client.put(
+        f"/api/v1/ordenes/grupos/{orden_id}/estado",
+        json={"estado": "cobrada"},
+    )
+
+    assert update_resp.status_code == 400
+    assert "Estado de orden inválido" in update_resp.json()["detail"]
+
+
 def test_update_orden(authenticated_client):
     payload = [{
         "fecha": str(date.today()),

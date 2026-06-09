@@ -31,6 +31,20 @@ class ComisionistasOrdenBody(BaseModel):
     comisionista_ids: List[UUID]
 
 
+class EstadoOrdenBody(BaseModel):
+    estado: str
+
+
+def _parse_estado_orden(value: str) -> EstadoOrden:
+    try:
+        return EstadoOrden(value)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Estado de orden inválido",
+        ) from exc
+
+
 @router.get("/")
 def listar_ordenes(
     agrupadas: bool = False,
@@ -261,7 +275,7 @@ def actualizar_orden(
     update_data = data.model_dump(exclude_unset=True)
     comisionista_ids = update_data.pop("comisionista_ids", None)
     if "estado" in update_data:
-        update_data["estado"] = EstadoOrden(update_data["estado"])
+        update_data["estado"] = _parse_estado_orden(update_data["estado"])
 
     for field, value in update_data.items():
         setattr(oi, field, value)
@@ -320,6 +334,40 @@ def asignar_comisionistas_a_orden(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
         ) from exc
+
+
+@router.put("/grupos/{id}/estado")
+def actualizar_estado_orden_grupo(
+    id: UUID,
+    body: EstadoOrdenBody,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    orden = (
+        db.query(Orden)
+        .options(selectinload(Orden.items))
+        .filter(Orden.id == id)
+        .first()
+    )
+    if not orden:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Orden no encontrada"
+        )
+
+    nuevo_estado = _parse_estado_orden(body.estado)
+    if nuevo_estado == EstadoOrden.liquidada:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="El estado liquidada se asigna al guardar una liquidación",
+        )
+
+    orden.estado = nuevo_estado
+    for item in orden.items:
+        item.estado = nuevo_estado
+
+    db.commit()
+    db.refresh(orden)
+    return _serializar_orden(orden)
 
 
 @router.delete("/{id}", status_code=status.HTTP_204_NO_CONTENT)
