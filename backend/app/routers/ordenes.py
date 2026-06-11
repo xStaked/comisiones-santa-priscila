@@ -248,6 +248,20 @@ def _serializar_ordenes_agrupadas(items: list[OrdenItem]) -> list[dict[str, Any]
 
 @router.post("/limpiar")
 def limpiar_ordenes(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    tiene_ordenes_liquidadas = (
+        db.query(Orden.id).filter(Orden.estado == EstadoOrden.liquidada).first()
+        is not None
+    )
+    tiene_items_liquidados = (
+        db.query(OrdenItem.id).filter(OrdenItem.estado == EstadoOrden.liquidada).first()
+        is not None
+    )
+    if tiene_ordenes_liquidadas or tiene_items_liquidados:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No se pueden limpiar órdenes con ítems liquidados",
+        )
+
     try:
         # Eliminar ítems sueltos (sin orden padre)
         count_items = db.query(OrdenItem).filter(OrdenItem.orden_id.is_(None)).delete(synchronize_session=False)

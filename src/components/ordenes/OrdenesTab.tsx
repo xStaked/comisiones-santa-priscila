@@ -48,11 +48,13 @@ function MultiSelectComisionistas({
   selectedIds,
   onChange,
   placeholder = 'Seleccionar comisionistas...',
+  disabled = false,
 }: {
   comisionistas: { id: string; nombre: string }[];
   selectedIds: string[];
   onChange: (ids: string[]) => void;
   placeholder?: string;
+  disabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -68,6 +70,7 @@ function MultiSelectComisionistas({
   }, []);
 
   const toggle = (id: string) => {
+    if (disabled) return;
     if (selectedIds.includes(id)) {
       onChange(selectedIds.filter(sid => sid !== id));
     } else {
@@ -79,8 +82,9 @@ function MultiSelectComisionistas({
     <div className="relative" ref={ref}>
       <button
         type="button"
+        disabled={disabled}
         onClick={() => setOpen(!open)}
-        className="flex items-center justify-between w-full h-10 px-3 rounded-xl border border-slate-200 bg-white text-sm text-slate-900 hover:border-slate-300 transition-colors"
+        className="flex items-center justify-between w-full h-10 px-3 rounded-xl border border-slate-200 bg-white text-sm text-slate-900 hover:border-slate-300 transition-colors disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400"
       >
         <span className={selectedIds.length === 0 ? 'text-slate-400' : ''}>
           {selectedIds.length === 0
@@ -99,6 +103,7 @@ function MultiSelectComisionistas({
               <input
                 type="checkbox"
                 checked={selectedIds.includes(c.id)}
+                disabled={disabled}
                 onChange={() => toggle(c.id)}
                 className="h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-900"
               />
@@ -371,6 +376,10 @@ export function OrdenesTab() {
   };
 
   const totalGeneral = ordenItems.reduce((s, i) => s + i.total, 0);
+  const hayItemsLiquidados = useMemo(
+    () => ordenItems.some(item => item.estado === 'liquidada'),
+    [ordenItems]
+  );
   const cantidadOrdenes = useMemo(() => {
     const ids = new Set(ordenItems.map(item => item.ordenId || `${item.fecha}-${item.numeroOrden}-${item.clienteId || ''}`));
     return ids.size;
@@ -647,11 +656,17 @@ export function OrdenesTab() {
                   selectedIds={globalComisionistaIds}
                   onChange={setGlobalComisionistaIds}
                   placeholder="Seleccionar..."
+                  disabled={hayItemsLiquidados}
                 />
                 <Button
                   size="sm"
                   variant="outline"
+                  disabled={hayItemsLiquidados}
                   onClick={() => {
+                    if (hayItemsLiquidados) {
+                      toast.error('No se pueden modificar órdenes con ítems liquidados');
+                      return;
+                    }
                     if (globalComisionistaIds.length === 0) {
                       toast.error('Selecciona al menos un comisionista');
                       return;
@@ -683,7 +698,13 @@ export function OrdenesTab() {
               <p className="text-xs text-slate-500">{cantidadOrdenes} orden{cantidadOrdenes === 1 ? '' : 'es'} / {ordenItems.length} productos</p>
               <p className="text-xl font-bold text-slate-900 tabular-nums">${totalGeneral.toFixed(2)}</p>
             </div>
-            <Button variant="outline" size="sm" onClick={clearOrdenItems} className="text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg border-slate-200">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={hayItemsLiquidados}
+              onClick={clearOrdenItems}
+              className="text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg border-slate-200 disabled:text-slate-400 disabled:hover:bg-white"
+            >
               <Trash2 className="h-4 w-4 mr-1" />
               Limpiar
             </Button>
