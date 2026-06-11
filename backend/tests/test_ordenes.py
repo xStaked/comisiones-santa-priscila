@@ -562,6 +562,117 @@ def test_rechaza_limpiar_ordenes_con_items_liquidados(authenticated_client):
     assert "No se pueden limpiar órdenes con ítems liquidados" in limpiar_resp.json()["detail"]
 
 
+def test_rechaza_marcar_item_como_liquidado_manualmente(authenticated_client):
+    payload = [{
+        "fecha": str(date.today()),
+        "numero_orden": "ORD-ITEM-ESTADO-LIQUIDADO-001",
+        "finca": "Finca Test",
+        "producto": "Camarón",
+        "cantidad": "100.00",
+        "unidad": "kg",
+        "precio_unitario": "5.50",
+        "total": "550.00",
+        "comisionista_ids": [],
+    }]
+    create_resp = authenticated_client.post("/api/v1/ordenes/", json=payload)
+    assert create_resp.status_code == 201
+    item = create_resp.json()[0]
+
+    update_resp = authenticated_client.put(
+        f"/api/v1/ordenes/{item['id']}",
+        json={"estado": "liquidada"},
+    )
+
+    assert update_resp.status_code == 400
+    assert "El estado liquidada se asigna al guardar una liquidación" in update_resp.json()["detail"]
+
+
+def test_rechaza_modificar_items_de_grupo_parcialmente_liquidado(authenticated_client):
+    comisionista_resp = authenticated_client.post("/api/v1/comisionistas/", json={
+        "nombre": "Comisionista Hermano Bloqueado",
+        "tarifas": [],
+    })
+    assert comisionista_resp.status_code == 201
+    comisionista_id = comisionista_resp.json()["id"]
+
+    payload = {
+        "fecha": str(date.today()),
+        "numero_orden": "ORD-GRUPO-PARCIAL-LIQUIDADO-001",
+        "origen": "manual",
+        "items": [
+            {
+                "finca": "Finca A",
+                "producto": "Camarón",
+                "cantidad": "10.00",
+                "unidad": "kg",
+                "precio_unitario": "5.00",
+                "total": "50.00",
+                "comisionista_ids": [],
+            },
+            {
+                "finca": "Finca B",
+                "producto": "Tilapia",
+                "cantidad": "20.00",
+                "unidad": "kg",
+                "precio_unitario": "3.00",
+                "total": "60.00",
+                "comisionista_ids": [comisionista_id],
+            },
+        ],
+    }
+    create_resp = authenticated_client.post("/api/v1/ordenes/", json=payload)
+    assert create_resp.status_code == 201
+    orden = create_resp.json()
+    item_liquidado = orden["items"][0]
+    item_hermano = orden["items"][1]
+
+    estado_resp = authenticated_client.put(
+        f"/api/v1/ordenes/grupos/{orden['id']}/estado",
+        json={"estado": "pagada"},
+    )
+    assert estado_resp.status_code == 200
+
+    liq_resp = authenticated_client.post(
+        "/api/v1/liquidaciones/",
+        json={
+            "nombre": "Liquidación parcial con hermano",
+            "orden_item_ids": [item_liquidado["id"]],
+        },
+    )
+    assert liq_resp.status_code == 201
+
+    update_resp = authenticated_client.put(
+        f"/api/v1/ordenes/{item_hermano['id']}",
+        json={"finca": "Finca Editada"},
+    )
+    assert update_resp.status_code == 400
+    assert "No se puede modificar un ítem liquidado" in update_resp.json()["detail"]
+
+    agregar_resp = authenticated_client.post(
+        f"/api/v1/ordenes/{item_hermano['id']}/comisionistas",
+        json={"comisionista_id": comisionista_id},
+    )
+    assert agregar_resp.status_code == 400
+    assert "No se puede modificar un ítem liquidado" in agregar_resp.json()["detail"]
+
+    quitar_resp = authenticated_client.delete(
+        f"/api/v1/ordenes/{item_hermano['id']}/comisionistas/{comisionista_id}",
+    )
+    assert quitar_resp.status_code == 400
+    assert "No se puede modificar un ítem liquidado" in quitar_resp.json()["detail"]
+
+    asignar_global_resp = authenticated_client.post(
+        "/api/v1/ordenes/asignar-global",
+        json={"orden_ids": [item_hermano["id"]], "comisionista_ids": [comisionista_id]},
+    )
+    assert asignar_global_resp.status_code == 400
+    assert "No se puede modificar un ítem liquidado" in asignar_global_resp.json()["detail"]
+
+    delete_resp = authenticated_client.delete(f"/api/v1/ordenes/{item_hermano['id']}")
+    assert delete_resp.status_code == 400
+    assert "No se puede eliminar un ítem liquidado" in delete_resp.json()["detail"]
+
+
 def test_rechaza_asignar_comisionistas_a_grupo_con_items_liquidados(authenticated_client):
     comisionista_resp = authenticated_client.post("/api/v1/comisionistas/", json={
         "nombre": "Comisionista Grupo Bloqueado",
