@@ -130,7 +130,7 @@ function EditFincaSelect({ clienteId, value, onChange }: { clienteId: string; va
 }
 
 export function OrdenesTab() {
-  const { comisionistas, ordenItems, addOrdenItems, updateOrdenItem, deleteOrdenItem, clearOrdenItems, assignComisionistasGlobal, clientes, productos, tarifasClienteProducto } = useApp();
+  const { comisionistas, ordenItems, addOrdenItems, updateOrdenItem, updateEstadoOrden, deleteOrdenItem, clearOrdenItems, assignComisionistasGlobal, clientes, productos, tarifasClienteProducto } = useApp();
   const [activeForm, setActiveForm] = useState<'manual' | 'pdf'>('manual');
   const [globalComisionistaIds, setGlobalComisionistaIds] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -743,15 +743,35 @@ export function OrdenesTab() {
                           <td className="px-4 py-3">
                             {(() => {
                               const estadoMeta = getEstadoOrdenMeta(orden.estado);
+                              const estadoEditable = orden.estado !== 'liquidada';
                               return (
-                                <Badge variant="secondary" className={estadoMeta.className}>
-                                  {estadoMeta.label}
-                                </Badge>
+                                <div className="flex flex-col gap-2">
+                                  <Badge variant="secondary" className={estadoMeta.className}>
+                                    {estadoMeta.label}
+                                  </Badge>
+                                  {estadoEditable && (
+                                    <Select
+                                      value={orden.estado}
+                                      onValueChange={(value) => updateEstadoOrden(orden.id, value as EstadoOrden)}
+                                    >
+                                      <SelectTrigger className="h-8 w-44 rounded-lg border-slate-200 bg-white text-xs">
+                                        <SelectValue />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {ESTADOS_ORDEN.filter((estado) => estado.value !== 'liquidada').map((estado) => (
+                                          <SelectItem key={estado.value} value={estado.value}>
+                                            {estado.label}
+                                          </SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                  )}
+                                </div>
                               );
                             })()}
                           </td>
                           <td className="px-4 py-3 text-center">
-                            <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg" onClick={() => {
+                            <Button variant="ghost" size="icon" disabled={orden.estado === 'liquidada'} className="h-7 w-7 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-slate-400" onClick={() => {
                               if (confirm('¿Eliminar toda la orden y sus productos?')) {
                                 orden.items.forEach(item => deleteOrdenItem(item.id));
                               }
@@ -791,10 +811,10 @@ export function OrdenesTab() {
                             </td>
                             <td className="px-4 py-3">
                               <div className="flex justify-center gap-1">
-                                <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg" onClick={() => handleEdit(item)}>
+                                <Button variant="ghost" size="icon" disabled={orden.estado === 'liquidada'} className="h-7 w-7 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-slate-400" onClick={() => handleEdit(item)}>
                                   <Pencil className="h-3.5 w-3.5" />
                                 </Button>
-                                <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg" onClick={() => deleteOrdenItem(item.id)}>
+                                <Button variant="ghost" size="icon" disabled={orden.estado === 'liquidada'} className="h-7 w-7 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-slate-400" onClick={() => deleteOrdenItem(item.id)}>
                                   <Trash2 className="h-3.5 w-3.5" />
                                 </Button>
                               </div>
