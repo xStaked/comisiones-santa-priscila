@@ -32,18 +32,18 @@ export function LiquidacionTab() {
     [comisionistas]
   );
 
-  const ordenItemsActivos = useMemo(
-    () => ordenItems.filter(item => item.estado !== 'liquidada'),
+  const ordenItemsPagados = useMemo(
+    () => ordenItems.filter(item => item.estado === 'pagada'),
     [ordenItems]
   );
 
   const filteredItems = useMemo(() => {
-    return ordenItemsActivos.filter(i => {
+    return ordenItemsPagados.filter(i => {
       const matchComisionista = !filterComisionista || i.comisionistas.some(a => a.comisionistaId === filterComisionista);
       const matchFactura = !filterFactura || i.numeroOrden.toLowerCase().includes(filterFactura.toLowerCase());
       return matchComisionista && matchFactura;
     });
-  }, [ordenItemsActivos, filterComisionista, filterFactura]);
+  }, [ordenItemsPagados, filterComisionista, filterFactura]);
 
   const cantidadOrdenes = useMemo(() => {
     const ids = new Set(filteredItems.map(item => item.ordenId || `${item.fecha}-${item.numeroOrden}-${item.clienteId || ''}`));
@@ -120,11 +120,11 @@ export function LiquidacionTab() {
       toast.error('Ingresa un nombre para la liquidación');
       return;
     }
-    // Refrescar datos para evitar enviar ítems stale (ya liquidados)
+    // Refrescar datos para reducir el riesgo de enviar ítems stale; el backend revalida el estado.
     await queryClient.refetchQueries({ queryKey: ['ordenes'] });
-    // Reconstruir IDs a partir de los datos actualizados
-    const ids = ordenItems
-      .filter(item => item.estado !== 'liquidada')
+    const ordenesActualizadas = queryClient.getQueryData<typeof ordenItems>(['ordenes']) ?? ordenItems;
+    const ids = ordenesActualizadas
+      .filter(item => item.estado === 'pagada')
       .filter(i => {
         const matchComisionista = !filterComisionista || i.comisionistas.some(a => a.comisionistaId === filterComisionista);
         const matchFactura = !filterFactura || i.numeroOrden.toLowerCase().includes(filterFactura.toLowerCase());
@@ -132,7 +132,7 @@ export function LiquidacionTab() {
       })
       .map((i) => i.id);
     if (ids.length === 0) {
-      toast.error('No hay órdenes activas para guardar');
+      toast.error('No hay órdenes pagadas para guardar');
       return;
     }
     saveLiquidacion(nombreLiquidacion, ids);
@@ -142,19 +142,29 @@ export function LiquidacionTab() {
 
   const handlePreviewSave = () => {
     if (filteredItems.length === 0) {
-      toast.error('No hay órdenes para guardar');
+      toast.error('No hay órdenes pagadas para guardar');
       return;
     }
     setNombreLiquidacion(`Liquidación ${new Date().toLocaleDateString('es-ES')}`);
     setPreviewOpen(true);
   };
 
-  if (ordenItemsActivos.length === 0) {
+  if (ordenItems.length === 0) {
     return (
       <div className="text-center py-20 bg-white rounded-2xl border border-dashed border-slate-200">
         <Calculator className="h-12 w-12 text-slate-300 mx-auto mb-4" />
         <h3 className="text-lg font-medium text-slate-700">Sin órdenes cargadas</h3>
         <p className="text-sm text-slate-500 mt-1 max-w-sm mx-auto">Ve a &quot;Cargar Órdenes&quot; para agregar registros y generar una liquidación.</p>
+      </div>
+    );
+  }
+
+  if (ordenItemsPagados.length === 0) {
+    return (
+      <div className="text-center py-20 bg-white rounded-2xl border border-dashed border-slate-200">
+        <Calculator className="h-12 w-12 text-slate-300 mx-auto mb-4" />
+        <h3 className="text-lg font-medium text-slate-700">Sin órdenes pagadas</h3>
+        <p className="text-sm text-slate-500 mt-1 max-w-sm mx-auto">Marca una orden como pagada para calcular y guardar su liquidación.</p>
       </div>
     );
   }
@@ -212,7 +222,7 @@ export function LiquidacionTab() {
               <div className="space-y-4 mt-2">
                 <div className="bg-slate-50 rounded-xl p-4 border border-slate-200 space-y-3">
                   <div className="flex justify-between items-center">
-                    <span className="text-sm text-slate-500">Órdenes a liquidar</span>
+                    <span className="text-sm text-slate-500">Órdenes pagadas a liquidar</span>
                     <span className="text-sm font-semibold text-slate-900">{cantidadOrdenes}</span>
                   </div>
                   <div className="flex justify-between items-center">
@@ -253,7 +263,7 @@ export function LiquidacionTab() {
 
       <Card className="card-elevated rounded-2xl overflow-hidden">
         <CardHeader className="pb-3">
-            <CardTitle className="text-base text-slate-900">Vista de Liquidación: {cantidadOrdenes} orden{cantidadOrdenes === 1 ? '' : 'es'} / {itemsConComision.length} producto{itemsConComision.length === 1 ? '' : 's'}</CardTitle>
+            <CardTitle className="text-base text-slate-900">Vista de Liquidación: {cantidadOrdenes} orden{cantidadOrdenes === 1 ? '' : 'es'} pagada{cantidadOrdenes === 1 ? '' : 's'} / {itemsConComision.length} producto{itemsConComision.length === 1 ? '' : 's'}</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
           <div className="overflow-x-auto">
