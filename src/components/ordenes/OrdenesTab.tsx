@@ -34,6 +34,15 @@ function getEstadoOrdenMeta(estado?: string) {
   return ESTADOS_ORDEN.find((item) => item.value === estado) ?? ESTADOS_ORDEN[0];
 }
 
+function getEstadoOrdenAgrupada(items: OrdenItem[]): EstadoOrden {
+  const estados = items.map((item) => item.estado || 'pendiente');
+  const primero = estados[0] || 'pendiente';
+  if (estados.every((estado) => estado === primero)) return primero;
+  if (estados.includes('pagada')) return 'pagada';
+  if (estados.includes('parcialmente_pagada')) return 'parcialmente_pagada';
+  return 'pendiente';
+}
+
 function MultiSelectComisionistas({
   comisionistas,
   selectedIds,
@@ -217,9 +226,7 @@ export function OrdenesTab() {
         comisionistaIds.forEach((cid) => {
           if (!existente.comisionistaIds.includes(cid)) existente.comisionistaIds.push(cid);
         });
-        existente.estado = existente.items.every(i => i.estado === existente.items[0]?.estado)
-          ? (existente.items[0]?.estado || 'pendiente')
-          : 'parcialmente_pagada';
+        existente.estado = getEstadoOrdenAgrupada(existente.items);
         return;
       }
 
