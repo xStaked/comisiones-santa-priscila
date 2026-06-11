@@ -353,10 +353,11 @@ def crear_liquidacion(
     orden_items_pagados: list[OrdenItem] = []
     for oi in orden_items:
         estado_orden = oi.orden.estado if oi.orden else oi.estado
-        if estado_orden != EstadoOrden.pagada:
+        if estado_orden != EstadoOrden.pagada or oi.estado != EstadoOrden.pagada:
             errores_estado.append({
                 "id": str(oi.id),
                 "estado": estado_orden.value,
+                "estado_item": oi.estado.value,
                 "motivo": "la orden debe estar pagada para liquidarse",
             })
         else:
@@ -456,15 +457,24 @@ def crear_liquidacion(
     orden_ids = {oi.orden_id for oi in orden_items_pagados if oi.orden_id is not None}
     for oi in orden_items_pagados:
         oi.estado = EstadoOrden.liquidada
-        if oi.orden:
-            oi.orden.estado = EstadoOrden.liquidada
 
+    db.flush()
     for orden_id in orden_ids:
         orden = db.query(Orden).filter(Orden.id == orden_id).first()
         if orden:
-            orden.estado = EstadoOrden.liquidada
-
-    db.flush()
+            pendientes = (
+                db.query(OrdenItem)
+                .filter(
+                    OrdenItem.orden_id == orden_id,
+                    OrdenItem.estado == EstadoOrden.pagada,
+                )
+                .count()
+            )
+            orden.estado = (
+                EstadoOrden.liquidada
+                if pendientes == 0
+                else EstadoOrden.pagada
+            )
 
     db.commit()
     db.refresh(liquidacion)

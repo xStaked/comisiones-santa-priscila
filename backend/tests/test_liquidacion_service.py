@@ -506,6 +506,69 @@ def test_eliminar_liquidacion_restaura_orden_y_items_a_pagada(db_session):
     assert orden_item.estado == EstadoOrden.pagada
 
 
+def test_liquidacion_parcial_mantiene_orden_pagada_hasta_liquidar_todos_los_items(db_session):
+    orden = Orden(
+        fecha=date.today(),
+        numero_orden="ORD-LIQ-PARCIAL-001",
+        estado=EstadoOrden.pagada,
+    )
+    db_session.add(orden)
+    db_session.flush()
+
+    item_uno = OrdenItem(
+        orden_id=orden.id,
+        fecha=date.today(),
+        numero_orden="ORD-LIQ-PARCIAL-001",
+        finca="Finca A",
+        producto="Producto A",
+        cantidad=Decimal("10"),
+        unidad="kg",
+        precio_unitario=Decimal("5"),
+        total=Decimal("50"),
+        estado=EstadoOrden.pagada,
+    )
+    item_dos = OrdenItem(
+        orden_id=orden.id,
+        fecha=date.today(),
+        numero_orden="ORD-LIQ-PARCIAL-001",
+        finca="Finca B",
+        producto="Producto B",
+        cantidad=Decimal("20"),
+        unidad="kg",
+        precio_unitario=Decimal("3"),
+        total=Decimal("60"),
+        estado=EstadoOrden.pagada,
+    )
+    db_session.add_all([item_uno, item_dos])
+    db_session.commit()
+
+    primera_liquidacion, _ = crear_liquidacion(
+        db_session,
+        "Liq parcial 1",
+        [item_uno.id],
+    )
+
+    db_session.refresh(orden)
+    db_session.refresh(item_uno)
+    db_session.refresh(item_dos)
+    assert primera_liquidacion.id is not None
+    assert orden.estado == EstadoOrden.pagada
+    assert item_uno.estado == EstadoOrden.liquidada
+    assert item_dos.estado == EstadoOrden.pagada
+
+    segunda_liquidacion, _ = crear_liquidacion(
+        db_session,
+        "Liq parcial 2",
+        [item_dos.id],
+    )
+
+    db_session.refresh(orden)
+    db_session.refresh(item_dos)
+    assert segunda_liquidacion.id is not None
+    assert orden.estado == EstadoOrden.liquidada
+    assert item_dos.estado == EstadoOrden.liquidada
+
+
 def test_restaurar_liquidacion_recrea_orden_y_items_en_pagada(db_session):
     orden = Orden(
         fecha=date.today(),
