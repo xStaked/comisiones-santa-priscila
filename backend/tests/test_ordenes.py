@@ -216,12 +216,11 @@ def test_liquidacion_preserva_orden_id_en_snapshots(authenticated_client):
     assert create_resp.status_code == 201
     orden = create_resp.json()
     item_ids = [item["id"] for item in orden["items"]]
-    for item_id in item_ids:
-        estado_resp = authenticated_client.put(
-            f"/api/v1/ordenes/{item_id}",
-            json={"estado": "pagada"},
-        )
-        assert estado_resp.status_code == 200
+    estado_resp = authenticated_client.put(
+        f"/api/v1/ordenes/grupos/{orden['id']}/estado",
+        json={"estado": "pagada"},
+    )
+    assert estado_resp.status_code == 200
 
     liq_resp = authenticated_client.post(
         "/api/v1/liquidaciones/",
@@ -240,6 +239,97 @@ def test_liquidacion_preserva_orden_id_en_snapshots(authenticated_client):
         o for o in agrupadas_resp.json() if o["numero_orden"] == "ORD-LIQ-GRUPO-001"
     )
     assert orden_liquidada["estado"] == "liquidada"
+    assert {item["estado"] for item in orden_liquidada["items"]} == {"liquidada"}
+
+
+def test_liquidacion_rechaza_orden_pendiente(authenticated_client):
+    payload = {
+        "fecha": str(date.today()),
+        "numero_orden": "ORD-LIQ-PENDIENTE-001",
+        "origen": "manual",
+        "items": [
+            {
+                "finca": "Finca A",
+                "producto": "Camarón",
+                "cantidad": "10.00",
+                "unidad": "kg",
+                "precio_unitario": "5.00",
+                "total": "50.00",
+                "comisionista_ids": [],
+            }
+        ],
+    }
+
+    create_resp = authenticated_client.post("/api/v1/ordenes/", json=payload)
+    assert create_resp.status_code == 201
+    orden = create_resp.json()
+
+    liq_resp = authenticated_client.post(
+        "/api/v1/liquidaciones/",
+        json={
+            "nombre": "Liquidación rechazada",
+            "orden_item_ids": [orden["items"][0]["id"]],
+        },
+    )
+
+    assert liq_resp.status_code == 400
+    assert "pagada" in liq_resp.json()["detail"]
+
+
+def test_liquidacion_permite_orden_pagada_y_marca_liquidada(authenticated_client):
+    payload = {
+        "fecha": str(date.today()),
+        "numero_orden": "ORD-LIQ-PAGADA-001",
+        "origen": "manual",
+        "items": [
+            {
+                "finca": "Finca A",
+                "producto": "Camarón",
+                "cantidad": "10.00",
+                "unidad": "kg",
+                "precio_unitario": "5.00",
+                "total": "50.00",
+                "comisionista_ids": [],
+            },
+            {
+                "finca": "Finca B",
+                "producto": "Tilapia",
+                "cantidad": "20.00",
+                "unidad": "kg",
+                "precio_unitario": "3.00",
+                "total": "60.00",
+                "comisionista_ids": [],
+            },
+        ],
+    }
+
+    create_resp = authenticated_client.post("/api/v1/ordenes/", json=payload)
+    assert create_resp.status_code == 201
+    orden = create_resp.json()
+
+    estado_resp = authenticated_client.put(
+        f"/api/v1/ordenes/grupos/{orden['id']}/estado",
+        json={"estado": "pagada"},
+    )
+    assert estado_resp.status_code == 200
+
+    liq_resp = authenticated_client.post(
+        "/api/v1/liquidaciones/",
+        json={
+            "nombre": "Liquidación permitida",
+            "orden_item_ids": [item["id"] for item in orden["items"]],
+        },
+    )
+
+    assert liq_resp.status_code == 201
+
+    agrupadas_resp = authenticated_client.get("/api/v1/ordenes/", params={"agrupadas": True})
+    assert agrupadas_resp.status_code == 200
+    orden_liquidada = next(
+        o for o in agrupadas_resp.json() if o["id"] == orden["id"]
+    )
+    assert orden_liquidada["estado"] == "liquidada"
+    assert {item["estado"] for item in orden_liquidada["items"]} == {"liquidada"}
 
 
 def test_actualiza_estado_de_orden_agrupada_y_sus_items(authenticated_client):

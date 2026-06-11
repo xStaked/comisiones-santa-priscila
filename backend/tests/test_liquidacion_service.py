@@ -3,7 +3,7 @@ from decimal import Decimal
 
 from app.models.cliente import Cliente, Finca
 from app.models.comisionista import Comisionista, Tarifa, TipoTarifa
-from app.models.orden import Asignacion, Orden, OrdenItem
+from app.models.orden import Asignacion, EstadoOrden, Orden, OrdenItem
 from app.models.producto import Producto
 from app.models.tarifa_cliente_producto import TarifaClienteProducto
 from app.services.liquidacion import (
@@ -11,6 +11,8 @@ from app.services.liquidacion import (
     _calcular_comision_con_tarifa,
     _calcular_comision_especifica,
     crear_liquidacion,
+    eliminar_liquidacion,
+    restaurar_liquidacion,
 )
 
 
@@ -284,6 +286,7 @@ def test_crear_liquidacion_aplica_cero_cuando_proveedor_excluido_en_global(db_se
         fecha=date.today(),
         numero_orden="ORD-003",
         proveedor="Elizabeth Ochoa",
+        estado=EstadoOrden.pagada,
     )
     db_session.add(orden)
     db_session.flush()
@@ -298,6 +301,7 @@ def test_crear_liquidacion_aplica_cero_cuando_proveedor_excluido_en_global(db_se
         unidad="kg",
         precio_unitario=Decimal("5"),
         total=Decimal("50"),
+        estado=EstadoOrden.pagada,
     )
     db_session.add(orden_item)
     db_session.flush()
@@ -331,6 +335,7 @@ def test_crear_liquidacion_aplica_global_cuando_proveedor_no_excluido(db_session
         fecha=date.today(),
         numero_orden="ORD-004",
         proveedor="Dinacuamar",
+        estado=EstadoOrden.pagada,
     )
     db_session.add(orden)
     db_session.flush()
@@ -345,6 +350,7 @@ def test_crear_liquidacion_aplica_global_cuando_proveedor_no_excluido(db_session
         unidad="kg",
         precio_unitario=Decimal("5"),
         total=Decimal("50"),
+        estado=EstadoOrden.pagada,
     )
     db_session.add(orden_item)
     db_session.flush()
@@ -397,6 +403,7 @@ def test_crear_liquidacion_cero_comision_cuando_proveedor_excluido_en_tarifa_esp
         fecha=date.today(),
         numero_orden="ORD-MALAVE-001",
         proveedor="Elizabeth Ochoa",
+        estado=EstadoOrden.pagada,
     )
     db_session.add(orden)
     db_session.flush()
@@ -413,6 +420,7 @@ def test_crear_liquidacion_cero_comision_cuando_proveedor_excluido_en_tarifa_esp
         total=Decimal("500"),
         cliente_id=cliente.id,
         producto_id=producto.id,
+        estado=EstadoOrden.pagada,
     )
     db_session.add(orden_item)
     db_session.flush()
@@ -430,3 +438,108 @@ def test_crear_liquidacion_cero_comision_cuando_proveedor_excluido_en_tarifa_esp
     assert len(tarifas_comisionista) == 1
     assert tarifas_comisionista[0].comision_calculada == Decimal("0")
     assert tarifas_comisionista[0].tipo_snapshot == "sin_tarifa"
+
+
+def test_crear_liquidacion_rechaza_item_si_su_orden_padre_no_esta_pagada(db_session):
+    orden = Orden(
+        fecha=date.today(),
+        numero_orden="ORD-PADRE-PENDIENTE-001",
+        estado=EstadoOrden.pendiente,
+    )
+    db_session.add(orden)
+    db_session.flush()
+
+    orden_item = OrdenItem(
+        orden_id=orden.id,
+        fecha=date.today(),
+        numero_orden="ORD-PADRE-PENDIENTE-001",
+        finca="Finca Test",
+        producto="Producto Test",
+        cantidad=Decimal("10"),
+        unidad="kg",
+        precio_unitario=Decimal("5"),
+        total=Decimal("50"),
+        estado=EstadoOrden.pagada,
+    )
+    db_session.add(orden_item)
+    db_session.commit()
+
+    import pytest
+
+    with pytest.raises(ValueError, match="Solo se pueden liquidar órdenes en estado pagada"):
+        crear_liquidacion(db_session, "Liq inválida", [orden_item.id])
+
+
+def test_eliminar_liquidacion_restaura_orden_y_items_a_pagada(db_session):
+    orden = Orden(
+        fecha=date.today(),
+        numero_orden="ORD-ELIMINAR-LIQ-001",
+        estado=EstadoOrden.pagada,
+    )
+    db_session.add(orden)
+    db_session.flush()
+
+    orden_item = OrdenItem(
+        orden_id=orden.id,
+        fecha=date.today(),
+        numero_orden="ORD-ELIMINAR-LIQ-001",
+        finca="Finca Test",
+        producto="Producto Test",
+        cantidad=Decimal("10"),
+        unidad="kg",
+        precio_unitario=Decimal("5"),
+        total=Decimal("50"),
+        estado=EstadoOrden.pagada,
+    )
+    db_session.add(orden_item)
+    db_session.commit()
+
+    liquidacion, _ = crear_liquidacion(db_session, "Liq eliminar", [orden_item.id])
+    assert orden.estado == EstadoOrden.liquidada
+    assert orden_item.estado == EstadoOrden.liquidada
+
+    eliminar_liquidacion(db_session, liquidacion.id)
+
+    db_session.refresh(orden)
+    db_session.refresh(orden_item)
+    assert orden.estado == EstadoOrden.pagada
+    assert orden_item.estado == EstadoOrden.pagada
+
+
+def test_restaurar_liquidacion_recrea_orden_y_items_en_pagada(db_session):
+    orden = Orden(
+        fecha=date.today(),
+        numero_orden="ORD-RESTAURAR-LIQ-001",
+        estado=EstadoOrden.pagada,
+    )
+    db_session.add(orden)
+    db_session.flush()
+
+    orden_item = OrdenItem(
+        orden_id=orden.id,
+        fecha=date.today(),
+        numero_orden="ORD-RESTAURAR-LIQ-001",
+        finca="Finca Test",
+        producto="Producto Test",
+        cantidad=Decimal("10"),
+        unidad="kg",
+        precio_unitario=Decimal("5"),
+        total=Decimal("50"),
+        estado=EstadoOrden.pagada,
+    )
+    db_session.add(orden_item)
+    db_session.commit()
+
+    liquidacion, _ = crear_liquidacion(db_session, "Liq restaurar", [orden_item.id])
+
+    nuevos_ids = restaurar_liquidacion(db_session, liquidacion.id)
+
+    nuevos_items = (
+        db_session.query(OrdenItem)
+        .filter(OrdenItem.id.in_(nuevos_ids))
+        .all()
+    )
+    assert len(nuevos_items) == 1
+    assert nuevos_items[0].estado == EstadoOrden.pagada
+    assert nuevos_items[0].orden is not None
+    assert nuevos_items[0].orden.estado == EstadoOrden.pagada

@@ -349,21 +349,24 @@ def crear_liquidacion(
     if missing:
         raise ValueError(f"OrdenItems no encontrados: {missing}")
 
-    # Filtrar ítems no pagados: se omiten en lugar de fallar
-    omitidos: list[dict] = []
+    errores_estado: list[dict] = []
     orden_items_pagados: list[OrdenItem] = []
     for oi in orden_items:
-        if oi.estado != EstadoOrden.pagada:
-            omitidos.append({
+        estado_orden = oi.orden.estado if oi.orden else oi.estado
+        if estado_orden != EstadoOrden.pagada:
+            errores_estado.append({
                 "id": str(oi.id),
-                "estado": oi.estado.value,
-                "motivo": "no está pagada",
+                "estado": estado_orden.value,
+                "motivo": "la orden debe estar pagada para liquidarse",
             })
         else:
             orden_items_pagados.append(oi)
 
+    if errores_estado:
+        raise ValueError("Solo se pueden liquidar órdenes en estado pagada")
+
     if not orden_items_pagados:
-        raise ValueError("Ninguno de los ítems seleccionados está pagado")
+        raise ValueError("Ninguno de los ítems seleccionados pertenece a una orden pagada")
 
     now = datetime.now()
     mes = now.strftime("%Y-%m")
@@ -450,29 +453,22 @@ def crear_liquidacion(
                         )
                         db.add(lit)
 
+    orden_ids = {oi.orden_id for oi in orden_items_pagados if oi.orden_id is not None}
     for oi in orden_items_pagados:
         oi.estado = EstadoOrden.liquidada
+        if oi.orden:
+            oi.orden.estado = EstadoOrden.liquidada
+
+    for orden_id in orden_ids:
+        orden = db.query(Orden).filter(Orden.id == orden_id).first()
+        if orden:
+            orden.estado = EstadoOrden.liquidada
 
     db.flush()
 
-    orden_ids = {oi.orden_id for oi in orden_items_pagados if oi.orden_id is not None}
-    for orden_id in orden_ids:
-        pendientes = (
-            db.query(OrdenItem)
-            .filter(
-                OrdenItem.orden_id == orden_id,
-                OrdenItem.estado == EstadoOrden.pagada,
-            )
-            .count()
-        )
-        if pendientes == 0:
-            orden = db.query(Orden).filter(Orden.id == orden_id).first()
-            if orden:
-                orden.estado = EstadoOrden.liquidada
-
     db.commit()
     db.refresh(liquidacion)
-    return liquidacion, omitidos
+    return liquidacion, []
 
 
 def eliminar_liquidacion(db: Session, liquidacion_id: UUID) -> bool:
