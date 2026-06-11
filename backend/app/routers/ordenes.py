@@ -271,6 +271,11 @@ def actualizar_orden(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Orden no encontrada"
         )
+    if oi.estado == EstadoOrden.liquidada:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No se puede modificar un ítem liquidado",
+        )
 
     update_data = data.model_dump(exclude_unset=True)
     comisionista_ids = update_data.pop("comisionista_ids", None)
@@ -360,6 +365,11 @@ def actualizar_estado_orden_grupo(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="El estado liquidada se asigna al guardar una liquidación",
         )
+    if any(item.estado == EstadoOrden.liquidada for item in orden.items):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No se puede cambiar el estado de una orden con ítems liquidados",
+        )
 
     try:
         orden.estado = nuevo_estado
@@ -382,6 +392,11 @@ def eliminar_orden(id: UUID, db: Session = Depends(get_db), current_user: User =
     if not oi:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Orden no encontrada"
+        )
+    if oi.estado == EstadoOrden.liquidada:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No se puede eliminar un ítem liquidado",
         )
 
     try:
@@ -413,6 +428,11 @@ def agregar_comisionista(
     if not oi:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Orden no encontrada"
+        )
+    if oi.estado == EstadoOrden.liquidada:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No se puede modificar un ítem liquidado",
         )
 
     existe = (
@@ -461,6 +481,11 @@ def quitar_comisionista(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Asignación no encontrada",
         )
+    if asignacion.orden_item and asignacion.orden_item.estado == EstadoOrden.liquidada:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No se puede modificar un ítem liquidado",
+        )
 
     try:
         db.delete(asignacion)
@@ -485,6 +510,11 @@ def asignar_global(body: AsignarGlobalBody, db: Session = Depends(get_db), curre
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Órdenes no encontradas: {missing}",
+        )
+    if any(oi.estado == EstadoOrden.liquidada for oi in ordenes):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No se puede modificar un ítem liquidado",
         )
 
     try:
