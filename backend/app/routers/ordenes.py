@@ -324,6 +324,11 @@ def asignar_comisionistas_a_orden(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Orden no encontrada"
         )
+    if any(item.estado == EstadoOrden.liquidada for item in orden.items):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No se puede modificar un ítem liquidado",
+        )
 
     try:
         for item in orden.items:
