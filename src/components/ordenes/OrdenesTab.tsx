@@ -3,7 +3,7 @@
 import { Fragment, useState, useRef, useEffect, useMemo } from 'react';
 import { Plus, Upload, Trash2, Pencil, UserCheck, Calculator, FileUp, Check, X, Search, ChevronDown, ChevronRight } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
-import { OrdenItem, TarifaClienteProducto } from '@/types';
+import { EstadoOrden, OrdenItem, TarifaClienteProducto } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -22,6 +22,17 @@ import { uploadPDF, uploadImage, fetchFincas } from '@/lib/api';
 import { generarId } from '@/lib/id';
 import { useQuery } from '@tanstack/react-query';
 import { encontrarTarifaEspecifica } from '@/lib/export-utils';
+
+const ESTADOS_ORDEN: { value: EstadoOrden; label: string; className: string }[] = [
+  { value: 'pendiente', label: 'Pendiente', className: 'bg-slate-100 text-slate-700 border-0' },
+  { value: 'parcialmente_pagada', label: 'Parcialmente pagada', className: 'bg-amber-100 text-amber-700 border-0' },
+  { value: 'pagada', label: 'Pagada', className: 'bg-emerald-100 text-emerald-700 border-0' },
+  { value: 'liquidada', label: 'Liquidada', className: 'bg-blue-100 text-blue-700 border-0' },
+];
+
+function getEstadoOrdenMeta(estado?: string) {
+  return ESTADOS_ORDEN.find((item) => item.value === estado) ?? ESTADOS_ORDEN[0];
+}
 
 function MultiSelectComisionistas({
   comisionistas,
@@ -189,7 +200,7 @@ export function OrdenesTab() {
       cliente: string;
       fincas: string[];
       total: number;
-      estado: string;
+      estado: EstadoOrden;
       comisionistaIds: string[];
       items: OrdenItem[];
     }>();
@@ -206,7 +217,9 @@ export function OrdenesTab() {
         comisionistaIds.forEach((cid) => {
           if (!existente.comisionistaIds.includes(cid)) existente.comisionistaIds.push(cid);
         });
-        existente.estado = existente.items.every(i => i.estado === 'liquidada') ? 'liquidada' : 'pendiente';
+        existente.estado = existente.items.every(i => i.estado === existente.items[0]?.estado)
+          ? (existente.items[0]?.estado || 'pendiente')
+          : 'parcialmente_pagada';
         return;
       }
 
@@ -728,9 +741,14 @@ export function OrdenesTab() {
                             )}
                           </td>
                           <td className="px-4 py-3">
-                            <Badge variant="secondary" className={orden.estado === 'liquidada' ? 'bg-emerald-100 text-emerald-700 border-0' : 'bg-slate-100 text-slate-700 border-0'}>
-                              {orden.estado === 'liquidada' ? 'Liquidada' : 'Pendiente'}
-                            </Badge>
+                            {(() => {
+                              const estadoMeta = getEstadoOrdenMeta(orden.estado);
+                              return (
+                                <Badge variant="secondary" className={estadoMeta.className}>
+                                  {estadoMeta.label}
+                                </Badge>
+                              );
+                            })()}
                           </td>
                           <td className="px-4 py-3 text-center">
                             <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg" onClick={() => {

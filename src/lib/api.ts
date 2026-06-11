@@ -1,6 +1,6 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 import { toCamelCase, toSnakeCase } from './transform';
-import type { Liquidacion, OrdenItem } from '@/types';
+import type { EstadoOrden, Liquidacion, OrdenItem } from '@/types';
 
 const API_BASE_URL = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000').replace(/\/+$/, '');
 
@@ -159,7 +159,7 @@ export async function updateOrden(id: string, data: any) {
   return toCamelCase(res.data);
 }
 
-export async function updateEstadoOrdenGrupo(id: string, estado: string) {
+export async function updateEstadoOrdenGrupo(id: string, estado: EstadoOrden) {
   const res = await api.put(`/api/v1/ordenes/grupos/${id}/estado`, toSnakeCase({ estado }));
   return toCamelCase(res.data);
 }
