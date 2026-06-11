@@ -361,13 +361,19 @@ def actualizar_estado_orden_grupo(
             detail="El estado liquidada se asigna al guardar una liquidación",
         )
 
-    orden.estado = nuevo_estado
-    for item in orden.items:
-        item.estado = nuevo_estado
+    try:
+        orden.estado = nuevo_estado
+        for item in orden.items:
+            item.estado = nuevo_estado
 
-    db.commit()
-    db.refresh(orden)
-    return _serializar_orden(orden)
+        db.commit()
+        db.refresh(orden)
+        return _serializar_orden(orden)
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
+        ) from exc
 
 
 @router.delete("/{id}", status_code=status.HTTP_204_NO_CONTENT)

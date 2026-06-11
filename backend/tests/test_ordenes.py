@@ -282,6 +282,14 @@ def test_actualiza_estado_de_orden_agrupada_y_sus_items(authenticated_client):
     assert data["estado"] == "pagada"
     assert {item["estado"] for item in data["items"]} == {"pagada"}
 
+    list_resp = authenticated_client.get("/api/v1/ordenes/", params={"agrupadas": True})
+    assert list_resp.status_code == 200
+    orden_actualizada = next(
+        o for o in list_resp.json() if o["id"] == orden_id
+    )
+    assert orden_actualizada["estado"] == "pagada"
+    assert {item["estado"] for item in orden_actualizada["items"]} == {"pagada"}
+
 
 def test_rechaza_estado_de_orden_desconocido(authenticated_client):
     payload = [{
@@ -306,6 +314,34 @@ def test_rechaza_estado_de_orden_desconocido(authenticated_client):
 
     assert update_resp.status_code == 400
     assert "Estado de orden inválido" in update_resp.json()["detail"]
+
+
+def test_rechaza_marcar_orden_como_liquidada_manualmente(authenticated_client):
+    payload = [{
+        "fecha": str(date.today()),
+        "numero_orden": "ORD-PAGO-LIQUIDADA-001",
+        "finca": "Finca Test",
+        "producto": "Camarón",
+        "cantidad": "100.00",
+        "unidad": "kg",
+        "precio_unitario": "5.50",
+        "total": "550.00",
+        "comisionista_ids": [],
+    }]
+    create_resp = authenticated_client.post("/api/v1/ordenes/", json=payload)
+    assert create_resp.status_code == 201
+    orden_id = create_resp.json()[0]["orden_id"]
+
+    update_resp = authenticated_client.put(
+        f"/api/v1/ordenes/grupos/{orden_id}/estado",
+        json={"estado": "liquidada"},
+    )
+
+    assert update_resp.status_code == 400
+    assert (
+        "El estado liquidada se asigna al guardar una liquidación"
+        in update_resp.json()["detail"]
+    )
 
 
 def test_update_orden(authenticated_client):
