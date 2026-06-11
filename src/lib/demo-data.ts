@@ -46,7 +46,7 @@ function makeOrden(
     total,
     comisionistas: comisionistaIds.map(id => ({ comisionistaId: id })),
     sector: prod.finca,
-    estado: 'Cobrado',
+    estado: 'pagada',
   };
 }
 

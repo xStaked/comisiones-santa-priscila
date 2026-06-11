@@ -206,7 +206,7 @@ export function OrdenesTab() {
         comisionistaIds.forEach((cid) => {
           if (!existente.comisionistaIds.includes(cid)) existente.comisionistaIds.push(cid);
         });
-        existente.estado = existente.items.every(i => i.estado === 'liquidado') ? 'liquidado' : 'activo';
+        existente.estado = existente.items.every(i => i.estado === 'liquidada') ? 'liquidada' : 'pendiente';
         return;
       }
 
@@ -217,7 +217,7 @@ export function OrdenesTab() {
         cliente: item.cliente?.nombre || '-',
         fincas: finca ? [finca] : [],
         total: item.total,
-        estado: item.estado || 'activo',
+        estado: item.estado || 'pendiente',
         comisionistaIds,
         items: [item],
       });
@@ -728,8 +728,8 @@ export function OrdenesTab() {
                             )}
                           </td>
                           <td className="px-4 py-3">
-                            <Badge variant="secondary" className={orden.estado === 'liquidado' ? 'bg-emerald-100 text-emerald-700 border-0' : 'bg-slate-100 text-slate-700 border-0'}>
-                              {orden.estado === 'liquidado' ? 'Liquidado' : 'Activo'}
+                            <Badge variant="secondary" className={orden.estado === 'liquidada' ? 'bg-emerald-100 text-emerald-700 border-0' : 'bg-slate-100 text-slate-700 border-0'}>
+                              {orden.estado === 'liquidada' ? 'Liquidada' : 'Pendiente'}
                             </Badge>
                           </td>
                           <td className="px-4 py-3 text-center">

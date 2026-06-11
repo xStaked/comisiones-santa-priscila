@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Comisionista, OrdenItem, Liquidacion, Cliente, Producto, Finca, TarifaClienteProducto } from '@/types';
+import { Comisionista, OrdenItem, Liquidacion, Cliente, Producto, Finca, TarifaClienteProducto, EstadoOrden } from '@/types';
 import { toast } from 'sonner';
 import {
   fetchComisionistas,
@@ -12,6 +12,7 @@ import {
   fetchOrdenes,
   createOrdenes,
   updateOrden as apiUpdateOrden,
+  updateEstadoOrdenGrupo as apiUpdateEstadoOrdenGrupo,
   deleteOrden as apiDeleteOrden,
   asignarComisionista as apiAsignarComisionista,
   desasignarComisionista as apiDesasignarComisionista,
@@ -47,6 +48,7 @@ interface AppContextType {
   ordenItems: OrdenItem[];
   addOrdenItems: (items: OrdenItem[]) => void;
   updateOrdenItem: (id: string, item: Partial<OrdenItem>) => void;
+  updateEstadoOrden: (ordenId: string, estado: EstadoOrden) => void;
   deleteOrdenItem: (id: string) => void;
   clearOrdenItems: () => void;
   assignComisionistasGlobal: (comisionistaIds: string[]) => void;
@@ -196,6 +198,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     },
   });
 
+  const updateEstadoOrdenMutation = useMutation({
+    mutationFn: ({ ordenId, estado }: { ordenId: string; estado: EstadoOrden }) =>
+      apiUpdateEstadoOrdenGrupo(ordenId, estado),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['ordenes'] });
+      toast.success('Estado de orden actualizado');
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.detail || 'Error al actualizar estado de orden');
+    },
+  });
+
   const deleteOrdenMutation = useMutation({
     mutationFn: apiDeleteOrden,
     onSuccess: () => {
@@ -260,7 +274,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       queryClient.invalidateQueries({ queryKey: ['ordenes'] });
       queryClient.invalidateQueries({ queryKey: ['liquidaciones'] });
       if (data.omitidos && data.omitidos.length > 0) {
-        toast.success(`Liquidación guardada. Se omitieron ${data.omitidos.length} ítem(s) que ya no están activos.`);
+        toast.success(`Liquidación guardada. Se omitieron ${data.omitidos.length} ítem(s) que ya no están pagados.`);
       } else {
         toast.success('Liquidación guardada');
       }
@@ -451,6 +465,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [deleteOrdenMutation]
   );
 
+  const updateEstadoOrden = useCallback(
+    (ordenId: string, estado: EstadoOrden) => {
+      updateEstadoOrdenMutation.mutate({ ordenId, estado });
+    },
+    [updateEstadoOrdenMutation]
+  );
+
   const clearOrdenItems = useCallback(() => {
     limpiarOrdenesMutation.mutate();
   }, [limpiarOrdenesMutation]);
@@ -479,9 +500,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const saveLiquidacion = useCallback(
     (nombre: string, ordenItemIds?: string[]) => {
-      const ids = ordenItemIds ?? ordenItems.filter((o) => o.estado !== 'liquidado').map((o) => o.id);
+      const ids = ordenItemIds ?? ordenItems.filter((o) => o.estado === 'pagada').map((o) => o.id);
       if (ids.length === 0) {
-        toast.error('No hay órdenes para guardar');
+        toast.error('No hay órdenes pagadas para guardar');
         return;
       }
       createLiquidacionMutation.mutate({ nombre, ordenItemIds: ids });
@@ -580,6 +601,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         ordenItems,
         addOrdenItems,
         updateOrdenItem,
+        updateEstadoOrden,
         deleteOrdenItem,
         clearOrdenItems,
         assignComisionistasGlobal,

@@ -418,7 +418,7 @@ export function exportarPDF(
           `${item.cantidad.toLocaleString('es-ES')}`,
           tarifasLabel,
           `$ ${comision.toFixed(2).replace('.', ',')}`,
-          item.estado || 'Cobrado',
+          item.estado || 'pagada',
           item.sector || item.finca || '-',
         ];
       });
@@ -594,7 +594,7 @@ export function exportarExcel(
           item.cantidad,
           tarifasLabel,
           `$ ${comision.toFixed(2).replace('.', ',')}`,
-          item.estado || 'Cobrado',
+          item.estado || 'pagada',
           item.sector || item.finca || '-',
         ]);
       });

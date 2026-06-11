@@ -159,6 +159,11 @@ export async function updateOrden(id: string, data: any) {
   return toCamelCase(res.data);
 }
 
+export async function updateEstadoOrdenGrupo(id: string, estado: string) {
+  const res = await api.put(`/api/v1/ordenes/grupos/${id}/estado`, toSnakeCase({ estado }));
+  return toCamelCase(res.data);
+}
+
 export async function deleteOrden(id: string) {
   await api.delete(`/api/v1/ordenes/${id}`);
 }

@@ -33,7 +33,7 @@ export function LiquidacionTab() {
   );
 
   const ordenItemsActivos = useMemo(
-    () => ordenItems.filter(item => item.estado !== 'liquidado'),
+    () => ordenItems.filter(item => item.estado !== 'liquidada'),
     [ordenItems]
   );
 
@@ -124,7 +124,7 @@ export function LiquidacionTab() {
     await queryClient.refetchQueries({ queryKey: ['ordenes'] });
     // Reconstruir IDs a partir de los datos actualizados
     const ids = ordenItems
-      .filter(item => item.estado !== 'liquidado')
+      .filter(item => item.estado !== 'liquidada')
       .filter(i => {
         const matchComisionista = !filterComisionista || i.comisionistas.some(a => a.comisionistaId === filterComisionista);
         const matchFactura = !filterFactura || i.numeroOrden.toLowerCase().includes(filterFactura.toLowerCase());

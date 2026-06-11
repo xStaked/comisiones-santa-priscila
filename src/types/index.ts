@@ -1,3 +1,5 @@
+export type EstadoOrden = 'pendiente' | 'parcialmente_pagada' | 'pagada' | 'liquidada';
+
 export interface Proveedor {
   id: string;
   nombre: string;
@@ -32,7 +34,7 @@ export interface OrdenItem {
   total: number;
   comisionistas: AsignacionComisionista[];
   sector?: string;
-  estado?: string;
+  estado?: EstadoOrden;
   // Nuevos campos (Fase 3)
   clienteId?: string;
   productoId?: string;
@@ -53,7 +55,7 @@ export interface Orden {
   semana?: string;
   archivoNombre?: string;
   origen: 'manual' | 'pdf' | 'imagen' | string;
-  estado: 'activo' | 'liquidado' | string;
+  estado: EstadoOrden;
   total: number;
   cantidadProductos: number;
   items: OrdenItem[];
