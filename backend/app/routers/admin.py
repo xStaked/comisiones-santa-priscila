@@ -15,6 +15,7 @@ from app.commands.seed_tarifas_excel import (
     obtener_productos,
     procesar_hoja,
 )
+from app.commands.seed_tarifas_externas import seed_tarifas_externas
 
 router = APIRouter()
 
@@ -88,3 +89,22 @@ def seed_demo(
     current_user: User = Depends(get_current_superuser),
 ):
     return seed_real(db, current_user)
+
+
+@router.post("/seed-tarifas-externas")
+def seed_tarifas_externas_endpoint(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_superuser),
+):
+    try:
+        resumen = seed_tarifas_externas(db)
+        return {
+            "detail": "Tarifas externas cargadas correctamente",
+            **resumen,
+        }
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error al cargar tarifas externas: {exc}",
+        ) from exc
