@@ -61,6 +61,7 @@ def resumen(db: Session = Depends(get_db), current_user: User = Depends(get_curr
                 total_comisionado += t.comision_calculada
 
     return {
+        "total_ordenes_pagadas": total_ordenes,
         "total_ordenes_activas": total_ordenes,
         "total_liquidaciones": total_liquidaciones,
         "total_comisionado_este_mes": float(total_comisionado),
@@ -245,7 +246,7 @@ def por_cliente(db: Session = Depends(get_db), current_user: User = Depends(get_
 
 @router.get("/global")
 def global_stats(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    total_ordenes_activas = db.query(OrdenItem).filter(OrdenItem.estado == EstadoOrden.pagada).count()
+    total_ordenes_pagadas = db.query(OrdenItem).filter(OrdenItem.estado == EstadoOrden.pagada).count()
     total_liquidaciones = db.query(Liquidacion).count()
 
     # Total comisionado histórico (todas las liquidaciones)
@@ -271,8 +272,8 @@ def global_stats(db: Session = Depends(get_db), current_user: User = Depends(get
             for t in li.tarifas:
                 total_comisionado_mes += t.comision_calculada
 
-    # Órdenes activas
-    ordenes_activas = (
+    # Órdenes pagadas pendientes de liquidar
+    ordenes_pagadas = (
         db.query(OrdenItem)
         .filter(OrdenItem.estado == EstadoOrden.pagada)
         .options(
@@ -283,21 +284,24 @@ def global_stats(db: Session = Depends(get_db), current_user: User = Depends(get
         )
         .all()
     )
-    total_comision_activas = Decimal("0")
-    total_vendido_activas = Decimal("0")
-    for oi in ordenes_activas:
-        total_vendido_activas += oi.total
+    total_comision_pagadas = Decimal("0")
+    total_vendido_pagadas = Decimal("0")
+    for oi in ordenes_pagadas:
+        total_vendido_pagadas += oi.total
         for asig in oi.asignaciones:
-            total_comision_activas += _calcular_comision_orden(db, oi, asig.comisionista)
+            total_comision_pagadas += _calcular_comision_orden(db, oi, asig.comisionista)
 
     return {
-        "total_ordenes_activas": total_ordenes_activas,
+        "total_ordenes_pagadas": total_ordenes_pagadas,
+        "total_ordenes_activas": total_ordenes_pagadas,
         "total_liquidaciones": total_liquidaciones,
         "total_comisionado_este_mes": float(total_comisionado_mes),
         "total_comisionado_historico": float(total_comisionado_historico),
-        "total_comision_activas": float(total_comision_activas),
+        "total_comision_pagadas": float(total_comision_pagadas),
+        "total_comision_activas": float(total_comision_pagadas),
         "total_vendido_historico": float(total_vendido_historico),
-        "total_vendido_activas": float(total_vendido_activas),
+        "total_vendido_pagadas": float(total_vendido_pagadas),
+        "total_vendido_activas": float(total_vendido_pagadas),
     }
 
 
@@ -321,9 +325,9 @@ def tendencias(db: Session = Depends(get_db), current_user: User = Depends(get_c
             for t in li.tarifas:
                 meses[mes]["comision"] += t.comision_calculada
 
-    # Órdenes activas en mes actual
+    # Órdenes pagadas pendientes de liquidar en mes actual
     mes_actual = datetime.now().strftime("%Y-%m")
-    ordenes_activas = (
+    ordenes_pagadas = (
         db.query(OrdenItem)
         .filter(OrdenItem.estado == EstadoOrden.pagada)
         .options(
@@ -334,10 +338,10 @@ def tendencias(db: Session = Depends(get_db), current_user: User = Depends(get_c
         )
         .all()
     )
-    if ordenes_activas:
+    if ordenes_pagadas:
         if mes_actual not in meses:
             meses[mes_actual] = {"comision": Decimal("0"), "ventas": Decimal("0"), "ordenes": 0}
-        for oi in ordenes_activas:
+        for oi in ordenes_pagadas:
             meses[mes_actual]["ventas"] += oi.total
             meses[mes_actual]["ordenes"] += 1
             for asig in oi.asignaciones:

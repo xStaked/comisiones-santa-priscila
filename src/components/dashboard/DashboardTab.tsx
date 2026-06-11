@@ -60,8 +60,9 @@ export function DashboardTab() {
   });
 
   const totalLiquidado = globalStats?.totalComisionadoHistorico ?? 0;
-  const totalComisionActual = globalStats?.totalComisionActivas ?? 0;
-  const totalVendido = (globalStats?.totalVendidoHistorico ?? 0) + (globalStats?.totalVendidoActivas ?? 0);
+  const ordenesPagadas = globalStats?.totalOrdenesPagadas ?? globalStats?.totalOrdenesActivas ?? 0;
+  const totalComisionPorLiquidar = globalStats?.totalComisionPagadas ?? globalStats?.totalComisionActivas ?? 0;
+  const totalVendido = (globalStats?.totalVendidoHistorico ?? 0) + (globalStats?.totalVendidoPagadas ?? globalStats?.totalVendidoActivas ?? 0);
 
   const tendencias = useMemo(() => {
     if (!tendenciasData || tendenciasData.length === 0) return { diff: 0, up: true };
@@ -136,8 +137,8 @@ export function DashboardTab() {
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs text-slate-500 uppercase tracking-wide font-medium">Comisión Actual</p>
-                <p className="text-2xl font-bold text-slate-900 mt-1 tabular-nums">${totalComisionActual.toFixed(2)}</p>
+                <p className="text-xs text-slate-500 uppercase tracking-wide font-medium">Comisión por Liquidar</p>
+                <p className="text-2xl font-bold text-slate-900 mt-1 tabular-nums">${totalComisionPorLiquidar.toFixed(2)}</p>
                 {tendencias.diff !== 0 && (
                   <p className={`text-xs mt-1 flex items-center gap-1 ${tendencias.up ? 'text-emerald-600' : 'text-red-500'}`}>
                     {tendencias.up ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
@@ -184,8 +185,8 @@ export function DashboardTab() {
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs text-slate-500 uppercase tracking-wide font-medium">Órdenes en Proceso</p>
-                <p className="text-2xl font-bold text-slate-900 mt-1 tabular-nums">{ordenItems.length}</p>
+                <p className="text-xs text-slate-500 uppercase tracking-wide font-medium">Órdenes Pagadas</p>
+                <p className="text-2xl font-bold text-slate-900 mt-1 tabular-nums">{ordenesPagadas}</p>
               </div>
               <div className="h-10 w-10 rounded-xl bg-amber-50 flex items-center justify-center">
                 <FileText className="h-5 w-5 text-amber-600" />

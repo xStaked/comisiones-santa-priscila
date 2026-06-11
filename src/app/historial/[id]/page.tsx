@@ -307,7 +307,7 @@ export default function LiquidacionDetallePage() {
             <Button
               size="sm"
               onClick={() => {
-                if (confirm('¿Restaurar esta liquidación a órdenes activas? Se eliminará del historial y los registros volverán a estar editables.')) {
+                if (confirm('¿Restaurar esta liquidación a órdenes pagadas? Se eliminará del historial y los registros volverán a estar editables.')) {
                   restoreLiquidacion(liquidacion.id);
                   router.push('/ordenes');
                 }
@@ -315,7 +315,7 @@ export default function LiquidacionDetallePage() {
               className="btn-primary-dark rounded-xl"
             >
               <RotateCcw className="h-4 w-4 mr-2" />
-              Restaurar a activas
+              Restaurar a pagadas
             </Button>
           </div>
         </div>

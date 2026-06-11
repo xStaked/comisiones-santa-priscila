@@ -124,7 +124,7 @@ export function ReportesTab() {
     queryFn: () => fetchTarifasClienteProducto(),
   });
 
-  const ordenItems: OrdenItem[] = ordenesData ?? [];
+  const ordenItems: OrdenItem[] = (ordenesData ?? []).filter((item: OrdenItem) => item.estado === 'pagada');
   const tarifasEspecificas: TarifaClienteProducto[] = tarifasData ?? [];
 
   const fincasUnicas = useMemo(() =>
@@ -305,7 +305,7 @@ export function ReportesTab() {
           <CardContent className="pt-5">
             <div className="flex items-center gap-2 text-xs text-slate-500 mb-1">
               <Package className="h-3.5 w-3.5" />
-              Registros
+              Registros pagados
             </div>
             <p className="text-2xl font-bold text-slate-900">{itemsFiltrados.length}</p>
           </CardContent>

@@ -76,7 +76,7 @@ ORDEN_ITEMS_DATA = [
     {"fecha": "2026-04-15", "numero": "OC-2026-0520", "prod": 7, "cant": 2000, "unidad": "kg", "precio": Decimal("8.1"), "coms": ["com-002", "com-007"]},
     {"fecha": "2026-04-18", "numero": "OC-2026-0525", "prod": 0, "cant": 3300, "unidad": "kg", "precio": Decimal("8.7"), "coms": ["com-003"]},
     {"fecha": "2026-04-20", "numero": "OC-2026-0528", "prod": 2, "cant": 2400, "unidad": "kg", "precio": Decimal("6.9"), "coms": ["com-004"]},
-    # Mayo 2026 (activas)
+    # Mayo 2026 (pagadas, pendientes de liquidar)
     {"fecha": "2026-05-03", "numero": "OC-2026-0550", "prod": 1, "cant": 2700, "unidad": "kg", "precio": Decimal("8.0"), "coms": ["com-005"]},
     {"fecha": "2026-05-05", "numero": "OC-2026-0553", "prod": 3, "cant": 1600, "unidad": "kg", "precio": Decimal("9.3"), "coms": ["com-006"]},
     {"fecha": "2026-05-08", "numero": "OC-2026-0558", "prod": 4, "cant": 4000, "unidad": "kg", "precio": Decimal("4.6"), "coms": ["com-001", "com-007"]},
