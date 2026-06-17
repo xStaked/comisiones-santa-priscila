@@ -18,9 +18,9 @@ def _seed_catalogo_base(db_session):
     clientes = [
         santa,
         Cliente(nombre="FRIGOLANDIA", tipo="individual", retencion_porcentaje=Decimal("1.75")),
-        Cliente(nombre="ASOC INT CAMPONIO", tipo="individual", retencion_porcentaje=Decimal("1.75")),
+        Cliente(nombre="CAMPONIO", tipo="individual", retencion_porcentaje=Decimal("1.75")),
         Cliente(nombre="INTEDECAM", tipo="individual", retencion_porcentaje=Decimal("1.75")),
-        Cliente(nombre="INT ISL PALO SANTO", tipo="individual", retencion_porcentaje=Decimal("1.75")),
+        Cliente(nombre="INTEDECAM ISLA PALO SANTO", tipo="individual", retencion_porcentaje=Decimal("1.75")),
         Cliente(nombre="GOLDENSHRIMP", tipo="individual", retencion_porcentaje=Decimal("1.75")),
         Cliente(nombre="AQUALITORAL", tipo="individual", retencion_porcentaje=Decimal("1.75")),
     ]
@@ -49,38 +49,15 @@ def _seed_catalogo_base(db_session):
 
     db_session.add_all(
         [
-            Producto(
-                nombre="CITRIUS-011",
-                unidad_comision="caneca",
-                peso_por_unidad=Decimal("20"),
-            ),
-            Producto(
-                nombre="ECU-BACILLUS AGUA",
-                unidad_comision="tacho",
-                tacho_kilos=Decimal("10"),
-            ),
-            Producto(
-                nombre="ECU-BACILLUS SALUD",
-                unidad_comision="tacho",
-                tacho_kilos=Decimal("10"),
-            ),
-            Producto(
-                nombre="ECU-BACILLUS SUELO",
-                unidad_comision="tacho",
-                tacho_kilos=Decimal("10"),
-            ),
-            Producto(
-                nombre="ECU-BACILLUS SUELO PASTILLA TH",
-                unidad_comision="tacho",
-                tacho_kilos=Decimal("10"),
-            ),
+            Producto(nombre="PAST TH", unidad_comision="kg"),
+            Producto(nombre="AGUA", unidad_comision="kg"),
+            Producto(nombre="SALUD", unidad_comision="kg"),
+            Producto(nombre="SUELO / POLVO", unidad_comision="kg"),
+            Producto(nombre="CITRIUS", unidad_comision="litro"),
+            Producto(nombre="CALCINIT", unidad_comision="kg"),
+            Producto(nombre="NATUXTRACT", unidad_comision="tacho", tacho_kilos=Decimal("15")),
             Producto(nombre="MORTAL C", unidad_comision="litro"),
-            Producto(
-                nombre="NATUXTRACT-ECUCITRIUS",
-                unidad_comision="tacho",
-                tacho_kilos=Decimal("15"),
-            ),
-            Producto(nombre="NITRATO DE CALCIO", unidad_comision="kg"),
+            Producto(nombre="ECU BACILLUS SUELO PASTILLA", unidad_comision="kg"),
         ]
     )
     db_session.commit()
@@ -104,15 +81,13 @@ def test_seed_tarifas_externas_crea_catalogo_faltante_y_tarifas(db_session):
     ).one()
 
 
-def test_seed_tarifas_externas_usa_producto_aprobado_para_pastilla(db_session):
+def test_seed_tarifas_externas_crea_tarifas_para_alburquerque(db_session):
     _seed_catalogo_base(db_session)
 
     seed_tarifas_externas(db_session)
 
-    comisionista = db_session.query(Comisionista).filter_by(nombre="ALEMAN ROBERT").one()
-    producto = db_session.query(Producto).filter_by(
-        nombre="ECU-BACILLUS SUELO PASTILLA TH"
-    ).one()
+    comisionista = db_session.query(Comisionista).filter_by(nombre="ALBURQUERQUE EDGAR").one()
+    producto = db_session.query(Producto).filter_by(nombre="PAST TH").one()
     tarifas = (
         db_session.query(TarifaClienteProducto)
         .filter(
@@ -149,10 +124,10 @@ def test_seed_tarifas_externas_crea_alias_relevantes(db_session):
         alias.alias: alias.producto.nombre
         for alias in db_session.query(ProductoAlias).all()
     }
-    assert aliases["NATRUXTACT"] == "NATUXTRACT-ECUCITRIUS"
+    assert aliases["NATRUXTACT"] == "NATUXTRACT"
     assert aliases["MORTAL CONTROL"] == "MORTAL C"
-    assert aliases["NITRATO DED CALCIO"] == "NITRATO DE CALCIO"
-    assert aliases["ECU-BACILLUS PASTILLA"] == "ECU-BACILLUS SUELO PASTILLA TH"
+    assert aliases["NITRATO DED CALCIO"] == "CALCINIT"
+    assert aliases["ECU-BACILLUS SUELO-PASTILLA TH"] == "PAST TH"
 
 
 def test_admin_seed_tarifas_externas_endpoint(client, db_session):

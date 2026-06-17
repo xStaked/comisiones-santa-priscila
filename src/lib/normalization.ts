@@ -46,6 +46,9 @@ export function normalizarNombreProducto(valor?: string): string | undefined {
     if (/\bPASTILLAS\b/.test(normalizado) && /\bGRANDES\b/.test(normalizado)) {
       return 'PAST GRAN';
     }
+    if (/\bPASTILLA\b/.test(normalizado)) {
+      return 'ECU BACILLUS SUELO PASTILLA';
+    }
     if (normalizado.includes('ALIMENTACION') || normalizado.includes('ALIM')) {
       return 'PAST ALIM';
     }
@@ -69,19 +72,19 @@ export function normalizarNombreProducto(valor?: string): string | undefined {
     return normalizado;
   }
 
-  if (normalizado.includes('NATUXTRACT')) {
+  if (/\bNATUXTRACT\b/.test(normalizado)) {
     return 'NATUXTRACT';
   }
-  if (normalizado.includes('CITRIUS')) {
+  if (/\bCITRIUS\b/.test(normalizado)) {
     return 'CITRIUS';
   }
   if (
-    normalizado.includes('CALCINIT') ||
-    (normalizado.includes('NITRATO') && normalizado.includes('CALCIO'))
+    /\bCALCINIT\b/.test(normalizado) ||
+    (/\bNITRATO\b/.test(normalizado) && /\bCALCIO\b/.test(normalizado))
   ) {
     return 'CALCINIT';
   }
-  if (normalizado.includes('MORTAL') && normalizado.split(' ').includes('C')) {
+  if (/\bMORTAL\b/.test(normalizado) && normalizado.split(' ').includes('C')) {
     return 'MORTAL C';
   }
 

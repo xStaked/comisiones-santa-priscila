@@ -30,43 +30,63 @@ CLIENTES_FALTANTES = ["EXPALSA", "PINGUIMAR", "CAMPROEX", "PROMARISCO"]
 
 PRODUCTOS_REQUERIDOS = {
     "MORTAL SHELL": {"unidad_comision": "litro"},
+    "ECU BACILLUS SUELO PASTILLA": {"unidad_comision": "kg"},
+}
+
+PRODUCTO_UNIDAD = {
+    "PAST TH": "kg",
+    "ECU BACILLUS SUELO PASTILLA": "kg",
+    "SALUD": "kg",
+    "AGUA": "kg",
+    "SUELO / POLVO": "kg",
+    "CITRIUS": "litro",
+    "CALCINIT": "kg",
+    "NATUXTRACT": "tacho",
+    "MORTAL C": "litro",
+    "MORTAL SHELL": "litro",
 }
 
 ALIASES_PRODUCTO = {
-    "NATRUXTACT": "NATUXTRACT-ECUCITRIUS",
-    "NATRUXTACT-ECUCITRIUS": "NATUXTRACT-ECUCITRIUS",
-    "NATUXTRACT-ECUCITRIUS": "NATUXTRACT-ECUCITRIUS",
+    "NATRUXTACT": "NATUXTRACT",
+    "NATRUXTACT-ECUCITRIUS": "NATUXTRACT",
+    "NATUXTRACT-ECUCITRIUS": "NATUXTRACT",
     "MORTAL CONTROL": "MORTAL C",
-    "NITRATO DED CALCIO": "NITRATO DE CALCIO",
-    "ECU-BACILLUS PASTILLA": "ECU-BACILLUS SUELO PASTILLA TH",
-    "ECU-BACILLUS SUELO-PASTILLA": "ECU-BACILLUS SUELO PASTILLA TH",
+    "NITRATO DED CALCIO": "CALCINIT",
+    "ECU-BACILLUS PASTILLA": "PAST TH",
+    "ECU-BACILLUS SUELO-PASTILLA TH": "PAST TH",
+    "ECU-BACILLUS SUELO-PASTILLA": "ECU BACILLUS SUELO PASTILLA",
+    "ECU-BACILLUS SALUD": "SALUD",
+    "ECU-BACILLUS AGUA": "AGUA",
+    "CITRIUS-011": "CITRIUS",
+    "NITRATO DE CALCIO": "CALCINIT",
 }
 
 COLUMNAS_SANTA_PRISCILA = [
-    ("past_th", "ECU-BACILLUS SUELO PASTILLA TH", TipoTarifa.fijo_kg),
-    ("pastilla", "ECU-BACILLUS SUELO PASTILLA TH", TipoTarifa.fijo_kg),
-    ("salud", "ECU-BACILLUS SALUD", TipoTarifa.fijo_kg),
-    ("agua", "ECU-BACILLUS AGUA", TipoTarifa.fijo_kg),
-    ("suelo_polvo", "ECU-BACILLUS SUELO", TipoTarifa.fijo_kg),
-    ("citrius_litro", "CITRIUS-011", TipoTarifa.fijo_kg),
-    ("nitrato_saco", "NITRATO DE CALCIO", TipoTarifa.fijo_unidad),
-    ("natuxtract_tacho", "NATUXTRACT-ECUCITRIUS", TipoTarifa.fijo_unidad),
+    ("past_th", "PAST TH", TipoTarifa.fijo_kg),
+    ("pastilla", "ECU BACILLUS SUELO PASTILLA", TipoTarifa.fijo_kg),
+    ("salud", "SALUD", TipoTarifa.fijo_kg),
+    ("agua", "AGUA", TipoTarifa.fijo_kg),
+    ("suelo_polvo", "SUELO / POLVO", TipoTarifa.fijo_kg),
+    ("citrius_litro", "CITRIUS", TipoTarifa.fijo_unidad),
+    ("nitrato_saco", "CALCINIT", TipoTarifa.fijo_unidad),
+    ("natuxtract_tacho", "NATUXTRACT", TipoTarifa.fijo_unidad),
     ("mortal_control_litro", "MORTAL C", TipoTarifa.fijo_unidad),
 ]
 
 COLUMNAS_OTROS_CLIENTES = [
-    ("pastilla", "ECU-BACILLUS SUELO PASTILLA TH", TipoTarifa.fijo_kg),
-    ("salud", "ECU-BACILLUS SALUD", TipoTarifa.fijo_kg),
-    ("agua", "ECU-BACILLUS AGUA", TipoTarifa.fijo_kg),
-    ("suelo_polvo", "ECU-BACILLUS SUELO", TipoTarifa.fijo_kg),
-    ("citrius_litro", "CITRIUS-011", TipoTarifa.fijo_kg),
-    ("nitrato_saco", "NITRATO DE CALCIO", TipoTarifa.fijo_unidad),
-    ("natuxtract_tacho", "NATUXTRACT-ECUCITRIUS", TipoTarifa.fijo_unidad),
+    ("pastilla", "PAST TH", TipoTarifa.fijo_kg),
+    ("salud", "SALUD", TipoTarifa.fijo_kg),
+    ("agua", "AGUA", TipoTarifa.fijo_kg),
+    ("suelo_polvo", "SUELO / POLVO", TipoTarifa.fijo_kg),
+    ("citrius_litro", "CITRIUS", TipoTarifa.fijo_unidad),
+    ("nitrato_saco", "CALCINIT", TipoTarifa.fijo_unidad),
+    ("natuxtract_tacho", "NATUXTRACT", TipoTarifa.fijo_unidad),
     ("mortal_control_litro", "MORTAL C", TipoTarifa.fijo_unidad),
     ("mortal_shell_litro", "MORTAL SHELL", TipoTarifa.fijo_unidad),
 ]
 
 SANTA_PRISCILA_TARIFAS = [
+    # --- ALBURQUERQUE EDGAR (PDF page 1) ---
     {
         "comisionista": "ALBURQUERQUE EDGAR",
         "finca": "AFRICA ADMINISTRACION",
@@ -74,119 +94,99 @@ SANTA_PRISCILA_TARIFAS = [
         "pastilla": "1.00",
         "salud": "1.00",
         "agua": "1.00",
+        "suelo_polvo": "1.00",
     },
     {
-        "comisionista": "ALEMAN ROBERT",
+        "comisionista": "ALBURQUERQUE EDGAR",
         "finca": "BAJEN ADM A",
         "past_th": "0.50",
         "pastilla": "0.50",
         "salud": "0.50",
         "agua": "0.50",
         "suelo_polvo": "0.50",
-        "citrius_litro": "0.10",
     },
     {
-        "comisionista": "ALEMAN ROBERT",
+        "comisionista": "ALBURQUERQUE EDGAR",
         "finca": "BAJEN ADM B",
         "past_th": "0.50",
         "pastilla": "0.50",
         "salud": "0.50",
         "agua": "0.50",
         "suelo_polvo": "0.50",
-        "citrius_litro": "0.10",
     },
     {
-        "comisionista": "AUGURTO MANUEL",
+        "comisionista": "ALBURQUERQUE EDGAR",
         "finca": "TAURA ADM A",
         "past_th": "2.00",
         "pastilla": "2.00",
         "salud": "2.00",
         "agua": "2.00",
         "suelo_polvo": "2.00",
-        "citrius_litro": "0.15",
-        "nitrato_saco": "1.00",
-        "natuxtract_tacho": "2.00",
-        "mortal_control_litro": "2.00",
     },
     {
-        "comisionista": "AUGURTO MANUEL",
+        "comisionista": "ALBURQUERQUE EDGAR",
         "finca": "TAURA ADM B",
         "past_th": "2.00",
         "pastilla": "2.00",
         "salud": "2.00",
         "agua": "2.00",
         "suelo_polvo": "2.00",
-        "citrius_litro": "0.15",
-        "nitrato_saco": "1.00",
-        "natuxtract_tacho": "2.00",
-        "mortal_control_litro": "2.00",
     },
     {
-        "comisionista": "AUGURTO MANUEL",
+        "comisionista": "ALBURQUERQUE EDGAR",
         "finca": "TAURA ADM C",
         "past_th": "2.00",
         "pastilla": "2.00",
         "salud": "2.00",
         "agua": "2.00",
         "suelo_polvo": "2.00",
-        "citrius_litro": "0.15",
-        "nitrato_saco": "1.00",
-        "natuxtract_tacho": "2.00",
-        "mortal_control_litro": "2.00",
     },
     {
-        "comisionista": "AUGURTO MANUEL",
+        "comisionista": "ALBURQUERQUE EDGAR",
         "finca": "TAURA ADM D",
         "past_th": "2.00",
         "pastilla": "2.00",
         "salud": "2.00",
         "agua": "2.00",
         "suelo_polvo": "2.00",
-        "citrius_litro": "0.15",
-        "nitrato_saco": "1.00",
-        "natuxtract_tacho": "2.00",
-        "mortal_control_litro": "2.00",
     },
     {
-        "comisionista": "ASUNCION REGIS",
+        "comisionista": "ALBURQUERQUE EDGAR",
         "finca": "CALIFORNIA ADM A",
         "past_th": "1.50",
         "pastilla": "1.50",
         "salud": "1.50",
-        "citrius_litro": "0.05",
-        "nitrato_saco": "0.50",
-        "natuxtract_tacho": "1.00",
-        "mortal_control_litro": "0.50",
+        "agua": "1.50",
+        "suelo_polvo": "1.50",
     },
     {
-        "comisionista": "ASUNCION REGIS",
+        "comisionista": "ALBURQUERQUE EDGAR",
         "finca": "CALIFORNIA ADM B",
         "past_th": "1.50",
         "pastilla": "1.50",
         "salud": "1.50",
-        "citrius_litro": "0.05",
-        "nitrato_saco": "0.50",
-        "natuxtract_tacho": "1.00",
-        "mortal_control_litro": "0.50",
+        "agua": "1.50",
+        "suelo_polvo": "1.50",
     },
     {
-        "comisionista": "CORDOVA JUAN CARLOS",
+        "comisionista": "ALBURQUERQUE EDGAR",
         "finca": "CORVINERO ADM A",
         "past_th": "0.50",
         "pastilla": "0.50",
         "salud": "0.50",
         "agua": "0.50",
-        "citrius_litro": "0.08",
+        "suelo_polvo": "0.50",
     },
     {
-        "comisionista": "CORDOVA JUAN CARLOS",
+        "comisionista": "ALBURQUERQUE EDGAR",
         "finca": "CORVINERO ADM B",
         "past_th": "0.50",
         "pastilla": "0.50",
         "salud": "0.50",
         "agua": "0.50",
-        "citrius_litro": "0.08",
+        "suelo_polvo": "0.50",
     },
+    # --- CORDOVA ROGER (PDF page 1) ---
     {
         "comisionista": "CORDOVA ROGER",
         "finca": "ASIA ADMINISTRACION",
@@ -195,6 +195,7 @@ SANTA_PRISCILA_TARIFAS = [
         "salud": "1.00",
         "agua": "1.00",
     },
+    # --- JAIME MARTIN (PDF page 1) ---
     {
         "comisionista": "JAIME MARTIN",
         "finca": "TAURA ADM A",
@@ -202,64 +203,66 @@ SANTA_PRISCILA_TARIFAS = [
         "pastilla": "1.00",
         "agua": "1.00",
         "suelo_polvo": "2.00",
-        "natuxtract_tacho": "2.00",
     },
     {
-        "comisionista": "NARANJO JUNIOR",
+        "comisionista": "JAIME MARTIN",
         "finca": "CALIFORNIA ADM A",
         "past_th": "3.00",
         "pastilla": "3.00",
         "salud": "3.00",
-        "citrius_litro": "0.15",
-        "nitrato_saco": "0.50",
-        "natuxtract_tacho": "2.00",
     },
     {
-        "comisionista": "NARANJO JUNIOR",
+        "comisionista": "JAIME MARTIN",
         "finca": "CALIFORNIA ADM B",
         "past_th": "3.00",
         "pastilla": "3.00",
         "salud": "3.00",
-        "citrius_litro": "0.15",
-        "nitrato_saco": "0.50",
-        "natuxtract_tacho": "2.00",
     },
     {
-        "comisionista": "QUEVEDO RUBEN",
+        "comisionista": "JAIME MARTIN",
         "finca": "CHANDUY",
         "past_th": "1.00",
         "pastilla": "1.00",
-        "agua": "1.00",
-        "suelo_polvo": "1.00",
-        "citrius_litro": "0.07",
-        "nitrato_saco": "0.50",
     },
     {
-        "comisionista": "QUEVEDO RUBEN",
+        "comisionista": "JAIME MARTIN",
         "finca": "PAÑAMAO",
         "past_th": "1.00",
         "pastilla": "1.00",
-        "agua": "1.00",
-        "suelo_polvo": "1.00",
-        "citrius_litro": "0.07",
-        "nitrato_saco": "0.50",
     },
     {
-        "comisionista": "RUEDA JORGE",
+        "comisionista": "JAIME MARTIN",
         "finca": "AFRICA ADMINISTRACION",
         "past_th": "2.00",
-        "pastilla": "1.00",
+        "salud": "2.00",
         "agua": "2.00",
-        "suelo_polvo": "2.00",
-        "citrius_litro": "0.15",
-        "nitrato_saco": "1.00",
     },
-    {"comisionista": "RUEDA JORGE", "finca": "ASIA ADMINISTRACION", "past_th": "1.00"},
-    {"comisionista": "RUEDA JORGE", "finca": "BAJEN ADM A", "past_th": "2.00", "salud": "2.00"},
-    {"comisionista": "RUEDA JORGE", "finca": "CORVINERO ADM A", "past_th": "2.00"},
-    {"comisionista": "RUEDA JORGE", "finca": "CORVINERO ADM B", "past_th": "2.00"},
-    {"comisionista": "RUEDA JORGE", "finca": "CHANDUY", "past_th": "1.00"},
-    {"comisionista": "RUEDA JORGE", "finca": "DAULAR ADMINISTRACION", "past_th": "1.00"},
+    {
+        "comisionista": "JAIME MARTIN",
+        "finca": "ASIA ADMINISTRACION",
+        "past_th": "1.00",
+    },
+    {
+        "comisionista": "JAIME MARTIN",
+        "finca": "BAJEN ADM A",
+        "past_th": "2.00",
+    },
+    {
+        "comisionista": "JAIME MARTIN",
+        "finca": "CORVINERO ADM A",
+        "past_th": "2.00",
+    },
+    {
+        "comisionista": "JAIME MARTIN",
+        "finca": "CORVINERO ADM B",
+        "past_th": "2.00",
+    },
+    {
+        "comisionista": "JAIME MARTIN",
+        "finca": "DAULAR ADMINISTRACION",
+        "past_th": "1.00",
+    },
+    # --- RUGEL ANGEL (PDF page 1) ---
     {
         "comisionista": "RUGEL ANGEL",
         "finca": "PAÑAMAO",
@@ -269,7 +272,7 @@ SANTA_PRISCILA_TARIFAS = [
         "agua": "1.00",
     },
     {
-        "comisionista": "ZARATE TEOBALDO",
+        "comisionista": "RUGEL ANGEL",
         "finca": "DAULAR - ADMINISTRACION",
         "past_th": "1.00",
         "pastilla": "1.00",
@@ -277,7 +280,7 @@ SANTA_PRISCILA_TARIFAS = [
         "agua": "1.00",
     },
     {
-        "comisionista": "ZARATE TEOBALDO",
+        "comisionista": "RUGEL ANGEL",
         "finca": "DAULAR - CURAZAO",
         "past_th": "1.00",
         "pastilla": "1.00",
@@ -302,15 +305,15 @@ OTROS_CLIENTES_TARIFAS = [
         "agua": "2.00",
     },
     {
-        "comisionista": "ULLOA RONALD",
-        "cliente": "ASOC INT CAMPONIO",
+        "comisionista": "ASOCIACION INTEDECAM",
+        "cliente": "CAMPONIO",
         "pastilla": "9.00",
         "salud": "9.00",
         "agua": "9.00",
         "suelo_polvo": "9.00",
     },
     {
-        "comisionista": "ULLOA RONALD",
+        "comisionista": "ASOCIACION INTEDECAM",
         "cliente": "INTEDECAM",
         "pastilla": "9.00",
         "salud": "9.00",
@@ -318,15 +321,15 @@ OTROS_CLIENTES_TARIFAS = [
         "suelo_polvo": "9.00",
     },
     {
-        "comisionista": "ULLOA RONALD",
-        "cliente": "INT ISL PALO SANTO",
+        "comisionista": "ASOCIACION INTEDECAM",
+        "cliente": "INTEDECAM ISLA PALO SANTO",
         "pastilla": "9.00",
         "salud": "9.00",
         "agua": "9.00",
         "suelo_polvo": "9.00",
     },
     {
-        "comisionista": "ULLOA RONALD",
+        "comisionista": "ASOCIACION INTEDECAM",
         "cliente": "GOLDENSHRIMP",
         "pastilla": "9.00",
         "salud": "9.00",
@@ -334,7 +337,7 @@ OTROS_CLIENTES_TARIFAS = [
         "suelo_polvo": "9.00",
     },
     {
-        "comisionista": "ULLOA RONALD",
+        "comisionista": "ASOCIACION INTEDECAM",
         "cliente": "AQUALITORAL",
         "pastilla": "9.00",
         "salud": "9.00",
@@ -342,7 +345,7 @@ OTROS_CLIENTES_TARIFAS = [
         "suelo_polvo": "9.00",
     },
     {
-        "comisionista": "ULLOA RONALD",
+        "comisionista": "ASOCIACION INTEDECAM",
         "cliente": "PINGUIMAR",
         "pastilla": "9.00",
         "salud": "9.00",
@@ -350,7 +353,7 @@ OTROS_CLIENTES_TARIFAS = [
         "suelo_polvo": "9.00",
     },
     {
-        "comisionista": "ULLOA RONALD",
+        "comisionista": "ASOCIACION INTEDECAM",
         "cliente": "CAMPROEX",
         "pastilla": "9.00",
         "salud": "9.00",
@@ -412,13 +415,6 @@ def _obtener_o_crear_producto(
     db.add(producto)
     db.flush()
     resumen["productos_creados"] += 1
-    return producto
-
-
-def _obtener_producto_requerido(db: Session, nombre: str) -> Producto:
-    producto = _buscar_por_nombre(db, Producto, nombre)
-    if not producto:
-        raise RuntimeError(f"Producto requerido no encontrado: {nombre}")
     return producto
 
 
@@ -568,7 +564,12 @@ def seed_tarifas_externas(db: Session) -> dict[str, int]:
     productos = {producto.nombre: producto for producto in db.query(Producto).all()}
     for _, producto_nombre, _ in COLUMNAS_SANTA_PRISCILA + COLUMNAS_OTROS_CLIENTES:
         if producto_nombre not in productos:
-            productos[producto_nombre] = _obtener_producto_requerido(db, producto_nombre)
+            productos[producto_nombre] = _obtener_o_crear_producto(
+                db,
+                producto_nombre,
+                resumen,
+                unidad_comision=PRODUCTO_UNIDAD.get(producto_nombre, "kg"),
+            )
 
     for alias, producto_nombre in ALIASES_PRODUCTO.items():
         _crear_alias(db, alias, productos[producto_nombre], resumen)

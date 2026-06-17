@@ -44,6 +44,8 @@ def normalizar_nombre_producto(nombre: str) -> str:
             return "PAST TH"
         if re.search(r"\bPASTILLAS\b", normalizado) and "GRANDES" in normalizado:
             return "PAST GRAN"
+        if re.search(r"\bPASTILLA\b", normalizado):
+            return "ECU BACILLUS SUELO PASTILLA"
         if "ALIMENTACION" in normalizado or "ALIM" in normalizado:
             return "PAST ALIM"
         if "AGUA" in normalizado:
@@ -59,13 +61,15 @@ def normalizar_nombre_producto(nombre: str) -> str:
     }:
         return normalizado
 
-    if "NATUXTRACT" in normalizado:
+    if re.search(r"\bNATUXTRACT\b", normalizado):
         return "NATUXTRACT"
-    if "CITRIUS" in normalizado:
+    if re.search(r"\bCITRIUS\b", normalizado):
         return "CITRIUS"
-    if "CALCINIT" in normalizado or ("NITRATO" in normalizado and "CALCIO" in normalizado):
+    if re.search(r"\bCALCINIT\b", normalizado) or (
+        re.search(r"\bNITRATO\b", normalizado) and re.search(r"\bCALCIO\b", normalizado)
+    ):
         return "CALCINIT"
-    if "MORTAL" in normalizado and "C" in normalizado.split():
+    if re.search(r"\bMORTAL\b", normalizado) and "C" in normalizado.split():
         return "MORTAL C"
 
     # Fallback legacy
