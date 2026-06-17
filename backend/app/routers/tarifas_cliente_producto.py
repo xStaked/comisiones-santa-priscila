@@ -11,6 +11,7 @@ from app.database import get_db
 from app.dependencies import get_current_user
 from app.models.comisionista import Comisionista
 from app.models.tarifa_cliente_producto import TarifaClienteProducto
+from app.services.catalog_normalization import normalizar_proveedor_tarifa
 from app.models.user import User
 from app.schemas.tarifa_cliente_producto import (
     TarifaClienteProductoCreate,
@@ -90,7 +91,7 @@ def crear_tarifa_cliente_producto(
         cliente_id=data.cliente_id,
         producto_id=data.producto_id,
         finca_id=data.finca_id,
-        proveedor=data.proveedor,
+        proveedor=normalizar_proveedor_tarifa(data.proveedor),
         proveedores_excluidos=data.proveedores_excluidos or [],
         tipo=data.tipo,
         valor=data.valor,
@@ -143,7 +144,7 @@ def actualizar_tarifa_cliente_producto(
     tarifa.cliente_id = data.cliente_id
     tarifa.producto_id = data.producto_id
     tarifa.finca_id = data.finca_id
-    tarifa.proveedor = data.proveedor
+    tarifa.proveedor = normalizar_proveedor_tarifa(data.proveedor)
     tarifa.proveedores_excluidos = data.proveedores_excluidos or []
     tarifa.tipo = data.tipo
     tarifa.valor = data.valor

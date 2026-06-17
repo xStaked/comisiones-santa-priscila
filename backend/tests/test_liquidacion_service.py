@@ -270,6 +270,52 @@ def test_buscar_tarifa_especifica_encuentra_cuando_proveedor_no_excluido(db_sess
     assert encontrada.id == tarifa.id
 
 
+def test_buscar_tarifa_especifica_trata_cualquier_proveedor_como_comodin(db_session):
+    cliente = Cliente(nombre="Cliente Test", tipo="grupo")
+    comisionista = Comisionista(nombre="Comisionista Test")
+    producto = Producto(nombre="Producto Test", unidad_comision="kg")
+    db_session.add_all([cliente, comisionista, producto])
+    db_session.flush()
+
+    tarifa = TarifaClienteProducto(
+        comisionista_id=comisionista.id,
+        cliente_id=cliente.id,
+        producto_id=producto.id,
+        finca_id=None,
+        tipo=TipoTarifa.fijo_kg,
+        valor=Decimal("1.00"),
+        proveedor="Cualquier proveedor",
+    )
+
+    orden = Orden(
+        fecha=date.today(),
+        numero_orden="ORD-003-A",
+        proveedor="Dinacuamar",
+    )
+    db_session.add(orden)
+    db_session.flush()
+
+    orden_item = OrdenItem(
+        orden_id=orden.id,
+        fecha=date.today(),
+        numero_orden="ORD-003-A",
+        finca="-",
+        producto=producto.nombre,
+        cantidad=Decimal("10"),
+        unidad="kg",
+        precio_unitario=Decimal("5"),
+        total=Decimal("50"),
+        cliente_id=cliente.id,
+        producto_id=producto.id,
+    )
+    db_session.add_all([tarifa, orden_item])
+    db_session.commit()
+
+    encontrada = _buscar_tarifa_especifica(db_session, orden_item, comisionista.id)
+    assert encontrada is not None
+    assert encontrada.id == tarifa.id
+
+
 def test_crear_liquidacion_aplica_cero_cuando_proveedor_excluido_en_global(db_session):
     comisionista = Comisionista(nombre="Comisionista Test")
     comisionista.tarifas = [

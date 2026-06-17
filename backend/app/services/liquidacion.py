@@ -5,6 +5,7 @@ from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
 
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.models.cliente import Finca
@@ -15,6 +16,7 @@ from app.models.producto import Producto
 from app.models.tarifa_cliente_producto import TarifaClienteProducto
 from app.services.catalog_normalization import (
     _normalizar_texto,
+    es_proveedor_comodin,
     normalizar_nombre_finca,
     normalizar_nombre_producto,
 )
@@ -132,6 +134,8 @@ def _buscar_tarifa_especifica(
             excluidos = [_normalizar_texto(p) for p in tarifa.proveedores_excluidos]
             if proveedor_orden in excluidos:
                 return False
+        if es_proveedor_comodin(tarifa.proveedor):
+            return True
         # 2. Si tiene proveedor específico, solo aplica si coincide
         if tarifa.proveedor:
             return _normalizar_texto(tarifa.proveedor) == proveedor_orden
@@ -147,7 +151,10 @@ def _buscar_tarifa_especifica(
                 TarifaClienteProducto.cliente_id == cliente_id,
                 TarifaClienteProducto.producto_id == producto_id,
                 TarifaClienteProducto.finca_id == finca_id,
-                TarifaClienteProducto.proveedor != "",
+                ~or_(
+                    TarifaClienteProducto.proveedor == "",
+                    func.upper(TarifaClienteProducto.proveedor) == "CUALQUIER PROVEEDOR",
+                ),
                 TarifaClienteProducto.activo.is_(True),
             )
             .first()
@@ -164,7 +171,10 @@ def _buscar_tarifa_especifica(
                 TarifaClienteProducto.cliente_id == cliente_id,
                 TarifaClienteProducto.producto_id == producto_id,
                 TarifaClienteProducto.finca_id == finca_id,
-                TarifaClienteProducto.proveedor == "",
+                or_(
+                    TarifaClienteProducto.proveedor == "",
+                    func.upper(TarifaClienteProducto.proveedor) == "CUALQUIER PROVEEDOR",
+                ),
                 TarifaClienteProducto.activo.is_(True),
             )
             .first()
@@ -182,7 +192,10 @@ def _buscar_tarifa_especifica(
                 TarifaClienteProducto.cliente_id == cliente_id,
                 TarifaClienteProducto.producto_id == producto_id,
                 TarifaClienteProducto.finca_id.isnot(None),
-                TarifaClienteProducto.proveedor != "",
+                ~or_(
+                    TarifaClienteProducto.proveedor == "",
+                    func.upper(TarifaClienteProducto.proveedor) == "CUALQUIER PROVEEDOR",
+                ),
                 TarifaClienteProducto.activo.is_(True),
             )
             .all()
@@ -201,7 +214,10 @@ def _buscar_tarifa_especifica(
                 TarifaClienteProducto.cliente_id == cliente_id,
                 TarifaClienteProducto.producto_id == producto_id,
                 TarifaClienteProducto.finca_id.isnot(None),
-                TarifaClienteProducto.proveedor == "",
+                or_(
+                    TarifaClienteProducto.proveedor == "",
+                    func.upper(TarifaClienteProducto.proveedor) == "CUALQUIER PROVEEDOR",
+                ),
                 TarifaClienteProducto.activo.is_(True),
             )
             .all()
@@ -218,7 +234,10 @@ def _buscar_tarifa_especifica(
             TarifaClienteProducto.cliente_id == cliente_id,
             TarifaClienteProducto.producto_id == producto_id,
             TarifaClienteProducto.finca_id.is_(None),
-            TarifaClienteProducto.proveedor != "",
+            ~or_(
+                TarifaClienteProducto.proveedor == "",
+                func.upper(TarifaClienteProducto.proveedor) == "CUALQUIER PROVEEDOR",
+            ),
             TarifaClienteProducto.activo.is_(True),
         )
         .first()
@@ -234,7 +253,10 @@ def _buscar_tarifa_especifica(
             TarifaClienteProducto.cliente_id == cliente_id,
             TarifaClienteProducto.producto_id == producto_id,
             TarifaClienteProducto.finca_id.is_(None),
-            TarifaClienteProducto.proveedor == "",
+            or_(
+                TarifaClienteProducto.proveedor == "",
+                func.upper(TarifaClienteProducto.proveedor) == "CUALQUIER PROVEEDOR",
+            ),
             TarifaClienteProducto.activo.is_(True),
         )
         .first()

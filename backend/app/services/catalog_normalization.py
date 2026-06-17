@@ -77,3 +77,13 @@ def normalizar_nombre_producto(nombre: str) -> str:
         return "PAST TH"
 
     return normalizado
+
+
+def es_proveedor_comodin(proveedor: str | None) -> bool:
+    return not _normalizar_texto(proveedor or "") or _normalizar_texto(proveedor or "") == "CUALQUIER PROVEEDOR"
+
+
+def normalizar_proveedor_tarifa(proveedor: str | None) -> str:
+    if es_proveedor_comodin(proveedor):
+        return ""
+    return " ".join((proveedor or "").strip().split())

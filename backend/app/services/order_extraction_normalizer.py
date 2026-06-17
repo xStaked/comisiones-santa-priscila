@@ -8,6 +8,7 @@ from app.models.producto import Producto, ProductoAlias
 from app.models.tarifa_cliente_producto import TarifaClienteProducto
 from app.services.catalog_normalization import (
     _normalizar_texto,
+    es_proveedor_comodin,
     normalizar_nombre_finca,
     normalizar_nombre_producto,
 )
@@ -119,11 +120,11 @@ def _buscar_comisionistas_aplicables(
 
     for tarifa in tarifas:
         com_id = str(tarifa.comisionista_id)
-        if tarifa.proveedor:
+        if es_proveedor_comodin(tarifa.proveedor):
+            comisionistas_sin_prov[com_id] = True
+        elif tarifa.proveedor:
             if _normalizar_texto(tarifa.proveedor) == proveedor_normalizado:
                 comisionistas_con_prov[com_id] = True
-        else:
-            comisionistas_sin_prov[com_id] = True
 
     # Si un comisionista tiene tarifa con proveedor coincidente, usar esa.
     # Si no, usar la tarifa sin proveedor (wildcard).
