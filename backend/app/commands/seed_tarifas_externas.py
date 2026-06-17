@@ -482,6 +482,23 @@ def _crear_alias(db: Session, alias: str, producto: Producto, resumen: dict[str,
     resumen["aliases_creados"] += 1
 
 
+def seed_aliases_productos(db: Session, resumen: dict[str, int] | None = None) -> dict[str, int]:
+    if resumen is None:
+        resumen = {
+            "aliases_creados": 0,
+            "aliases_actualizados": 0,
+        }
+
+    productos = {producto.nombre: producto for producto in db.query(Producto).all()}
+    for alias, producto_nombre in ALIASES_PRODUCTO.items():
+        producto = productos.get(producto_nombre)
+        if producto is None:
+            continue
+        _crear_alias(db, alias, producto, resumen)
+
+    return resumen
+
+
 def _buscar_finca(db: Session, cliente: Cliente, nombre_pdf: str) -> Finca:
     nombre_normalizado = normalizar_nombre_finca(nombre_pdf)
     for finca in cliente.fincas:
@@ -619,8 +636,7 @@ def seed_tarifas_externas(db: Session) -> dict[str, int]:
                 unidad_comision=PRODUCTO_UNIDAD.get(producto_nombre, "kg"),
             )
 
-    for alias, producto_nombre in ALIASES_PRODUCTO.items():
-        _crear_alias(db, alias, productos[producto_nombre], resumen)
+    seed_aliases_productos(db, resumen)
 
     santa_priscila = _buscar_por_nombre(db, Cliente, "Santa Priscila")
     if not santa_priscila:

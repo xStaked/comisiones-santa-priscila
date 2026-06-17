@@ -15,7 +15,7 @@ from app.commands.seed_tarifas_excel import (
     obtener_productos,
     procesar_hoja,
 )
-from app.commands.seed_tarifas_externas import seed_tarifas_externas
+from app.commands.seed_tarifas_externas import seed_aliases_productos, seed_tarifas_externas
 
 router = APIRouter()
 
@@ -25,6 +25,7 @@ def cargar_datos_reales(db: Session) -> int:
     truncate_catalogos(db)
     seed_clientes(db)
     seed_productos(db)
+    seed_aliases_productos(db)
 
     comisionistas = obtener_o_crear_comisionistas(db)
     db.commit()

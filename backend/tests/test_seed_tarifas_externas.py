@@ -154,3 +154,32 @@ def test_admin_seed_tarifas_externas_endpoint(client, db_session):
     assert response.status_code == 200
     assert response.json()["detail"] == "Tarifas externas cargadas correctamente"
     assert response.json()["tarifas_creadas"] > 0
+
+
+def test_seed_real_crea_alias_natruxtract_ecucitrius(client, db_session):
+    user = User(
+        username="admin",
+        email="admin@example.com",
+        hashed_password=get_password_hash("password"),
+        is_active=True,
+        is_superuser=True,
+    )
+    db_session.add(user)
+    db_session.commit()
+
+    login = client.post(
+        "/api/v1/auth/login",
+        json={"username": "admin", "password": "password"},
+    )
+    assert login.status_code == 200
+    client.headers.update({"Authorization": f"Bearer {login.json()['access_token']}"})
+
+    response = client.post("/api/v1/admin/seed-real")
+
+    assert response.status_code == 200
+    alias = (
+        db_session.query(ProductoAlias)
+        .filter_by(alias="NATRUXTACT-ECUCITRIUS")
+        .one()
+    )
+    assert alias.producto.nombre == "NATUXTRACT"
