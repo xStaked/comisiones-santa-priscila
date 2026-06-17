@@ -299,13 +299,22 @@ def test_asigna_varios_comisionistas_activos_por_cliente_producto_y_finca(db_ses
 def test_asigna_comisionista_cuando_tarifa_tiene_cualquier_proveedor(db_session):
     cliente = Cliente(nombre="SANTA PRISCILA", tipo="grupo")
     finca = Finca(nombre="TAURA D", cliente=cliente)
-    producto = Producto(nombre="NATUXTRACT", unidad_comision="tacho", tacho_kilos=Decimal("15"))
+    producto_canonico = Producto(
+        nombre="NATUXTRACT",
+        unidad_comision="tacho",
+        tacho_kilos=Decimal("15"),
+    )
+    producto_legado = Producto(
+        nombre="NATUXTRACT-ECUCITRIUS",
+        unidad_comision="tacho",
+        tacho_kilos=Decimal("15"),
+    )
     comisionista = Comisionista(nombre="AUGURTO MANUEL")
-    db_session.add_all([cliente, finca, producto, comisionista])
+    db_session.add_all([cliente, finca, producto_canonico, producto_legado, comisionista])
     db_session.flush()
-    db_session.add(ProductoAlias(producto_id=producto.id, alias="NATRUXTACT-ECUCITRIUS"))
+    db_session.add(ProductoAlias(producto_id=producto_canonico.id, alias="NATRUXTACT-ECUCITRIUS"))
 
-    tarifa = _crear_tarifa(comisionista, cliente, producto, finca)
+    tarifa = _crear_tarifa(comisionista, cliente, producto_legado, finca)
     tarifa.proveedor = "Cualquier proveedor"
     db_session.add(tarifa)
     db_session.commit()
@@ -318,6 +327,10 @@ def test_asigna_comisionista_cuando_tarifa_tiene_cualquier_proveedor(db_session)
     assert normalizada.items[0].comisionistas == [
         {"comisionistaId": str(comisionista.id)}
     ]
+    assert normalizada.items[0].productoId in {
+        str(producto_canonico.id),
+        str(producto_legado.id),
+    }
 
 
 def test_no_asigna_comisionista_si_la_finca_es_distinta(db_session):

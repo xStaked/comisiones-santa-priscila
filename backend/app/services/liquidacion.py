@@ -20,6 +20,7 @@ from app.services.catalog_normalization import (
     normalizar_nombre_finca,
     normalizar_nombre_producto,
 )
+from app.services.product_matching import obtener_productos_equivalentes
 
 LIBRA_A_KG = Decimal("0.453592")
 
@@ -128,6 +129,13 @@ def _buscar_tarifa_especifica(
     if not cliente_id or not producto_id:
         return None
 
+    producto_obj = next((p for p in db.query(Producto).all() if p.id == producto_id), None)
+    producto_ids = (
+        obtener_productos_equivalentes(db, producto_obj)
+        if producto_obj
+        else [str(producto_id)]
+    )
+
     def _tarifa_aplica_para_proveedor(tarifa: TarifaClienteProducto) -> bool:
         # 1. Si tiene proveedores excluidos y el proveedor de la orden está en la lista, NO aplica
         if tarifa.proveedores_excluidos:
@@ -149,7 +157,7 @@ def _buscar_tarifa_especifica(
             .filter(
                 TarifaClienteProducto.comisionista_id == comisionista_id,
                 TarifaClienteProducto.cliente_id == cliente_id,
-                TarifaClienteProducto.producto_id == producto_id,
+                TarifaClienteProducto.producto_id.in_(producto_ids),
                 TarifaClienteProducto.finca_id == finca_id,
                 ~or_(
                     TarifaClienteProducto.proveedor == "",
@@ -169,7 +177,7 @@ def _buscar_tarifa_especifica(
             .filter(
                 TarifaClienteProducto.comisionista_id == comisionista_id,
                 TarifaClienteProducto.cliente_id == cliente_id,
-                TarifaClienteProducto.producto_id == producto_id,
+                TarifaClienteProducto.producto_id.in_(producto_ids),
                 TarifaClienteProducto.finca_id == finca_id,
                 or_(
                     TarifaClienteProducto.proveedor == "",
@@ -190,7 +198,7 @@ def _buscar_tarifa_especifica(
             .filter(
                 TarifaClienteProducto.comisionista_id == comisionista_id,
                 TarifaClienteProducto.cliente_id == cliente_id,
-                TarifaClienteProducto.producto_id == producto_id,
+                TarifaClienteProducto.producto_id.in_(producto_ids),
                 TarifaClienteProducto.finca_id.isnot(None),
                 ~or_(
                     TarifaClienteProducto.proveedor == "",
@@ -212,7 +220,7 @@ def _buscar_tarifa_especifica(
             .filter(
                 TarifaClienteProducto.comisionista_id == comisionista_id,
                 TarifaClienteProducto.cliente_id == cliente_id,
-                TarifaClienteProducto.producto_id == producto_id,
+                TarifaClienteProducto.producto_id.in_(producto_ids),
                 TarifaClienteProducto.finca_id.isnot(None),
                 or_(
                     TarifaClienteProducto.proveedor == "",
@@ -232,7 +240,7 @@ def _buscar_tarifa_especifica(
         .filter(
             TarifaClienteProducto.comisionista_id == comisionista_id,
             TarifaClienteProducto.cliente_id == cliente_id,
-            TarifaClienteProducto.producto_id == producto_id,
+            TarifaClienteProducto.producto_id.in_(producto_ids),
             TarifaClienteProducto.finca_id.is_(None),
             ~or_(
                 TarifaClienteProducto.proveedor == "",
@@ -251,7 +259,7 @@ def _buscar_tarifa_especifica(
         .filter(
             TarifaClienteProducto.comisionista_id == comisionista_id,
             TarifaClienteProducto.cliente_id == cliente_id,
-            TarifaClienteProducto.producto_id == producto_id,
+            TarifaClienteProducto.producto_id.in_(producto_ids),
             TarifaClienteProducto.finca_id.is_(None),
             or_(
                 TarifaClienteProducto.proveedor == "",

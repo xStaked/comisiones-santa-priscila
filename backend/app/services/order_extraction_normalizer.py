@@ -12,6 +12,7 @@ from app.services.catalog_normalization import (
     normalizar_nombre_finca,
     normalizar_nombre_producto,
 )
+from app.services.product_matching import obtener_productos_equivalentes
 from app.services.order_extraction_models import OrdenValidada
 
 
@@ -99,10 +100,11 @@ def _buscar_comisionistas_aplicables(
         return []
 
     proveedor_normalizado = _normalizar_texto(proveedor)
+    producto_ids = obtener_productos_equivalentes(db, producto)
 
     query = db.query(TarifaClienteProducto).filter(
         TarifaClienteProducto.cliente_id == cliente.id,
-        TarifaClienteProducto.producto_id == producto.id,
+        TarifaClienteProducto.producto_id.in_(producto_ids),
         TarifaClienteProducto.activo.is_(True),
     )
     if cliente.fincas:
