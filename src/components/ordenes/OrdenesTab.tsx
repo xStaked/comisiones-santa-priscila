@@ -215,7 +215,7 @@ export function OrdenesTab() {
   const [filterFechaDesde, setFilterFechaDesde] = useState('');
   const [filterFechaHasta, setFilterFechaHasta] = useState('');
   const [filterComisionistaId, setFilterComisionistaId] = useState<string>('todos');
-  const [sortField, setSortField] = useState<'fecha' | 'total' | 'numeroOrden'>('fecha');
+  const [sortField, setSortField] = useState<'fecha' | 'total' | 'numeroOrden'>('numeroOrden');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const [showFilters, setShowFilters] = useState(false);
 
@@ -313,7 +313,7 @@ export function OrdenesTab() {
       let cmp = 0;
       if (sortField === 'fecha') cmp = a.fecha.localeCompare(b.fecha);
       else if (sortField === 'total') cmp = a.total - b.total;
-      else if (sortField === 'numeroOrden') cmp = a.numeroOrden.localeCompare(b.numeroOrden);
+      else if (sortField === 'numeroOrden') cmp = (parseFloat(a.numeroOrden) || 0) - (parseFloat(b.numeroOrden) || 0);
       return sortDir === 'asc' ? cmp : -cmp;
     });
 
