@@ -74,27 +74,37 @@ function getCantidadParaTarifaKg(item: OrdenItem): number {
     return item.cantidad * 3.78541; // 1 galón ≈ 3.785 litros ≈ 3.785 kg
   }
 
-  if (producto?.unidadComision === 'tacho') {
-    return item.cantidad * (producto.tachoKilos || 15);
-  }
+  // Las conversiones por unidadComision del producto solo aplican cuando la unidad
+  // de la orden no es una unidad base ya reconocida (kg, libras, litros, caneca, galón, tacho).
+  // Si la unidad ya fue procesada arriba, no se debe aplicar un segundo factor de conversión.
+  const unidadYaReconocida = unidadLower === 'kg' ||
+    unidadLower === 'libras' ||
+    unidadLower === 'litros' ||
+    unidadLower.includes('tacho') ||
+    unidadLower.includes('caneca') ||
+    unidadLower.includes('galon') ||
+    unidadLower.includes('galón');
 
-  if (producto?.unidadComision === 'saco') {
-    return item.cantidad * (producto.sacoKilos || 25);
-  }
+  if (!unidadYaReconocida) {
+    if (producto?.unidadComision === 'tacho') {
+      return item.cantidad * (producto.tachoKilos || 15);
+    }
 
-  if (producto?.unidadComision === 'caneca') {
-    return item.cantidad * 20; // 1 caneca = 20 litros ≈ 20 kg
-  }
+    if (producto?.unidadComision === 'saco') {
+      return item.cantidad * (producto.sacoKilos || 25);
+    }
 
-  if (producto?.unidadComision === 'galon') {
-    return item.cantidad * 3.78541; // 1 galón ≈ 3.785 litros ≈ 3.785 kg
-  }
+    if (producto?.unidadComision === 'caneca') {
+      return item.cantidad * 20; // 1 caneca = 20 litros ≈ 20 kg
+    }
 
-  if (
-    producto?.pesoPorUnidad &&
-    !['kg', 'libras', 'litros'].includes(unidadLower)
-  ) {
-    return item.cantidad * producto.pesoPorUnidad;
+    if (producto?.unidadComision === 'galon') {
+      return item.cantidad * 3.78541; // 1 galón ≈ 3.785 litros ≈ 3.785 kg
+    }
+
+    if (producto?.pesoPorUnidad) {
+      return item.cantidad * producto.pesoPorUnidad;
+    }
   }
 
   return item.cantidad;
