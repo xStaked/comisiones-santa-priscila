@@ -307,13 +307,20 @@ export function OrdenesTab() {
       });
     });
 
+    const extraerNumero = (s: string) => { const m = s.match(/\d+/); return m ? parseInt(m[0], 10) : NaN; };
+
     const result = Array.from(map.values());
 
     result.sort((a, b) => {
       let cmp = 0;
       if (sortField === 'fecha') cmp = a.fecha.localeCompare(b.fecha);
       else if (sortField === 'total') cmp = a.total - b.total;
-      else if (sortField === 'numeroOrden') cmp = (parseFloat(a.numeroOrden) || 0) - (parseFloat(b.numeroOrden) || 0);
+      else if (sortField === 'numeroOrden') {
+        const na = extraerNumero(a.numeroOrden);
+        const nb = extraerNumero(b.numeroOrden);
+        if (!isNaN(na) && !isNaN(nb)) cmp = na - nb;
+        else cmp = a.numeroOrden.localeCompare(b.numeroOrden);
+      }
       return sortDir === 'asc' ? cmp : -cmp;
     });
 
