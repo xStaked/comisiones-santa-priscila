@@ -1,9 +1,9 @@
 'use client';
 
-import { Fragment, useState, useRef, useEffect, useMemo } from 'react';
-import { Plus, Upload, Trash2, Pencil, UserCheck, Calculator, FileUp, Check, X, Search, ChevronDown, ChevronRight } from 'lucide-react';
+import { useState, useRef, useEffect, useMemo } from 'react';
+import { Plus, Upload, Trash2, Pencil, UserCheck, Calculator, FileUp, Check, X, Search, ChevronDown, ChevronRight, ChevronLeft, Filter, Calendar, ArrowUpDown } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
-import { EstadoOrden, OrdenItem, TarifaClienteProducto } from '@/types';
+import { EstadoOrden, OrdenItem } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -29,6 +29,8 @@ const ESTADOS_ORDEN: { value: EstadoOrden; label: string; className: string }[] 
   { value: 'pagada', label: 'Pagada', className: 'bg-emerald-100 text-emerald-700 border-0' },
   { value: 'liquidada', label: 'Liquidada', className: 'bg-blue-100 text-blue-700 border-0' },
 ];
+
+const ITEMS_PER_PAGE = 15;
 
 function getEstadoOrdenMeta(estado?: string) {
   return ESTADOS_ORDEN.find((item) => item.value === estado) ?? ESTADOS_ORDEN[0];
@@ -78,20 +80,40 @@ function MultiSelectComisionistas({
     }
   };
 
+  const selectedNames = selectedIds
+    .map(id => comisionistas.find(c => c.id === id)?.nombre)
+    .filter(Boolean) as string[];
+
   return (
     <div className="relative" ref={ref}>
       <button
         type="button"
         disabled={disabled}
         onClick={() => setOpen(!open)}
-        className="flex items-center justify-between w-full h-10 px-3 rounded-xl border border-slate-200 bg-white text-sm text-slate-900 hover:border-slate-300 transition-colors disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400"
+        className="flex items-center justify-between w-full min-h-10 px-3 py-2 rounded-xl border border-slate-200 bg-white text-sm text-slate-900 hover:border-slate-300 transition-colors disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400"
       >
         <span className={selectedIds.length === 0 ? 'text-slate-400' : ''}>
           {selectedIds.length === 0
             ? placeholder
-            : `${selectedIds.length} seleccionado${selectedIds.length > 1 ? 's' : ''}`}
+            : (
+              <span className="flex flex-wrap gap-1">
+                {selectedNames.map((name, i) => (
+                  <span key={selectedIds[i]} className="inline-flex items-center gap-0.5 bg-slate-100 px-1.5 py-0.5 rounded-md text-xs font-medium text-slate-700">
+                    {name}
+                    <button
+                      type="button"
+                      className="ml-0.5 hover:text-red-500"
+                      onClick={(e) => { e.stopPropagation(); toggle(selectedIds[i]); }}
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </span>
+                ))}
+              </span>
+            )
+          }
         </span>
-        <ChevronDown className="h-4 w-4 text-slate-400" />
+        <ChevronDown className="h-4 w-4 text-slate-400 shrink-0 ml-1" />
       </button>
       {open && (
         <div className="absolute z-50 mt-1 w-full bg-white border border-slate-200 rounded-xl shadow-lg max-h-60 overflow-auto">
@@ -161,8 +183,9 @@ export function OrdenesTab() {
   const [uploadType, setUploadType] = useState<'pdf' | 'imagen'>('pdf');
   const [pdfClienteId, setPdfClienteId] = useState<string>('');
 
+  const initialFecha = useMemo(() => new Date().toISOString().slice(0, 10), []);
   const [form, setForm] = useState({
-    fecha: '',
+    fecha: initialFecha,
     numeroOrden: '',
     finca: '',
     producto: '',
@@ -182,29 +205,65 @@ export function OrdenesTab() {
     enabled: !!form.clienteId && selectedCliente?.tipo === 'grupo',
   });
 
-  useEffect(() => {
-    setForm(prev => ({ ...prev, fecha: new Date().toISOString().slice(0, 10) }));
-  }, []);
-
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Partial<OrdenItem>>({});
   const [editOpen, setEditOpen] = useState(false);
   const [search, setSearch] = useState('');
-  const [collapsedOrdenIds, setCollapsedOrdenIds] = useState<string[]>([]);
+  const [collapsedOrdenIds, setCollapsedOrdenIds] = useState<Set<string>>(new Set());
+  const [currentPage, setCurrentPage] = useState(1);
+  const [filterEstado, setFilterEstado] = useState<string>('todos');
+  const [filterFechaDesde, setFilterFechaDesde] = useState('');
+  const [filterFechaHasta, setFilterFechaHasta] = useState('');
+  const [filterComisionistaId, setFilterComisionistaId] = useState<string>('todos');
+  const [sortField, setSortField] = useState<'fecha' | 'total' | 'numeroOrden'>('fecha');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+  const [showFilters, setShowFilters] = useState(false);
+
+  const toggleCollapse = (id: string) => {
+    setCollapsedOrdenIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const expandAll = () => {
+    setCollapsedOrdenIds(new Set());
+  };
+
+  const collapseAll = () => {
+    setCollapsedOrdenIds(new Set(ordenesAgrupadas.map(o => o.id)));
+  };
 
   const filteredOrdenItems = useMemo(() => {
-    if (!search.trim()) return ordenItems;
-    const q = search.toLowerCase();
-    return ordenItems.filter(item =>
-      item.producto.toLowerCase().includes(q) ||
-      item.productoRel?.nombre.toLowerCase().includes(q) ||
-      item.numeroOrden.toLowerCase().includes(q) ||
-      item.finca.toLowerCase().includes(q) ||
-      item.fincaRel?.nombre.toLowerCase().includes(q) ||
-      item.cliente?.nombre.toLowerCase().includes(q) ||
-      item.comisionistas.some(a => comisionistas.find(c => c.id === a.comisionistaId)?.nombre.toLowerCase().includes(q))
-    );
-  }, [ordenItems, search, comisionistas]);
+    let items = ordenItems;
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      items = items.filter(item =>
+        item.producto.toLowerCase().includes(q) ||
+        item.productoRel?.nombre.toLowerCase().includes(q) ||
+        item.numeroOrden.toLowerCase().includes(q) ||
+        item.finca.toLowerCase().includes(q) ||
+        item.fincaRel?.nombre.toLowerCase().includes(q) ||
+        item.cliente?.nombre.toLowerCase().includes(q) ||
+        item.comisionistas.some(a => comisionistas.find(c => c.id === a.comisionistaId)?.nombre.toLowerCase().includes(q))
+      );
+    }
+    if (filterFechaDesde) {
+      items = items.filter(item => item.fecha >= filterFechaDesde);
+    }
+    if (filterFechaHasta) {
+      items = items.filter(item => item.fecha <= filterFechaHasta);
+    }
+    if (filterEstado !== 'todos') {
+      items = items.filter(item => (item.estado || 'pendiente') === filterEstado);
+    }
+    if (filterComisionistaId !== 'todos') {
+      items = items.filter(item => item.comisionistas.some(a => a.comisionistaId === filterComisionistaId));
+    }
+    return items;
+  }, [ordenItems, search, comisionistas, filterFechaDesde, filterFechaHasta, filterEstado, filterComisionistaId]);
 
   const ordenesAgrupadas = useMemo(() => {
     const map = new Map<string, {
@@ -248,8 +307,25 @@ export function OrdenesTab() {
       });
     });
 
-    return Array.from(map.values()).sort((a, b) => b.fecha.localeCompare(a.fecha));
-  }, [filteredOrdenItems]);
+    const result = Array.from(map.values());
+
+    result.sort((a, b) => {
+      let cmp = 0;
+      if (sortField === 'fecha') cmp = a.fecha.localeCompare(b.fecha);
+      else if (sortField === 'total') cmp = a.total - b.total;
+      else if (sortField === 'numeroOrden') cmp = a.numeroOrden.localeCompare(b.numeroOrden);
+      return sortDir === 'asc' ? cmp : -cmp;
+    });
+
+    return result;
+  }, [filteredOrdenItems, sortField, sortDir]);
+
+  const totalPages = Math.max(1, Math.ceil(ordenesAgrupadas.length / ITEMS_PER_PAGE));
+  const safePage = Math.min(currentPage, totalPages);
+  const paginatedOrdenes = useMemo(() => {
+    const start = (safePage - 1) * ITEMS_PER_PAGE;
+    return ordenesAgrupadas.slice(start, start + ITEMS_PER_PAGE);
+  }, [ordenesAgrupadas, safePage]);
 
   const resetForm = () => {
     setForm({
@@ -364,12 +440,13 @@ export function OrdenesTab() {
 
   const handleSaveEdit = () => {
     if (!editingId) return;
-    if (editForm.cantidad && editForm.precioUnitario) {
-      editForm.total = editForm.cantidad * editForm.precioUnitario;
+    const updatedEditForm = { ...editForm };
+    if (updatedEditForm.cantidad && updatedEditForm.precioUnitario) {
+      updatedEditForm.total = updatedEditForm.cantidad * updatedEditForm.precioUnitario;
     }
     updateOrdenItem(editingId, {
-      ...editForm,
-      comisionistaIds: (editForm.comisionistas || []).map(a => a.comisionistaId),
+      ...updatedEditForm,
+      comisionistaIds: (updatedEditForm.comisionistas || []).map(a => a.comisionistaId),
     } as Partial<OrdenItem> & { comisionistaIds: string[] });
     setEditOpen(false);
     setEditingId(null);
@@ -384,6 +461,25 @@ export function OrdenesTab() {
     const ids = new Set(ordenItems.map(item => item.ordenId || `${item.fecha}-${item.numeroOrden}-${item.clienteId || ''}`));
     return ids.size;
   }, [ordenItems]);
+
+  const clearFilters = () => {
+    setSearch('');
+    setFilterEstado('todos');
+    setFilterFechaDesde('');
+    setFilterFechaHasta('');
+    setFilterComisionistaId('todos');
+  };
+
+  const hasActiveFilters = search || filterEstado !== 'todos' || filterFechaDesde || filterFechaHasta || filterComisionistaId !== 'todos';
+
+  const toggleSort = (field: 'fecha' | 'total' | 'numeroOrden') => {
+    if (sortField === field) {
+      setSortDir(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDir('desc');
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -541,9 +637,7 @@ export function OrdenesTab() {
                 <Label className="text-xs text-slate-500">Cliente (opcional)</Label>
                 <Select value={pdfClienteId} onValueChange={(value) => setPdfClienteId(value ?? '')}>
                   <SelectTrigger className="w-full rounded-xl border-slate-200 bg-white h-10 text-sm text-slate-900">
-                    <SelectValue placeholder="Seleccionar cliente para vincular fincas...">
-                      {clientes.find(c => c.id === pdfClienteId)?.nombre}
-                    </SelectValue>
+                    <SelectValue placeholder="Seleccionar cliente para vincular fincas..." />
                   </SelectTrigger>
                   <SelectContent>
                     {clientes.map(c => (
@@ -636,18 +730,90 @@ export function OrdenesTab() {
       </Card>
 
       {ordenItems.length > 0 && (
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-          <div className="relative w-full sm:w-64">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-            <Input
-              placeholder="Buscar producto, factura..."
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              className="pl-9 bg-white border-slate-200 rounded-xl text-sm"
-            />
+        <div className="flex flex-col gap-3 bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+            <div className="relative w-full sm:w-64">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+              <Input
+                placeholder="Buscar producto, factura..."
+                value={search}
+                onChange={e => { setSearch(e.target.value); setCurrentPage(1); }}
+                className="pl-9 bg-white border-slate-200 rounded-xl text-sm"
+              />
+            </div>
+            <Button
+              variant={showFilters ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setShowFilters(!showFilters)}
+              className={showFilters ? 'btn-primary-dark rounded-lg' : 'rounded-lg border-slate-200'}
+            >
+              <Filter className="h-4 w-4 mr-1" />
+              Filtros
+              {hasActiveFilters && (
+                <span className="ml-1 bg-white/20 text-xs px-1.5 py-0.5 rounded-md">
+                  {[search && 1, filterEstado !== 'todos' && 1, filterFechaDesde && 1, filterFechaHasta && 1, filterComisionistaId !== 'todos' && 1].filter(Boolean).length}
+                </span>
+              )}
+            </Button>
+            <div className="flex items-center gap-2 ml-auto">
+              <Button variant="outline" size="sm" onClick={collapseAll} className="rounded-lg border-slate-200 text-slate-600">
+                Colapsar todo
+              </Button>
+              <Button variant="outline" size="sm" onClick={expandAll} className="rounded-lg border-slate-200 text-slate-600">
+                Expandir todo
+              </Button>
+            </div>
           </div>
-          <div className="flex items-center gap-3 flex-1">
-            <UserCheck className="h-5 w-5 text-slate-400" />
+
+          {showFilters && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-2 border-t border-slate-100">
+              <div className="space-y-1">
+                <Label className="text-xs text-slate-500">Fecha desde</Label>
+                <Input type="date" value={filterFechaDesde} onChange={e => { setFilterFechaDesde(e.target.value); setCurrentPage(1); }} className="bg-white border-slate-200 rounded-xl h-9 text-sm" />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs text-slate-500">Fecha hasta</Label>
+                <Input type="date" value={filterFechaHasta} onChange={e => { setFilterFechaHasta(e.target.value); setCurrentPage(1); }} className="bg-white border-slate-200 rounded-xl h-9 text-sm" />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs text-slate-500">Estado</Label>
+                <Select value={filterEstado} onValueChange={v => { setFilterEstado(v ?? 'todos'); setCurrentPage(1); }}>
+                  <SelectTrigger className="bg-white border-slate-200 rounded-xl h-9 text-sm">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todos">Todos los estados</SelectItem>
+                    {ESTADOS_ORDEN.map(e => (
+                      <SelectItem key={e.value} value={e.value}>{e.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs text-slate-500">Comisionista</Label>
+                <Select value={filterComisionistaId} onValueChange={v => { setFilterComisionistaId(v ?? 'todos'); setCurrentPage(1); }}>
+                  <SelectTrigger className="bg-white border-slate-200 rounded-xl h-9 text-sm">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todos">Todos los comisionistas</SelectItem>
+                    {comisionistas.map(c => (
+                      <SelectItem key={c.id} value={c.id}>{c.nombre}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="sm:col-span-2 lg:col-span-4 flex justify-end">
+                <Button variant="ghost" size="sm" onClick={clearFilters} className="text-slate-500 hover:text-slate-700 rounded-lg">
+                  <X className="h-3.5 w-3.5 mr-1" />
+                  Limpiar filtros
+                </Button>
+              </div>
+            </div>
+          )}
+
+          <div className="flex items-center gap-3 pt-2 border-t border-slate-100">
+            <UserCheck className="h-5 w-5 text-slate-400 shrink-0" />
             <div className="flex-1 min-w-0">
               <Label className="text-xs text-slate-500">Asignar comisionistas a todos</Label>
               <div className="flex gap-2 mt-1">
@@ -672,7 +838,6 @@ export function OrdenesTab() {
                       return;
                     }
                     assignComisionistasGlobal(globalComisionistaIds);
-                    // Validar tarifas específicas y mostrar warning si faltan
                     const sinTarifa: string[] = [];
                     ordenItems.forEach(item => {
                       globalComisionistaIds.forEach(comId => {
@@ -692,173 +857,235 @@ export function OrdenesTab() {
                 </Button>
               </div>
             </div>
-          </div>
-          <div className="flex items-center gap-4">
-            <div className="text-right">
-              <p className="text-xs text-slate-500">{cantidadOrdenes} orden{cantidadOrdenes === 1 ? '' : 'es'} / {ordenItems.length} productos</p>
-              <p className="text-xl font-bold text-slate-900 tabular-nums">${totalGeneral.toFixed(2)}</p>
+            <div className="flex items-center gap-4 shrink-0">
+              <div className="text-right">
+                <p className="text-xs text-slate-500">{cantidadOrdenes} orden{cantidadOrdenes === 1 ? '' : 'es'} / {ordenItems.length} productos</p>
+                <p className="text-xl font-bold text-slate-900 tabular-nums">${totalGeneral.toFixed(2)}</p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={hayItemsLiquidados}
+                onClick={clearOrdenItems}
+                className="text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg border-slate-200 disabled:text-slate-400 disabled:hover:bg-white"
+              >
+                <Trash2 className="h-4 w-4 mr-1" />
+                Limpiar
+              </Button>
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={hayItemsLiquidados}
-              onClick={clearOrdenItems}
-              className="text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg border-slate-200 disabled:text-slate-400 disabled:hover:bg-white"
-            >
-              <Trash2 className="h-4 w-4 mr-1" />
-              Limpiar
-            </Button>
           </div>
         </div>
       )}
 
-      {ordenItems.length > 0 && (
+      {ordenesAgrupadas.length > 0 && (
         <Card className="card-elevated rounded-2xl overflow-hidden">
           <CardContent className="p-0">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-slate-50 border-b border-slate-200">
-                  <tr>
-                    <th className="text-left px-4 py-3 font-medium text-slate-600">Orden</th>
-                    <th className="text-left px-4 py-3 font-medium text-slate-600">Cliente</th>
-                    <th className="text-left px-4 py-3 font-medium text-slate-600">Fincas</th>
-                    <th className="text-right px-4 py-3 font-medium text-slate-600">Productos</th>
-                    <th className="text-right px-4 py-3 font-medium text-slate-600">Total</th>
-                    <th className="text-left px-4 py-3 font-medium text-slate-600">Comisionistas</th>
-                    <th className="text-left px-4 py-3 font-medium text-slate-600">Estado</th>
-                    <th className="text-center px-4 py-3 font-medium text-slate-600 w-20">Acción</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {ordenesAgrupadas.map(orden => {
-                    const collapsed = collapsedOrdenIds.includes(orden.id);
-                    return (
-                      <Fragment key={orden.id}>
-                        <tr key={orden.id} className="bg-slate-50/70 hover:bg-slate-100/70 transition-colors">
-                          <td className="px-4 py-3">
-                            <button
-                              type="button"
-                              onClick={() => setCollapsedOrdenIds(prev => collapsed ? prev.filter(id => id !== orden.id) : [...prev, orden.id])}
-                              className="flex items-center gap-2 text-left"
-                            >
-                              {collapsed ? <ChevronRight className="h-4 w-4 text-slate-400" /> : <ChevronDown className="h-4 w-4 text-slate-400" />}
-                              <span>
-                                <span className="block font-semibold text-slate-900">{orden.numeroOrden}</span>
-                                <span className="block text-xs text-slate-500">{orden.fecha}</span>
-                              </span>
-                            </button>
-                          </td>
-                          <td className="px-4 py-3 text-slate-600">{orden.cliente}</td>
-                          <td className="px-4 py-3 text-slate-600">{orden.fincas.length > 1 ? `${orden.fincas.length} fincas` : (orden.fincas[0] || '-')}</td>
-                          <td className="px-4 py-3 text-right text-slate-700">{orden.items.length}</td>
-                          <td className="px-4 py-3 text-right font-semibold text-slate-900">${orden.total.toFixed(2)}</td>
-                          <td className="px-4 py-3">
-                            {orden.comisionistaIds.length > 0 ? (
-                              <div className="flex flex-wrap gap-1">
-                                {orden.comisionistaIds.map(cid => {
-                                  const com = comisionistas.find(c => c.id === cid);
-                                  return com ? (
-                                    <Badge key={cid} variant="secondary" className="text-xs border-0 bg-slate-100 text-slate-700">
-                                      {com.nombre}
-                                    </Badge>
-                                  ) : null;
-                                })}
-                              </div>
-                            ) : (
-                              <span className="text-xs text-slate-400">Sin asignar</span>
-                            )}
-                          </td>
-                          <td className="px-4 py-3">
-                            {(() => {
-                              const estadoMeta = getEstadoOrdenMeta(orden.estado);
-                              const tieneItemsLiquidados = orden.items.some((item) => item.estado === 'liquidada');
-                              const estadoEditable = orden.estado !== 'liquidada' && !tieneItemsLiquidados;
-                              return (
-                                <div className="flex flex-col gap-2">
-                                  <Badge variant="secondary" className={estadoMeta.className}>
-                                    {estadoMeta.label}
-                                  </Badge>
-                                  {estadoEditable && (
-                                    <Select
-                                      value={orden.estado}
-                                      onValueChange={(value) => updateEstadoOrden(orden.id, value as EstadoOrden)}
-                                    >
-                                      <SelectTrigger className="h-8 w-44 rounded-lg border-slate-200 bg-white text-xs">
-                                        <SelectValue />
-                                      </SelectTrigger>
-                                      <SelectContent>
-                                        {ESTADOS_ORDEN.filter((estado) => estado.value !== 'liquidada').map((estado) => (
-                                          <SelectItem key={estado.value} value={estado.value}>
-                                            {estado.label}
-                                          </SelectItem>
-                                        ))}
-                                      </SelectContent>
-                                    </Select>
-                                  )}
-                                </div>
-                              );
-                            })()}
-                          </td>
-                          <td className="px-4 py-3 text-center">
-                            <Button variant="ghost" size="icon" disabled={orden.estado === 'liquidada' || orden.items.some((item) => item.estado === 'liquidada')} className="h-7 w-7 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-slate-400" onClick={() => {
-                              if (confirm('¿Eliminar toda la orden y sus productos?')) {
-                                orden.items.forEach(item => deleteOrdenItem(item.id));
-                              }
-                            }}>
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
-                          </td>
-                        </tr>
-                        {!collapsed && orden.items.map(item => {
-                          const grupoBloqueado = orden.estado === 'liquidada' || orden.items.some((ordenItem) => ordenItem.estado === 'liquidada');
-                          return (
-                            <tr key={item.id} className="hover:bg-slate-50/50 transition-colors">
-                              <td className="px-4 py-3 pl-10 text-slate-500">{item.productoRel?.nombre || item.producto}</td>
-                              <td className="px-4 py-3 text-slate-500">{item.cliente?.nombre || '-'}</td>
-                              <td className="px-4 py-3 text-slate-500">{item.fincaRel?.nombre || item.finca}</td>
-                              <td className="px-4 py-3 text-right text-slate-700">
-                                {item.cantidad.toLocaleString('es-ES')} <span className="text-xs text-slate-400">{item.unidad}</span>
-                              </td>
-                              <td className="px-4 py-3 text-right font-medium text-slate-900">${item.total.toFixed(2)}</td>
-                              <td className="px-4 py-3">
-                                {item.comisionistas.length > 0 ? (
-                            <div className="flex flex-wrap gap-1">
-                              {item.comisionistas.map(a => {
-                                const com = comisionistas.find(c => c.id === a.comisionistaId);
-                                const tieneTarifa = item.clienteId && item.productoId && encontrarTarifaEspecifica(item, a.comisionistaId, tarifasClienteProducto);
-                                return com ? (
-                                  <Badge key={a.comisionistaId} variant="secondary" className={`text-xs border-0 ${tieneTarifa ? 'bg-slate-100 text-slate-700' : 'bg-amber-100 text-amber-700'}`} title={tieneTarifa ? '' : 'Sin tarifa específica configurada'}>
-                                    {com.nombre}
-                                  </Badge>
-                                ) : null;
-                              })}
-                            </div>
-                          ) : (
-                            <span className="text-xs text-slate-400">Sin asignar</span>
+            <div className="flex items-center justify-between px-4 py-2 bg-slate-50 border-b border-slate-200">
+              <div className="flex items-center gap-3">
+                <span className="text-sm font-medium text-slate-700">
+                  {filteredOrdenItems.length === ordenItems.length
+                    ? `${cantidadOrdenes} orden${cantidadOrdenes === 1 ? '' : 'es'}`
+                    : `${ordenesAgrupadas.length} de ${cantidadOrdenes} orden${cantidadOrdenes === 1 ? '' : 'es'}`
+                  }
+                </span>
+              </div>
+              <div className="flex items-center gap-1">
+                <Button variant="ghost" size="sm" onClick={() => toggleSort('fecha')} className="text-xs text-slate-600 h-7 rounded-lg">
+                  <Calendar className="h-3.5 w-3.5 mr-1" />
+                  Fecha{sortField === 'fecha' && (sortDir === 'desc' ? ' ↓' : ' ↑')}
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => toggleSort('numeroOrden')} className="text-xs text-slate-600 h-7 rounded-lg">
+                  <ArrowUpDown className="h-3.5 w-3.5 mr-1" />
+                  №{sortField === 'numeroOrden' && (sortDir === 'desc' ? ' ↓' : ' ↑')}
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => toggleSort('total')} className="text-xs text-slate-600 h-7 rounded-lg">
+                  <ArrowUpDown className="h-3.5 w-3.5 mr-1" />
+                  Total{sortField === 'total' && (sortDir === 'desc' ? ' ↓' : ' ↑')}
+                </Button>
+              </div>
+            </div>
+
+            <div className="divide-y divide-slate-100">
+              {paginatedOrdenes.map(orden => {
+                const collapsed = collapsedOrdenIds.has(orden.id);
+                return (
+                  <div key={orden.id} className="group">
+                    <button
+                      type="button"
+                      onClick={() => toggleCollapse(orden.id)}
+                      className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-50/70 transition-colors text-left"
+                    >
+                      {collapsed ? <ChevronRight className="h-4 w-4 text-slate-400 shrink-0" /> : <ChevronDown className="h-4 w-4 text-slate-400 shrink-0" />}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-semibold text-slate-900 text-sm">{orden.numeroOrden}</span>
+                          <Badge variant="secondary" className={getEstadoOrdenMeta(orden.estado).className}>
+                            {getEstadoOrdenMeta(orden.estado).label}
+                          </Badge>
+                          <span className="text-xs text-slate-500">{orden.fecha}</span>
+                        </div>
+                        <div className="flex items-center gap-3 mt-0.5 text-xs text-slate-500">
+                          <span>{orden.cliente}</span>
+                          {orden.fincas.length > 0 && (
+                            <span>{orden.fincas.length > 1 ? `${orden.fincas.length} fincas` : orden.fincas[0]}</span>
                           )}
-                              </td>
-                              <td className="px-4 py-3 text-slate-500">
-                                <span className="text-xs">${item.precioUnitario.toFixed(2)} unit.</span>
-                              </td>
-                              <td className="px-4 py-3">
-                                <div className="flex justify-center gap-1">
-                                  <Button variant="ghost" size="icon" disabled={grupoBloqueado} className="h-7 w-7 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-slate-400" onClick={() => handleEdit(item)}>
-                                    <Pencil className="h-3.5 w-3.5" />
-                                  </Button>
-                                  <Button variant="ghost" size="icon" disabled={grupoBloqueado} className="h-7 w-7 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-slate-400" onClick={() => deleteOrdenItem(item.id)}>
-                                    <Trash2 className="h-3.5 w-3.5" />
-                                  </Button>
-                                </div>
-                              </td>
+                          <span>{orden.items.length} producto{orden.items.length !== 1 ? 's' : ''}</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        {orden.comisionistaIds.length > 0 ? (
+                          <div className="flex flex-wrap gap-1 justify-end">
+                            {orden.comisionistaIds.map(cid => {
+                              const com = comisionistas.find(c => c.id === cid);
+                              return com ? (
+                                <Badge key={cid} variant="secondary" className="text-xs border-0 bg-slate-100 text-slate-700">
+                                  {com.nombre}
+                                </Badge>
+                              ) : null;
+                            })}
+                          </div>
+                        ) : (
+                          <span className="text-xs text-slate-400">Sin asignar</span>
+                        )}
+                        <span className="text-sm font-semibold text-slate-900 tabular-nums ml-1">${orden.total.toFixed(2)}</span>
+                      </div>
+                    </button>
+
+                    {!collapsed && (
+                      <div className="border-t border-slate-100">
+                        <table className="w-full text-sm">
+                          <thead className="bg-slate-50/50">
+                            <tr>
+                              <th className="text-left px-4 py-2 font-medium text-slate-500 text-xs">Producto</th>
+                              <th className="text-left px-4 py-2 font-medium text-slate-500 text-xs">Cliente</th>
+                              <th className="text-left px-4 py-2 font-medium text-slate-500 text-xs">Finca</th>
+                              <th className="text-right px-4 py-2 font-medium text-slate-500 text-xs">Cantidad</th>
+                              <th className="text-right px-4 py-2 font-medium text-slate-500 text-xs">Total</th>
+                              <th className="text-left px-4 py-2 font-medium text-slate-500 text-xs">Comisionistas</th>
+                              <th className="text-left px-4 py-2 font-medium text-slate-500 text-xs">Estado</th>
+                              <th className="text-center px-4 py-2 font-medium text-slate-500 text-xs w-20"></th>
                             </tr>
-                          );
-                        })}
-                      </Fragment>
+                          </thead>
+                          <tbody className="divide-y divide-slate-50">
+                            {orden.items.map(item => {
+                              const grupoBloqueado = orden.estado === 'liquidada' || orden.items.some((ordenItem) => ordenItem.estado === 'liquidada');
+                              return (
+                                <tr key={item.id} className="hover:bg-slate-50/30 transition-colors">
+                                  <td className="px-4 py-2.5">
+                                    <span className="text-sm font-medium text-slate-900">{item.productoRel?.nombre || item.producto}</span>
+                                    <span className="ml-1.5 text-xs text-slate-400">${item.precioUnitario.toFixed(2)} unit.</span>
+                                  </td>
+                                  <td className="px-4 py-2.5 text-sm text-slate-600">{item.cliente?.nombre || '-'}</td>
+                                  <td className="px-4 py-2.5 text-sm text-slate-600">{item.fincaRel?.nombre || item.finca}</td>
+                                  <td className="px-4 py-2.5 text-right text-sm text-slate-700">
+                                    {item.cantidad.toLocaleString('es-ES')} <span className="text-xs text-slate-400">{item.unidad}</span>
+                                  </td>
+                                  <td className="px-4 py-2.5 text-right font-medium text-sm text-slate-900">${item.total.toFixed(2)}</td>
+                                  <td className="px-4 py-2.5">
+                                    {item.comisionistas.length > 0 ? (
+                                      <div className="flex flex-wrap gap-1">
+                                        {item.comisionistas.map(a => {
+                                          const com = comisionistas.find(c => c.id === a.comisionistaId);
+                                          const tieneTarifa = item.clienteId && item.productoId && encontrarTarifaEspecifica(item, a.comisionistaId, tarifasClienteProducto);
+                                          const nombre = com?.nombre || a.comisionistaId;
+                                          return (
+                                            <Badge key={a.comisionistaId} variant="secondary" className={`text-xs border-0 ${tieneTarifa ? 'bg-slate-100 text-slate-700' : 'bg-amber-100 text-amber-700'}`} title={tieneTarifa ? '' : 'Sin tarifa específica configurada'}>
+                                              {nombre}
+                                            </Badge>
+                                          );
+                                        })}
+                                      </div>
+                                    ) : (
+                                      <span className="text-xs text-slate-400">Sin asignar</span>
+                                    )}
+                                  </td>
+                                  <td className="px-4 py-2.5">
+                                    <Badge variant="secondary" className={getEstadoOrdenMeta(item.estado).className}>
+                                      {getEstadoOrdenMeta(item.estado).label}
+                                    </Badge>
+                                  </td>
+                                  <td className="px-4 py-2.5">
+                                    <div className="flex justify-center gap-1">
+                                      <Button variant="ghost" size="icon-xs" disabled={grupoBloqueado} className="text-slate-400 hover:text-slate-700 hover:bg-slate-100 disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-slate-400" onClick={() => handleEdit(item)}>
+                                        <Pencil className="h-3.5 w-3.5" />
+                                      </Button>
+                                      <Button variant="ghost" size="icon-xs" disabled={grupoBloqueado} className="text-slate-400 hover:text-red-600 hover:bg-red-50 disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-slate-400" onClick={() => deleteOrdenItem(item.id)}>
+                                        <Trash2 className="h-3.5 w-3.5" />
+                                      </Button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                        <div className="flex items-center justify-between px-4 py-2 bg-slate-50/50 border-t border-slate-100">
+                          <div className="flex items-center gap-2">
+                            <Select
+                              value={orden.estado}
+                              onValueChange={(value) => updateEstadoOrden(orden.id, value as EstadoOrden)}
+                              disabled={orden.estado === 'liquidada' || orden.items.some(item => item.estado === 'liquidada')}
+                            >
+                              <SelectTrigger className="h-7 w-40 rounded-lg border-slate-200 bg-white text-xs">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {ESTADOS_ORDEN.filter((estado) => estado.value !== 'liquidada').map((estado) => (
+                                  <SelectItem key={estado.value} value={estado.value}>
+                                    {estado.label}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <Button variant="ghost" size="sm" disabled={orden.estado === 'liquidada' || orden.items.some(item => item.estado === 'liquidada')} className="text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-red-300" onClick={() => {
+                            if (confirm('¿Eliminar toda la orden y sus productos?')) {
+                              orden.items.forEach(item => deleteOrdenItem(item.id));
+                            }
+                          }}>
+                            <Trash2 className="h-3.5 w-3.5 mr-1" />
+                            Eliminar orden
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between px-4 py-3 border-t border-slate-200 bg-slate-50/70">
+                <p className="text-xs text-slate-500">
+                  Mostrando {(safePage - 1) * ITEMS_PER_PAGE + 1}-{Math.min(safePage * ITEMS_PER_PAGE, ordenesAgrupadas.length)} de {ordenesAgrupadas.length} órdenes
+                </p>
+                <div className="flex items-center gap-1">
+                  <Button variant="outline" size="icon-xs" disabled={safePage === 1} onClick={() => setCurrentPage(p => p - 1)} className="rounded-lg border-slate-200">
+                    <ChevronLeft className="h-3.5 w-3.5" />
+                  </Button>
+                  {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
+                    let page: number;
+                    if (totalPages <= 5) {
+                      page = i + 1;
+                    } else if (safePage <= 3) {
+                      page = i + 1;
+                    } else if (safePage >= totalPages - 2) {
+                      page = totalPages - 4 + i;
+                    } else {
+                      page = safePage - 2 + i;
+                    }
+                    return (
+                      <Button key={page} variant={page === safePage ? 'default' : 'outline'} size="icon-xs" onClick={() => setCurrentPage(page)} className={page === safePage ? 'rounded-lg btn-primary-dark' : 'rounded-lg border-slate-200'}>
+                        {page}
+                      </Button>
                     );
                   })}
-                </tbody>
-              </table>
-            </div>
+                  <Button variant="outline" size="icon-xs" disabled={safePage === totalPages} onClick={() => setCurrentPage(p => p + 1)} className="rounded-lg border-slate-200">
+                    <ChevronRight className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
@@ -908,7 +1135,9 @@ export function OrdenesTab() {
                   });
                 }}>
                   <SelectTrigger className="w-full rounded-xl border-slate-200 bg-white h-10 text-sm text-slate-900">
-                    <SelectValue placeholder="Seleccionar cliente" />
+                    <SelectValue placeholder="Seleccionar cliente">
+                      {editForm.clienteId ? (clientes.find(c => c.id === editForm.clienteId)?.nombre || 'Cliente no encontrado') : 'Seleccionar cliente'}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     {clientes.map(c => (
@@ -940,7 +1169,9 @@ export function OrdenesTab() {
                   setEditForm({ ...editForm, productoId: value || undefined, producto: nombre || editForm.producto });
                 }}>
                   <SelectTrigger className="w-full rounded-xl border-slate-200 bg-white h-10 text-sm text-slate-900">
-                    <SelectValue placeholder="Seleccionar producto" />
+                    <SelectValue placeholder="Seleccionar producto">
+                      {editForm.productoId ? (productos.find(p => p.id === editForm.productoId)?.nombre || 'Producto no encontrado') : 'Seleccionar producto'}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     {productos.map(p => (
