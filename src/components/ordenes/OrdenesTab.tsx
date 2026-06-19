@@ -184,25 +184,32 @@ export function OrdenesTab() {
   const [pdfClienteId, setPdfClienteId] = useState<string>('');
 
   const initialFecha = useMemo(() => new Date().toISOString().slice(0, 10), []);
-  const [form, setForm] = useState({
+
+  const [manualHeader, setManualHeader] = useState({
     fecha: initialFecha,
     numeroOrden: '',
+    clienteId: '',
+    proveedor: '',
+  });
+
+  const [currentLine, setCurrentLine] = useState({
+    fincaId: '',
     finca: '',
+    productoId: '',
     producto: '',
     cantidad: '',
     unidad: 'kg',
     precioUnitario: '',
     comisionistaIds: [] as string[],
-    clienteId: '',
-    fincaId: '',
-    productoId: '',
   });
 
-  const selectedCliente = clientes.find(c => c.id === form.clienteId);
+  const [stagedItems, setStagedItems] = useState<OrdenItem[]>([]);
+
+  const manualSelectedCliente = clientes.find(c => c.id === manualHeader.clienteId);
   const { data: fincasCliente } = useQuery({
-    queryKey: ['fincas', form.clienteId],
-    queryFn: () => fetchFincas(form.clienteId),
-    enabled: !!form.clienteId && selectedCliente?.tipo === 'grupo',
+    queryKey: ['fincas', manualHeader.clienteId],
+    queryFn: () => fetchFincas(manualHeader.clienteId),
+    enabled: !!manualHeader.clienteId && manualSelectedCliente?.tipo === 'grupo',
   });
 
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -216,7 +223,7 @@ export function OrdenesTab() {
   const [filterFechaHasta, setFilterFechaHasta] = useState('');
   const [filterComisionistaId, setFilterComisionistaId] = useState<string>('todos');
   const [sortField, setSortField] = useState<'fecha' | 'total' | 'numeroOrden'>('numeroOrden');
-  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [showFilters, setShowFilters] = useState(false);
 
   const toggleCollapse = (id: string) => {
@@ -334,48 +341,82 @@ export function OrdenesTab() {
     return ordenesAgrupadas.slice(start, start + ITEMS_PER_PAGE);
   }, [ordenesAgrupadas, safePage]);
 
-  const resetForm = () => {
-    setForm({
+  const resetManualForm = () => {
+    setManualHeader({
       fecha: typeof window !== 'undefined' ? new Date().toISOString().slice(0, 10) : '',
       numeroOrden: '',
+      clienteId: '',
+      proveedor: '',
+    });
+    setCurrentLine({
+      fincaId: '',
       finca: '',
+      productoId: '',
       producto: '',
       cantidad: '',
       unidad: 'kg',
       precioUnitario: '',
       comisionistaIds: [],
-      clienteId: '',
-      fincaId: '',
-      productoId: '',
     });
+    setStagedItems([]);
   };
 
-  const handleAddManual = (e: React.FormEvent) => {
-    e.preventDefault();
-    const cantidad = parseFloat(form.cantidad);
-    const precio = parseFloat(form.precioUnitario);
-    if (!form.numeroOrden || !form.producto || isNaN(cantidad) || isNaN(precio)) {
-      toast.error('Complete los campos obligatorios');
+  const handleAddLine = () => {
+    const cantidad = parseFloat(currentLine.cantidad);
+    const precio = parseFloat(currentLine.precioUnitario);
+    if (!currentLine.producto || isNaN(cantidad) || isNaN(precio)) {
+      toast.error('Complete los campos obligatorios del producto');
       return;
     }
     const total = cantidad * precio;
     const item: OrdenItem = {
       id: generarId(),
-      fecha: form.fecha,
-      numeroOrden: form.numeroOrden,
-      finca: form.finca || '-',
-      producto: form.producto,
+      fecha: manualHeader.fecha,
+      numeroOrden: manualHeader.numeroOrden,
+      finca: currentLine.finca || '-',
+      producto: currentLine.producto,
       cantidad,
-      unidad: form.unidad,
+      unidad: currentLine.unidad,
       precioUnitario: precio,
       total,
-      comisionistas: form.comisionistaIds.map(id => ({ comisionistaId: id })),
-      clienteId: form.clienteId || undefined,
-      productoId: form.productoId || undefined,
-      fincaId: form.fincaId || undefined,
+      comisionistas: currentLine.comisionistaIds.map(id => ({ comisionistaId: id })),
+      clienteId: manualHeader.clienteId || undefined,
+      productoId: currentLine.productoId || undefined,
+      fincaId: currentLine.fincaId || undefined,
+      proveedor: manualHeader.proveedor || undefined,
     };
-    addOrdenItems([item]);
-    resetForm();
+    setStagedItems(prev => [...prev, item]);
+    setCurrentLine({
+      fincaId: '',
+      finca: manualSelectedCliente?.tipo === 'individual' ? manualSelectedCliente.nombre : '',
+      productoId: '',
+      producto: '',
+      cantidad: '',
+      unidad: 'kg',
+      precioUnitario: '',
+      comisionistaIds: [],
+    });
+  };
+
+  const handleConfirmManual = () => {
+    if (stagedItems.length === 0) return;
+    if (!manualHeader.numeroOrden) {
+      toast.error('Ingrese el número de factura/orden');
+      return;
+    }
+    const itemsWithHeader = stagedItems.map(item => ({
+      ...item,
+      fecha: manualHeader.fecha,
+      numeroOrden: manualHeader.numeroOrden,
+      clienteId: manualHeader.clienteId || undefined,
+      proveedor: manualHeader.proveedor || undefined,
+    }));
+    addOrdenItems(itemsWithHeader);
+    resetManualForm();
+  };
+
+  const removeStagedItem = (id: string) => {
+    setStagedItems(prev => prev.filter(item => item.id !== id));
   };
 
   function getNombreProducto(productoId: string) {
@@ -520,124 +561,192 @@ export function OrdenesTab() {
           </div>
 
           {activeForm === 'manual' ? (
-            <form onSubmit={handleAddManual} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              <div className="space-y-1.5">
-                <Label className="text-xs text-slate-500">Fecha</Label>
-                <Input type="date" value={form.fecha} onChange={e => setForm({...form, fecha: e.target.value})} className="bg-white border-slate-200 rounded-xl" />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs text-slate-500">Factura / Orden *</Label>
-                <Input placeholder="#001" value={form.numeroOrden} onChange={e => setForm({...form, numeroOrden: e.target.value})} className="bg-white border-slate-200 rounded-xl" />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs text-slate-500">Cliente</Label>
-                <Select value={form.clienteId} onValueChange={(value) => {
-                  const cliente = clientes.find(c => c.id === value);
-                  setForm({
-                    ...form,
-                    clienteId: value || '',
-                    fincaId: '',
-                    finca: cliente?.tipo === 'individual' ? cliente.nombre : form.finca,
-                  });
-                }}>
-                  <SelectTrigger className="w-full rounded-xl border-slate-200 bg-white h-10 text-sm text-slate-900">
-                    <SelectValue placeholder="Seleccionar cliente" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {clientes.map(c => (
-                      <SelectItem key={c.id} value={c.id}>{c.nombre}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              {selectedCliente?.tipo === 'grupo' && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <div className="space-y-1.5">
-                  <Label className="text-xs text-slate-500">Finca</Label>
-                  <Select value={form.fincaId} onValueChange={(value) => {
-                    const v = value ?? '';
-                    const nombre = getNombreFinca(v);
-                    setForm({ ...form, fincaId: v, finca: nombre || form.finca });
+                  <Label className="text-xs text-slate-500">Fecha</Label>
+                  <Input type="date" value={manualHeader.fecha} onChange={e => setManualHeader({...manualHeader, fecha: e.target.value})} className="bg-white border-slate-200 rounded-xl" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-slate-500">Factura / Orden *</Label>
+                  <Input placeholder="#001" value={manualHeader.numeroOrden} onChange={e => setManualHeader({...manualHeader, numeroOrden: e.target.value})} className="bg-white border-slate-200 rounded-xl" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-slate-500">Cliente</Label>
+                  <Select value={manualHeader.clienteId} onValueChange={(value) => {
+                    const cliente = clientes.find(c => c.id === value);
+                    setManualHeader({...manualHeader, clienteId: value || ''});
+                    setCurrentLine({...currentLine, fincaId: '', finca: cliente?.tipo === 'individual' ? cliente.nombre : ''});
                   }}>
                     <SelectTrigger className="w-full rounded-xl border-slate-200 bg-white h-10 text-sm text-slate-900">
-                      <SelectValue placeholder="Seleccionar finca" />
+                      <SelectValue placeholder="Seleccionar cliente" />
                     </SelectTrigger>
                     <SelectContent>
-                      {(fincasCliente || []).map((f: { id: string; nombre: string }) => (
-                        <SelectItem key={f.id} value={f.id}>{f.nombre}</SelectItem>
+                      {clientes.map(c => (
+                        <SelectItem key={c.id} value={c.id}>{c.nombre}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
-              )}
-              {selectedCliente?.tipo !== 'grupo' && (
                 <div className="space-y-1.5">
-                  <Label className="text-xs text-slate-500">Finca / Sector</Label>
-                  <Input placeholder="Finca A" value={form.finca} onChange={e => setForm({...form, finca: e.target.value})} className="bg-white border-slate-200 rounded-xl" />
+                  <Label className="text-xs text-slate-500">Proveedor</Label>
+                  <Input placeholder="Proveedor" value={manualHeader.proveedor} onChange={e => setManualHeader({...manualHeader, proveedor: e.target.value})} className="bg-white border-slate-200 rounded-xl" />
+                </div>
+              </div>
+
+              <div className="border-t border-slate-100 pt-4">
+                <p className="text-sm font-medium text-slate-700 mb-3">Agregar productos</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  {manualSelectedCliente?.tipo === 'grupo' && (
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-slate-500">Finca</Label>
+                      <Select value={currentLine.fincaId} onValueChange={(value) => {
+                        const v = value ?? '';
+                        const nombre = getNombreFinca(v);
+                        setCurrentLine({ ...currentLine, fincaId: v, finca: nombre || currentLine.finca });
+                      }}>
+                        <SelectTrigger className="w-full rounded-xl border-slate-200 bg-white h-10 text-sm text-slate-900">
+                          <SelectValue placeholder="Seleccionar finca" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {(fincasCliente || []).map((f: { id: string; nombre: string }) => (
+                            <SelectItem key={f.id} value={f.id}>{f.nombre}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+                  {manualSelectedCliente?.tipo !== 'grupo' && (
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-slate-500">Finca / Sector</Label>
+                      <Input placeholder="Finca A" value={currentLine.finca} onChange={e => setCurrentLine({...currentLine, finca: e.target.value})} className="bg-white border-slate-200 rounded-xl" />
+                    </div>
+                  )}
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-slate-500">Producto *</Label>
+                    <Select value={currentLine.productoId} onValueChange={(value) => {
+                      const v = value ?? '';
+                      const nombre = getNombreProducto(v);
+                      setCurrentLine({ ...currentLine, productoId: v, producto: nombre || currentLine.producto });
+                    }}>
+                      <SelectTrigger className="w-full rounded-xl border-slate-200 bg-white h-10 text-sm text-slate-900">
+                        <SelectValue placeholder="Seleccionar producto" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {productos.map(p => (
+                          <SelectItem key={p.id} value={p.id}>{p.nombre}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-slate-500">Producto (texto libre)</Label>
+                    <Input placeholder="Producto" value={currentLine.producto} onChange={e => setCurrentLine({...currentLine, producto: e.target.value})} className="bg-white border-slate-200 rounded-xl" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-slate-500">Cantidad *</Label>
+                    <Input type="number" step="0.01" placeholder="0" value={currentLine.cantidad} onChange={e => setCurrentLine({...currentLine, cantidad: e.target.value})} className="bg-white border-slate-200 rounded-xl" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-slate-500">Unidad</Label>
+                    <Select value={currentLine.unidad} onValueChange={(value) => setCurrentLine({...currentLine, unidad: value ?? 'kg'})}>
+                      <SelectTrigger className="w-full rounded-xl border-slate-200 bg-white h-10 text-sm text-slate-900">
+                        <SelectValue placeholder="Seleccionar unidad" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="kg">kg</SelectItem>
+                        <SelectItem value="libras">libras</SelectItem>
+                        <SelectItem value="unidades">unidades</SelectItem>
+                        <SelectItem value="cajas">cajas</SelectItem>
+                        <SelectItem value="litros">litros</SelectItem>
+                        <SelectItem value="tachos">tachos</SelectItem>
+                        <SelectItem value="sacos">sacos</SelectItem>
+                        <SelectItem value="canecas">canecas</SelectItem>
+                        <SelectItem value="galones">galones</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-slate-500">Precio Unit. *</Label>
+                    <Input type="number" step="0.01" placeholder="0.00" value={currentLine.precioUnitario} onChange={e => setCurrentLine({...currentLine, precioUnitario: e.target.value})} className="bg-white border-slate-200 rounded-xl" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-slate-500">Comisionistas</Label>
+                    <MultiSelectComisionistas
+                      comisionistas={comisionistas}
+                      selectedIds={currentLine.comisionistaIds}
+                      onChange={ids => setCurrentLine({...currentLine, comisionistaIds: ids})}
+                    />
+                  </div>
+                </div>
+                <div className="flex justify-end mt-4">
+                  <Button type="button" onClick={handleAddLine} className="btn-primary-dark rounded-xl">
+                    <Plus className="h-4 w-4 mr-2" />
+                    Agregar línea
+                  </Button>
+                </div>
+              </div>
+
+              {stagedItems.length > 0 && (
+                <div className="space-y-4">
+                  <div className="bg-slate-50 rounded-xl p-4 border border-slate-200">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-slate-900">Orden {manualHeader.numeroOrden || '—'}</p>
+                        <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-xs text-slate-600">
+                          <span><strong>Fecha:</strong> {manualHeader.fecha}</span>
+                          {manualHeader.proveedor && <span><strong>Proveedor:</strong> {manualHeader.proveedor}</span>}
+                          {manualSelectedCliente && <span><strong>Cliente:</strong> {manualSelectedCliente.nombre}</span>}
+                        </div>
+                      </div>
+                      <Badge variant="secondary" className="bg-slate-100 text-slate-700">{stagedItems.length} producto{stagedItems.length !== 1 ? 's' : ''}</Badge>
+                    </div>
+                  </div>
+
+                  <div className="overflow-x-auto border border-slate-200 rounded-xl">
+                    <table className="w-full text-sm">
+                      <thead className="bg-slate-50 border-b border-slate-200">
+                        <tr>
+                          <th className="text-left px-3 py-2 font-medium text-slate-600">Finca</th>
+                          <th className="text-left px-3 py-2 font-medium text-slate-600">Producto</th>
+                          <th className="text-right px-3 py-2 font-medium text-slate-600">Cantidad</th>
+                          <th className="text-right px-3 py-2 font-medium text-slate-600">Precio Unit.</th>
+                          <th className="text-right px-3 py-2 font-medium text-slate-600">Total</th>
+                          <th className="px-3 py-2 w-10"></th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {stagedItems.map(item => (
+                          <tr key={item.id} className="hover:bg-slate-50/50 transition-colors">
+                            <td className="px-3 py-2 text-slate-700">{item.finca}</td>
+                            <td className="px-3 py-2 text-slate-900 font-medium">{item.producto}</td>
+                            <td className="px-3 py-2 text-right text-slate-700">{item.cantidad.toLocaleString('es-ES')} {item.unidad}</td>
+                            <td className="px-3 py-2 text-right text-slate-700">${item.precioUnitario.toFixed(2)}</td>
+                            <td className="px-3 py-2 text-right font-medium text-slate-900">${item.total.toFixed(2)}</td>
+                            <td className="px-3 py-2">
+                              <Button variant="ghost" size="icon-xs" onClick={() => removeStagedItem(item.id)} className="text-slate-400 hover:text-red-600 hover:bg-red-50">
+                                <X className="h-3.5 w-3.5" />
+                              </Button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div className="flex justify-end gap-2">
+                    <Button variant="outline" onClick={resetManualForm} className="rounded-xl border-slate-200">
+                      <X className="h-4 w-4 mr-2" />
+                      Descartar
+                    </Button>
+                    <Button onClick={handleConfirmManual} className="btn-primary-dark rounded-xl">
+                      <Check className="h-4 w-4 mr-2" />
+                      Confirmar y Agregar
+                    </Button>
+                  </div>
                 </div>
               )}
-              <div className="space-y-1.5">
-                <Label className="text-xs text-slate-500">Producto *</Label>
-                <Select value={form.productoId} onValueChange={(value) => {
-                  const v = value ?? '';
-                  const nombre = getNombreProducto(v);
-                  setForm({ ...form, productoId: v, producto: nombre || form.producto });
-                }}>
-                  <SelectTrigger className="w-full rounded-xl border-slate-200 bg-white h-10 text-sm text-slate-900">
-                    <SelectValue placeholder="Seleccionar producto" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {productos.map(p => (
-                      <SelectItem key={p.id} value={p.id}>{p.nombre}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs text-slate-500">Producto (texto libre)</Label>
-                <Input placeholder="Producto" value={form.producto} onChange={e => setForm({...form, producto: e.target.value})} className="bg-white border-slate-200 rounded-xl" />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs text-slate-500">Cantidad *</Label>
-                <Input type="number" step="0.01" placeholder="0" value={form.cantidad} onChange={e => setForm({...form, cantidad: e.target.value})} className="bg-white border-slate-200 rounded-xl" />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs text-slate-500">Unidad</Label>
-                <Select value={form.unidad} onValueChange={(value) => setForm({...form, unidad: value ?? 'kg'})}>
-                  <SelectTrigger className="w-full rounded-xl border-slate-200 bg-white h-10 text-sm text-slate-900">
-                    <SelectValue placeholder="Seleccionar unidad" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="kg">kg</SelectItem>
-                    <SelectItem value="libras">libras</SelectItem>
-                    <SelectItem value="unidades">unidades</SelectItem>
-                    <SelectItem value="cajas">cajas</SelectItem>
-                    <SelectItem value="litros">litros</SelectItem>
-                    <SelectItem value="tachos">tachos</SelectItem>
-                    <SelectItem value="sacos">sacos</SelectItem>
-                    <SelectItem value="canecas">canecas</SelectItem>
-                    <SelectItem value="galones">galones</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs text-slate-500">Precio Unit. *</Label>
-                <Input type="number" step="0.01" placeholder="0.00" value={form.precioUnitario} onChange={e => setForm({...form, precioUnitario: e.target.value})} className="bg-white border-slate-200 rounded-xl" />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs text-slate-500">Comisionistas</Label>
-                <MultiSelectComisionistas
-                  comisionistas={comisionistas}
-                  selectedIds={form.comisionistaIds}
-                  onChange={ids => setForm({...form, comisionistaIds: ids})}
-                />
-              </div>
-              <div className="sm:col-span-2 lg:col-span-4 flex justify-end">
-                <Button type="submit" className="btn-primary-dark rounded-xl">
-                  <Plus className="h-4 w-4 mr-2" />
-                  Agregar Registro
-                </Button>
-              </div>
-            </form>
+            </div>
           ) : (
             <div className="space-y-4">
               <div className="space-y-1.5">
