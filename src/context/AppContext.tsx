@@ -335,6 +335,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     mutationFn: ({ id, data }: { id: string; data: Partial<Cliente> }) => apiUpdateCliente(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['clientes'] });
+      queryClient.invalidateQueries({ queryKey: ['ordenes'] });
       toast.success('Cliente actualizado');
     },
     onError: (err: any) => {
