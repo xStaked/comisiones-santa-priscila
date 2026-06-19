@@ -72,9 +72,24 @@ PRODUCTOS_DATA = [
     {"nombre": "PAST TH", "unidad_comision": "kg", "tacho_kilos": None},
     {"nombre": "PAST GRAN", "unidad_comision": "kg", "tacho_kilos": None},
     {"nombre": "PAST ALIM", "unidad_comision": "kg", "tacho_kilos": None},
-    {"nombre": "SALUD", "unidad_comision": "kg", "tacho_kilos": None},
-    {"nombre": "AGUA", "unidad_comision": "kg", "tacho_kilos": None},
-    {"nombre": "SUELO / POLVO", "unidad_comision": "kg", "tacho_kilos": None},
+    {
+        "nombre": "ECU-BACILLUS SALUD",
+        "unidad_comision": "tacho",
+        "tacho_kilos": Decimal("10"),
+        "peso_por_unidad": Decimal("10"),
+    },
+    {
+        "nombre": "ECU-BACILLUS AGUA",
+        "unidad_comision": "tacho",
+        "tacho_kilos": Decimal("10"),
+        "peso_por_unidad": Decimal("10"),
+    },
+    {
+        "nombre": "ECU-BACILLUS SUELO",
+        "unidad_comision": "tacho",
+        "tacho_kilos": Decimal("10"),
+        "peso_por_unidad": Decimal("10"),
+    },
     {"nombre": "CITRIUS", "unidad_comision": "litro", "tacho_kilos": None},
     {"nombre": "NATUXTRACT", "unidad_comision": "tacho", "tacho_kilos": Decimal("15")},
     {"nombre": "SACO TEST", "unidad_comision": "saco", "saco_kilos": Decimal("25")},
@@ -128,6 +143,7 @@ def seed_productos(db):
                 unidad_comision=data["unidad_comision"],
                 tacho_kilos=data.get("tacho_kilos"),
                 saco_kilos=data.get("saco_kilos"),
+                peso_por_unidad=data.get("peso_por_unidad"),
             )
         )
     db.commit()

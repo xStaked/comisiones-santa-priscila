@@ -53,23 +53,37 @@ export function normalizarNombreProducto(valor?: string): string | undefined {
       return 'PAST ALIM';
     }
     if (normalizado.includes('AGUA')) {
-      return 'AGUA';
+      return 'ECU-BACILLUS AGUA';
     }
     if (normalizado.includes('SALUD')) {
-      return 'SALUD';
+      return 'ECU-BACILLUS SALUD';
     }
     if (normalizado.includes('SUELO') || normalizado.includes('POLVO')) {
-      return 'SUELO / POLVO';
+      return 'ECU-BACILLUS SUELO';
     }
   }
 
   // Abreviaturas sueltas que aparecen en PDFs / Excel de tarifas
   if (
-    ['PAST TH', 'PAST GRAN', 'PAST ALIM', 'AGUA', 'SALUD', 'SUELO / POLVO'].includes(
-      normalizado
-    )
+    ['PAST TH', 'PAST GRAN', 'PAST ALIM'].includes(normalizado)
   ) {
     return normalizado;
+  }
+  if (normalizado === 'AGUA' || normalizado === 'ECU BACILLUS AGUA') {
+    return 'ECU-BACILLUS AGUA';
+  }
+  if (normalizado === 'SALUD' || normalizado === 'ECU BACILLUS SALUD') {
+    return 'ECU-BACILLUS SALUD';
+  }
+  if (
+    normalizado === 'SUELO' ||
+    normalizado === 'POLVO' ||
+    normalizado === 'SUELO POLVO' ||
+    normalizado === 'SUELO / POLVO' ||
+    normalizado === 'ECU BACILLUS SUELO' ||
+    normalizado === 'ECU BACILLUS SUELO POLVO'
+  ) {
+    return 'ECU-BACILLUS SUELO';
   }
 
   if (/\bNATUXTRACT\b/.test(normalizado)) {

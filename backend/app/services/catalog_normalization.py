@@ -49,17 +49,28 @@ def normalizar_nombre_producto(nombre: str) -> str:
         if "ALIMENTACION" in normalizado or "ALIM" in normalizado:
             return "PAST ALIM"
         if "AGUA" in normalizado:
-            return "AGUA"
+            return "ECU-BACILLUS AGUA"
         if "SALUD" in normalizado:
-            return "SALUD"
+            return "ECU-BACILLUS SALUD"
         if "SUELO" in normalizado or "POLVO" in normalizado:
-            return "SUELO / POLVO"
+            return "ECU-BACILLUS SUELO"
 
     # Abreviaturas sueltas que aparecen en los PDFs / Excel de tarifas
-    if normalizado in {
-        "PAST TH", "PAST GRAN", "PAST ALIM", "AGUA", "SALUD", "SUELO / POLVO"
-    }:
+    if normalizado in {"PAST TH", "PAST GRAN", "PAST ALIM"}:
         return normalizado
+    if normalizado in {"AGUA", "ECU BACILLUS AGUA"}:
+        return "ECU-BACILLUS AGUA"
+    if normalizado in {"SALUD", "ECU BACILLUS SALUD"}:
+        return "ECU-BACILLUS SALUD"
+    if normalizado in {
+        "SUELO",
+        "POLVO",
+        "SUELO POLVO",
+        "SUELO / POLVO",
+        "ECU BACILLUS SUELO",
+        "ECU BACILLUS SUELO POLVO",
+    }:
+        return "ECU-BACILLUS SUELO"
 
     if re.search(r"\bNATUXTRACT\b", normalizado):
         return "NATUXTRACT"

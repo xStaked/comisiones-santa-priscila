@@ -50,9 +50,24 @@ def _seed_catalogo_base(db_session):
     db_session.add_all(
         [
             Producto(nombre="PAST TH", unidad_comision="kg"),
-            Producto(nombre="AGUA", unidad_comision="kg"),
-            Producto(nombre="SALUD", unidad_comision="kg"),
-            Producto(nombre="SUELO / POLVO", unidad_comision="kg"),
+            Producto(
+                nombre="ECU-BACILLUS AGUA",
+                unidad_comision="tacho",
+                tacho_kilos=Decimal("10"),
+                peso_por_unidad=Decimal("10"),
+            ),
+            Producto(
+                nombre="ECU-BACILLUS SALUD",
+                unidad_comision="tacho",
+                tacho_kilos=Decimal("10"),
+                peso_por_unidad=Decimal("10"),
+            ),
+            Producto(
+                nombre="ECU-BACILLUS SUELO",
+                unidad_comision="tacho",
+                tacho_kilos=Decimal("10"),
+                peso_por_unidad=Decimal("10"),
+            ),
             Producto(nombre="CITRIUS", unidad_comision="litro"),
             Producto(nombre="CALCINIT", unidad_comision="kg"),
             Producto(nombre="NATUXTRACT", unidad_comision="tacho", tacho_kilos=Decimal("15")),

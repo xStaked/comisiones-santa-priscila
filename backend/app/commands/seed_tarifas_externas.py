@@ -31,14 +31,29 @@ CLIENTES_FALTANTES = ["EXPALSA", "PINGUIMAR", "CAMPROEX", "PROMARISCO"]
 PRODUCTOS_REQUERIDOS = {
     "MORTAL SHELL": {"unidad_comision": "litro"},
     "ECU BACILLUS SUELO PASTILLA": {"unidad_comision": "kg"},
+    "ECU-BACILLUS AGUA": {
+        "unidad_comision": "tacho",
+        "tacho_kilos": Decimal("10"),
+        "peso_por_unidad": Decimal("10"),
+    },
+    "ECU-BACILLUS SALUD": {
+        "unidad_comision": "tacho",
+        "tacho_kilos": Decimal("10"),
+        "peso_por_unidad": Decimal("10"),
+    },
+    "ECU-BACILLUS SUELO": {
+        "unidad_comision": "tacho",
+        "tacho_kilos": Decimal("10"),
+        "peso_por_unidad": Decimal("10"),
+    },
 }
 
 PRODUCTO_UNIDAD = {
     "PAST TH": "kg",
     "ECU BACILLUS SUELO PASTILLA": "kg",
-    "SALUD": "kg",
-    "AGUA": "kg",
-    "SUELO / POLVO": "kg",
+    "ECU-BACILLUS SALUD": "tacho",
+    "ECU-BACILLUS AGUA": "tacho",
+    "ECU-BACILLUS SUELO": "tacho",
     "CITRIUS": "litro",
     "CALCINIT": "kg",
     "NATUXTRACT": "tacho",
@@ -55,8 +70,6 @@ ALIASES_PRODUCTO = {
     "ECU-BACILLUS PASTILLA": "PAST TH",
     "ECU-BACILLUS SUELO-PASTILLA TH": "PAST TH",
     "ECU-BACILLUS SUELO-PASTILLA": "ECU BACILLUS SUELO PASTILLA",
-    "ECU-BACILLUS SALUD": "SALUD",
-    "ECU-BACILLUS AGUA": "AGUA",
     "CITRIUS-011": "CITRIUS",
     "NITRATO DE CALCIO": "CALCINIT",
 }
@@ -64,9 +77,9 @@ ALIASES_PRODUCTO = {
 COLUMNAS_SANTA_PRISCILA = [
     ("past_th", "PAST TH", TipoTarifa.fijo_kg),
     ("pastilla", "ECU BACILLUS SUELO PASTILLA", TipoTarifa.fijo_kg),
-    ("salud", "SALUD", TipoTarifa.fijo_kg),
-    ("agua", "AGUA", TipoTarifa.fijo_kg),
-    ("suelo_polvo", "SUELO / POLVO", TipoTarifa.fijo_kg),
+    ("salud", "ECU-BACILLUS SALUD", TipoTarifa.fijo_kg),
+    ("agua", "ECU-BACILLUS AGUA", TipoTarifa.fijo_kg),
+    ("suelo_polvo", "ECU-BACILLUS SUELO", TipoTarifa.fijo_kg),
     ("citrius_litro", "CITRIUS", TipoTarifa.fijo_unidad),
     ("nitrato_saco", "CALCINIT", TipoTarifa.fijo_unidad),
     ("natuxtract_tacho", "NATUXTRACT", TipoTarifa.fijo_unidad),
@@ -75,9 +88,9 @@ COLUMNAS_SANTA_PRISCILA = [
 
 COLUMNAS_OTROS_CLIENTES = [
     ("pastilla", "PAST TH", TipoTarifa.fijo_kg),
-    ("salud", "SALUD", TipoTarifa.fijo_kg),
-    ("agua", "AGUA", TipoTarifa.fijo_kg),
-    ("suelo_polvo", "SUELO / POLVO", TipoTarifa.fijo_kg),
+    ("salud", "ECU-BACILLUS SALUD", TipoTarifa.fijo_kg),
+    ("agua", "ECU-BACILLUS AGUA", TipoTarifa.fijo_kg),
+    ("suelo_polvo", "ECU-BACILLUS SUELO", TipoTarifa.fijo_kg),
     ("citrius_litro", "CITRIUS", TipoTarifa.fijo_unidad),
     ("nitrato_saco", "CALCINIT", TipoTarifa.fijo_unidad),
     ("natuxtract_tacho", "NATUXTRACT", TipoTarifa.fijo_unidad),
@@ -454,12 +467,25 @@ def _obtener_o_crear_producto(
     nombre: str,
     resumen: dict[str, int],
     unidad_comision: str = "kg",
+    tacho_kilos: Decimal | None = None,
+    peso_por_unidad: Decimal | None = None,
 ) -> Producto:
     producto = _buscar_por_nombre(db, Producto, nombre)
     if producto:
+        producto.unidad_comision = unidad_comision
+        if tacho_kilos is not None:
+            producto.tacho_kilos = tacho_kilos
+        if peso_por_unidad is not None:
+            producto.peso_por_unidad = peso_por_unidad
         return producto
 
-    producto = Producto(nombre=nombre, unidad_comision=unidad_comision, activo=True)
+    producto = Producto(
+        nombre=nombre,
+        unidad_comision=unidad_comision,
+        tacho_kilos=tacho_kilos,
+        peso_por_unidad=peso_por_unidad,
+        activo=True,
+    )
     db.add(producto)
     db.flush()
     resumen["productos_creados"] += 1
@@ -624,6 +650,8 @@ def seed_tarifas_externas(db: Session) -> dict[str, int]:
             nombre_producto,
             resumen,
             unidad_comision=data["unidad_comision"],
+            tacho_kilos=data.get("tacho_kilos"),
+            peso_por_unidad=data.get("peso_por_unidad"),
         )
 
     productos = {producto.nombre: producto for producto in db.query(Producto).all()}
