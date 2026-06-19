@@ -923,6 +923,23 @@ export function OrdenesTab() {
                             {getEstadoOrdenMeta(orden.estado).label}
                           </Badge>
                           <span className="text-xs text-slate-500">{orden.fecha}</span>
+                          {orden.comisionistaIds.length > 0 && (
+                            <div className="flex items-center gap-1">
+                              {orden.comisionistaIds.slice(0, 3).map(cid => {
+                                const com = comisionistas.find(c => c.id === cid);
+                                return com ? (
+                                  <Badge key={cid} variant="secondary" className="text-xs border-0 bg-slate-100 text-slate-700">
+                                    {com.nombre}
+                                  </Badge>
+                                ) : null;
+                              })}
+                              {orden.comisionistaIds.length > 3 && (
+                                <Badge variant="secondary" className="text-xs border-0 bg-slate-200 text-slate-600">
+                                  +{orden.comisionistaIds.length - 3}
+                                </Badge>
+                              )}
+                            </div>
+                          )}
                         </div>
                         <div className="flex items-center gap-3 mt-0.5 text-xs text-slate-500">
                           <span>{orden.cliente}</span>
@@ -930,25 +947,12 @@ export function OrdenesTab() {
                             <span>{orden.fincas.length > 1 ? `${orden.fincas.length} fincas` : orden.fincas[0]}</span>
                           )}
                           <span>{orden.items.length} producto{orden.items.length !== 1 ? 's' : ''}</span>
+                          {orden.comisionistaIds.length === 0 && (
+                            <span className="text-slate-400">Sin asignar</span>
+                          )}
                         </div>
                       </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        {orden.comisionistaIds.length > 0 ? (
-                          <div className="flex flex-wrap gap-1 justify-end">
-                            {orden.comisionistaIds.map(cid => {
-                              const com = comisionistas.find(c => c.id === cid);
-                              return com ? (
-                                <Badge key={cid} variant="secondary" className="text-xs border-0 bg-slate-100 text-slate-700">
-                                  {com.nombre}
-                                </Badge>
-                              ) : null;
-                            })}
-                          </div>
-                        ) : (
-                          <span className="text-xs text-slate-400">Sin asignar</span>
-                        )}
-                        <span className="text-sm font-semibold text-slate-900 tabular-nums ml-1">${orden.total.toFixed(2)}</span>
-                      </div>
+                      <span className="text-sm font-semibold text-slate-900 tabular-nums shrink-0">${orden.total.toFixed(2)}</span>
                     </button>
 
                     {!collapsed && (
