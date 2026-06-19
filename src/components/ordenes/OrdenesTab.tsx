@@ -116,7 +116,7 @@ function MultiSelectComisionistas({
         <ChevronDown className="h-4 w-4 text-slate-400 shrink-0 ml-1" />
       </button>
       {open && (
-        <div className="absolute z-50 mt-1 w-full bg-white border border-slate-200 rounded-xl shadow-lg max-h-60 overflow-auto">
+        <div className="absolute z-[9999] mt-1 w-full bg-white border border-slate-200 rounded-xl shadow-lg max-h-60 overflow-auto">
           {comisionistas.map(c => (
             <label
               key={c.id}
@@ -579,7 +579,9 @@ export function OrdenesTab() {
                     setCurrentLine({...currentLine, fincaId: '', finca: cliente?.tipo === 'individual' ? cliente.nombre : ''});
                   }}>
                     <SelectTrigger className="w-full rounded-xl border-slate-200 bg-white h-10 text-sm text-slate-900">
-                      <SelectValue placeholder="Seleccionar cliente" />
+                      <SelectValue placeholder="Seleccionar cliente">
+                        {manualHeader.clienteId ? (clientes.find(c => c.id === manualHeader.clienteId)?.nombre || 'Cliente no encontrado') : 'Seleccionar cliente'}
+                      </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
                       {clientes.map(c => (
@@ -606,7 +608,9 @@ export function OrdenesTab() {
                         setCurrentLine({ ...currentLine, fincaId: v, finca: nombre || currentLine.finca });
                       }}>
                         <SelectTrigger className="w-full rounded-xl border-slate-200 bg-white h-10 text-sm text-slate-900">
-                          <SelectValue placeholder="Seleccionar finca" />
+                          <SelectValue placeholder="Seleccionar finca">
+                            {currentLine.fincaId ? ((fincasCliente || []).find((f: { id: string; nombre: string }) => f.id === currentLine.fincaId)?.nombre || 'Finca no encontrada') : 'Seleccionar finca'}
+                          </SelectValue>
                         </SelectTrigger>
                         <SelectContent>
                           {(fincasCliente || []).map((f: { id: string; nombre: string }) => (
@@ -630,7 +634,9 @@ export function OrdenesTab() {
                       setCurrentLine({ ...currentLine, productoId: v, producto: nombre || currentLine.producto });
                     }}>
                       <SelectTrigger className="w-full rounded-xl border-slate-200 bg-white h-10 text-sm text-slate-900">
-                        <SelectValue placeholder="Seleccionar producto" />
+                        <SelectValue placeholder="Seleccionar producto">
+                          {currentLine.productoId ? (productos.find(p => p.id === currentLine.productoId)?.nombre || 'Producto no encontrado') : 'Seleccionar producto'}
+                        </SelectValue>
                       </SelectTrigger>
                       <SelectContent>
                         {productos.map(p => (
