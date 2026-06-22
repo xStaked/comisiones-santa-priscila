@@ -145,6 +145,70 @@ def test_calcula_tarifa_fija_kg_desde_tachos_sin_peso_explicitado(db_session):
     assert comision == Decimal("600.00")
 
 
+def test_tarifa_fija_kg_paga_por_saco_cuando_unidad_de_orden_es_saco(db_session):
+    """Si la orden sube el ítem como 'saco', una tarifa fijo_kg paga por saco (nº_sacos × valor),
+    no convertida a kilos, aunque el producto esté configurado como saco."""
+    producto = Producto(
+        nombre="Producto Saco", unidad_comision="saco", saco_kilos=Decimal("25")
+    )
+    db_session.add(producto)
+    db_session.flush()
+
+    orden_item = OrdenItem(
+        fecha=date.today(),
+        numero_orden="ORD-SACO-001",
+        finca="-",
+        producto=producto.nombre,
+        producto_id=producto.id,
+        cantidad=Decimal("10"),
+        unidad="sacos",
+        precio_unitario=Decimal("50"),
+        total=Decimal("500"),
+    )
+    tarifa = Tarifa(tipo=TipoTarifa.fijo_kg, valor=Decimal("1.00"))
+    db_session.add(orden_item)
+    db_session.commit()
+
+    comision = _calcular_comision_con_tarifa(orden_item, tarifa)
+
+    assert comision == Decimal("10.00")
+
+
+def test_tarifa_especifica_fija_kg_paga_por_saco_cuando_unidad_de_orden_es_saco(db_session):
+    cliente = Cliente(nombre="Cliente Saco", tipo="grupo")
+    comisionista = Comisionista(nombre="Comisionista Saco")
+    producto = Producto(
+        nombre="Producto Saco", unidad_comision="saco", saco_kilos=Decimal("25")
+    )
+    db_session.add_all([cliente, comisionista, producto])
+    db_session.flush()
+
+    orden_item = OrdenItem(
+        fecha=date.today(),
+        numero_orden="ORD-SACO-002",
+        finca="-",
+        producto=producto.nombre,
+        producto_id=producto.id,
+        cantidad=Decimal("10"),
+        unidad="sacos",
+        precio_unitario=Decimal("50"),
+        total=Decimal("500"),
+    )
+    tarifa = TarifaClienteProducto(
+        comisionista_id=comisionista.id,
+        cliente_id=cliente.id,
+        producto_id=producto.id,
+        tipo=TipoTarifa.fijo_kg,
+        valor=Decimal("1.00"),
+    )
+    db_session.add(orden_item)
+    db_session.commit()
+
+    comision = _calcular_comision_especifica(db_session, orden_item, tarifa)
+
+    assert comision == Decimal("10.00")
+
+
 def test_calcula_tarifa_especifica_fija_kg_desde_tachos_con_peso_en_unidad(db_session):
     cliente = Cliente(nombre="Santa Priscila", tipo="grupo")
     comisionista = Comisionista(nombre="PINEDA")

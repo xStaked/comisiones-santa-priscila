@@ -74,6 +74,12 @@ function getCantidadParaTarifaKg(item: OrdenItem): number {
     return item.cantidad * 3.78541; // 1 galón ≈ 3.785 litros ≈ 3.785 kg
   }
 
+  // Caso especial: si la orden sube el ítem como saco, la tarifa fijo_kg se paga
+  // por saco (nº de sacos × valor), NO convertida a kilos.
+  if (unidadLower.includes('saco')) {
+    return item.cantidad;
+  }
+
   // Las conversiones por unidadComision del producto solo aplican cuando la unidad
   // de la orden no es una unidad base ya reconocida (kg, libras, litros, caneca, galón, tacho).
   // Si la unidad ya fue procesada arriba, no se debe aplicar un segundo factor de conversión.

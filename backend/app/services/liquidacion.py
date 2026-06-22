@@ -62,6 +62,11 @@ def _cantidad_para_tarifa_kg(orden_item: OrdenItem) -> Decimal:
     if "galon" in unidad_lower or "galón" in unidad_lower:
         return cantidad * Decimal("3.78541")  # 1 galón ≈ 3.785 litros ≈ 3.785 kg
 
+    # Caso especial: si la orden sube el ítem como saco, la tarifa fijo_kg se paga
+    # por saco (nº de sacos × valor), NO convertida a kilos.
+    if "saco" in unidad_lower:
+        return cantidad
+
     if producto and producto.unidad_comision == "tacho":
         return cantidad * (producto.tacho_kilos or Decimal("15"))
 
