@@ -14,8 +14,32 @@ from app.models.user import User
 from app.models.orden import Asignacion, EstadoOrden, Orden, OrdenItem
 from app.schemas.orden import OrdenCreate, OrdenItemCreate, OrdenItemResponse, OrdenItemUpdate
 from app.dependencies import get_current_user
+from app.services.liquidacion import (
+    _buscar_tarifa_especifica,
+    _tiene_tarifas_especificas,
+)
 
 router = APIRouter()
+
+
+def _comisionistas_aplicables(
+    db: Session, oi: OrdenItem, comisionista_ids: list[UUID]
+) -> list[UUID]:
+    """Filtra los comisionistas que realmente cobran en este ítem.
+
+    Un comisionista se asigna a un ítem solo si tiene una tarifa específica que
+    aplica a su (cliente, producto, sector), o si no tiene ninguna tarifa
+    específica configurada (en cuyo caso usa las globales). Esto refleja
+    exactamente la lógica de pago de liquidacion.py y evita asignar comisionistas
+    a sectores que no les corresponden (comisiones infladas).
+    """
+    aplicables: list[UUID] = []
+    for cid in comisionista_ids:
+        if _buscar_tarifa_especifica(db, oi, cid) is not None:
+            aplicables.append(cid)
+        elif not _tiene_tarifas_especificas(db, cid):
+            aplicables.append(cid)
+    return aplicables
 
 
 class ComisionistaAsignacionBody(BaseModel):
@@ -198,7 +222,7 @@ def _crear_orden_item(db: Session, item: OrdenItemCreate, orden_id: UUID) -> Ord
     db.add(oi)
     db.flush()
 
-    for cid in item.comisionista_ids:
+    for cid in _comisionistas_aplicables(db, oi, item.comisionista_ids):
         db.add(Asignacion(orden_item_id=oi.id, comisionista_id=cid))
 
     return oi
@@ -326,7 +350,7 @@ def actualizar_orden(
             db.query(Asignacion).filter(
                 Asignacion.orden_item_id == oi.id
             ).delete(synchronize_session=False)
-            for comisionista_id in comisionista_ids:
+            for comisionista_id in _comisionistas_aplicables(db, oi, comisionista_ids):
                 db.add(
                     Asignacion(
                         orden_item_id=oi.id,
@@ -371,7 +395,7 @@ def asignar_comisionistas_a_orden(
             db.query(Asignacion).filter(
                 Asignacion.orden_item_id == item.id
             ).delete(synchronize_session=False)
-            for cid in body.comisionista_ids:
+            for cid in _comisionistas_aplicables(db, item, body.comisionista_ids):
                 db.add(Asignacion(orden_item_id=item.id, comisionista_id=cid))
         db.commit()
         return {"message": "Comisionistas asignados a la orden"}
@@ -574,7 +598,7 @@ def asignar_global(body: AsignarGlobalBody, db: Session = Depends(get_db), curre
                 Asignacion.orden_item_id == oi.id
             ).delete(synchronize_session=False)
 
-            for cid in body.comisionista_ids:
+            for cid in _comisionistas_aplicables(db, oi, body.comisionista_ids):
                 db.add(
                     Asignacion(
                         orden_item_id=oi.id, comisionista_id=cid
