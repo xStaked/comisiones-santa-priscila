@@ -32,6 +32,80 @@ const ESTADOS_ORDEN: { value: EstadoOrden; label: string; className: string }[] 
 
 const ITEMS_PER_PAGE = 15;
 
+type OrdenAgrupada = {
+  id: string;
+  fecha: string;
+  numeroOrden: string;
+  cliente: string;
+  fincas: string[];
+  total: number;
+  estado: EstadoOrden;
+  comisionistaIds: string[];
+  items: OrdenItem[];
+};
+
+type OrdenItemExtraido = Omit<OrdenItem, 'id'> & { id?: string };
+
+function agruparOrdenes(
+  ordenItems: OrdenItem[],
+  sortField: 'fecha' | 'total' | 'numeroOrden',
+  sortDir: 'asc' | 'desc'
+): OrdenAgrupada[] {
+  const map = new Map<string, OrdenAgrupada>();
+
+  ordenItems.forEach((item) => {
+    const id = item.ordenId || `${item.fecha}-${item.numeroOrden}-${item.clienteId || ''}`;
+    const existente = map.get(id);
+    const finca = item.fincaRel?.nombre || item.finca;
+    const comisionistaIds = item.comisionistas.map(a => a.comisionistaId);
+    if (existente) {
+      const items = [...existente.items, item];
+      const fincas = finca && !existente.fincas.includes(finca)
+        ? [...existente.fincas, finca]
+        : existente.fincas;
+      const nuevosComisionistaIds = comisionistaIds.filter((cid) => !existente.comisionistaIds.includes(cid));
+      map.set(id, {
+        ...existente,
+        total: existente.total + item.total,
+        items,
+        fincas,
+        comisionistaIds: nuevosComisionistaIds.length > 0
+          ? [...existente.comisionistaIds, ...nuevosComisionistaIds]
+          : existente.comisionistaIds,
+        estado: getEstadoOrdenAgrupada(items),
+      });
+      return;
+    }
+
+    map.set(id, {
+      id,
+      fecha: item.fecha,
+      numeroOrden: item.numeroOrden,
+      cliente: item.cliente?.nombre || '-',
+      fincas: finca ? [finca] : [],
+      total: item.total,
+      estado: item.estado || 'pendiente',
+      comisionistaIds,
+      items: [item],
+    });
+  });
+
+  const extraerNumero = (s: string) => { const m = s.match(/\d+/); return m ? parseInt(m[0], 10) : NaN; };
+
+  return Array.from(map.values()).sort((a, b) => {
+    let cmp = 0;
+    if (sortField === 'fecha') cmp = a.fecha.localeCompare(b.fecha);
+    else if (sortField === 'total') cmp = a.total - b.total;
+    else if (sortField === 'numeroOrden') {
+      const na = extraerNumero(a.numeroOrden);
+      const nb = extraerNumero(b.numeroOrden);
+      if (!isNaN(na) && !isNaN(nb)) cmp = na - nb;
+      else cmp = a.numeroOrden.localeCompare(b.numeroOrden);
+    }
+    return sortDir === 'asc' ? cmp : -cmp;
+  });
+}
+
 function getEstadoOrdenMeta(estado?: string) {
   return ESTADOS_ORDEN.find((item) => item.value === estado) ?? ESTADOS_ORDEN[0];
 }
@@ -206,6 +280,7 @@ export function OrdenesTab() {
   const [stagedItems, setStagedItems] = useState<OrdenItem[]>([]);
 
   const manualSelectedCliente = clientes.find(c => c.id === manualHeader.clienteId);
+  const pdfSelectedCliente = clientes.find(c => c.id === pdfClienteId);
   const { data: fincasCliente } = useQuery({
     queryKey: ['fincas', manualHeader.clienteId],
     queryFn: () => fetchFincas(manualHeader.clienteId),
@@ -272,74 +347,12 @@ export function OrdenesTab() {
     return items;
   }, [ordenItems, search, comisionistas, filterFechaDesde, filterFechaHasta, filterEstado, filterComisionistaId]);
 
-  const ordenesAgrupadas = useMemo(() => {
-    const map = new Map<string, {
-      id: string;
-      fecha: string;
-      numeroOrden: string;
-      cliente: string;
-      fincas: string[];
-      total: number;
-      estado: EstadoOrden;
-      comisionistaIds: string[];
-      items: OrdenItem[];
-    }>();
-
-    filteredOrdenItems.forEach((item) => {
-      const id = item.ordenId || `${item.fecha}-${item.numeroOrden}-${item.clienteId || ''}`;
-      const existente = map.get(id);
-      const finca = item.fincaRel?.nombre || item.finca;
-      const comisionistaIds = item.comisionistas.map(a => a.comisionistaId);
-      if (existente) {
-        existente.total += item.total;
-        existente.items.push(item);
-        if (finca && !existente.fincas.includes(finca)) existente.fincas.push(finca);
-        comisionistaIds.forEach((cid) => {
-          if (!existente.comisionistaIds.includes(cid)) existente.comisionistaIds.push(cid);
-        });
-        existente.estado = getEstadoOrdenAgrupada(existente.items);
-        return;
-      }
-
-      map.set(id, {
-        id,
-        fecha: item.fecha,
-        numeroOrden: item.numeroOrden,
-        cliente: item.cliente?.nombre || '-',
-        fincas: finca ? [finca] : [],
-        total: item.total,
-        estado: item.estado || 'pendiente',
-        comisionistaIds,
-        items: [item],
-      });
-    });
-
-    const extraerNumero = (s: string) => { const m = s.match(/\d+/); return m ? parseInt(m[0], 10) : NaN; };
-
-    const result = Array.from(map.values());
-
-    result.sort((a, b) => {
-      let cmp = 0;
-      if (sortField === 'fecha') cmp = a.fecha.localeCompare(b.fecha);
-      else if (sortField === 'total') cmp = a.total - b.total;
-      else if (sortField === 'numeroOrden') {
-        const na = extraerNumero(a.numeroOrden);
-        const nb = extraerNumero(b.numeroOrden);
-        if (!isNaN(na) && !isNaN(nb)) cmp = na - nb;
-        else cmp = a.numeroOrden.localeCompare(b.numeroOrden);
-      }
-      return sortDir === 'asc' ? cmp : -cmp;
-    });
-
-    return result;
-  }, [filteredOrdenItems, sortField, sortDir]);
+  const ordenesAgrupadas = agruparOrdenes(filteredOrdenItems, sortField, sortDir);
 
   const totalPages = Math.max(1, Math.ceil(ordenesAgrupadas.length / ITEMS_PER_PAGE));
   const safePage = Math.min(currentPage, totalPages);
-  const paginatedOrdenes = useMemo(() => {
-    const start = (safePage - 1) * ITEMS_PER_PAGE;
-    return ordenesAgrupadas.slice(start, start + ITEMS_PER_PAGE);
-  }, [ordenesAgrupadas, safePage]);
+  const start = (safePage - 1) * ITEMS_PER_PAGE;
+  const paginatedOrdenes = ordenesAgrupadas.slice(start, start + ITEMS_PER_PAGE);
 
   const resetManualForm = () => {
     setManualHeader({
@@ -448,7 +461,7 @@ export function OrdenesTab() {
         numeroOrden: result.numeroOrden,
         proveedor: result.proveedor,
         semana: result.semana,
-        items: result.items.map((item: any, idx: number) => ({
+        items: (result.items as OrdenItemExtraido[]).map((item, idx) => ({
           ...item,
           id: item.id || `preview-${Date.now()}-${idx}`,
         })),
@@ -759,7 +772,11 @@ export function OrdenesTab() {
                 <Label className="text-xs text-slate-500">Cliente (opcional)</Label>
                 <Select value={pdfClienteId} onValueChange={(value) => setPdfClienteId(value ?? '')}>
                   <SelectTrigger className="w-full rounded-xl border-slate-200 bg-white h-10 text-sm text-slate-900">
-                    <SelectValue placeholder="Seleccionar cliente para vincular fincas..." />
+                    <span className={`flex flex-1 truncate text-left ${pdfClienteId ? '' : 'text-slate-400'}`}>
+                      {pdfClienteId
+                        ? (pdfSelectedCliente?.nombre || 'Cliente no encontrado')
+                        : 'Seleccionar cliente para vincular fincas...'}
+                    </span>
                   </SelectTrigger>
                   <SelectContent>
                     {clientes.map(c => (
