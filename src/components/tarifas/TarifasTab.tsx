@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 import { Plus, Pencil, Trash2, Percent, Weight, Search, FileSpreadsheet } from 'lucide-react';
 import { useQueries, useQuery } from '@tanstack/react-query';
+import * as XLSX from 'xlsx';
 import { useApp } from '@/context/AppContext';
 import { TarifaClienteProducto, Finca, Proveedor } from '@/types';
 import { fetchFincas, fetchProveedores } from '@/lib/api';
@@ -294,6 +295,30 @@ export function TarifasTab() {
     toast.info('Función disponible en backend');
   };
 
+  const handleExportarExcel = () => {
+    if (filtered.length === 0) {
+      toast.error('No hay tarifas para exportar');
+      return;
+    }
+
+    const data = filtered.map((t) => ({
+      Comisionista: getComisionistaTarifa(t),
+      Cliente: getClienteTarifa(t),
+      Finca: getFincaTarifa(t),
+      Producto: getProductoTarifa(t),
+      Proveedor: getProveedorTarifa(t),
+      'Proveedores excluidos': getExcluidosTarifa(t) || '-',
+      Tipo: t.tipo === 'porcentaje' ? 'Porcentaje' : t.tipo === 'fijo_kg' ? 'Fijo/kg' : 'Fijo/unidad',
+      Valor: formatValor(t),
+      Estado: t.activo ? 'Activa' : 'Inactiva',
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Tarifas');
+    XLSX.writeFile(wb, 'Tarifas.xlsx');
+  };
+
   const formatValor = (t: TarifaClienteProducto) => {
     const valor = typeof t.valor === 'string' ? parseFloat(t.valor) : t.valor;
     if (t.tipo === 'porcentaje') {
@@ -396,6 +421,14 @@ export function TarifasTab() {
             </div>
 
             <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                onClick={handleExportarExcel}
+                className="rounded-xl border-slate-200 text-slate-600"
+              >
+                <FileSpreadsheet className="h-4 w-4 mr-2 text-emerald-600" />
+                Exportar Excel
+              </Button>
               <Button
                 variant="outline"
                 onClick={handleImportarExcel}
