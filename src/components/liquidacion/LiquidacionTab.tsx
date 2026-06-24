@@ -3,6 +3,7 @@
 import { useState, useMemo } from 'react';
 import { FileText, FileSpreadsheet, Save, Calculator, Filter } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
+import * as XLSX from 'xlsx';
 import { useApp } from '@/context/AppContext';
 import { exportarPDF, exportarExcel, calcularDetalleComision } from '@/lib/export-utils';
 import { Button } from '@/components/ui/button';
@@ -111,6 +112,34 @@ export function LiquidacionTab() {
     const com = filterComisionista ? comisionistaMap.get(filterComisionista) : undefined;
     exportarExcel(filteredItems, comisionistas, 'Liquidacion', com?.nombre, tarifasClienteProducto);
     toast.success('Excel generado');
+  };
+
+  const handleExportTotalesExcel = () => {
+    if (resumenPorComisionista.length === 0) {
+      toast.error('No hay totales para exportar');
+      return;
+    }
+
+    const data = [
+      ...resumenPorComisionista.map((com) => ({
+        Comisionista: com.nombre,
+        'Tarifa aplicada': com.tarifasLabel,
+        Items: com.items,
+        'Comisión total': Number(com.comision.toFixed(2)),
+      })),
+      {
+        Comisionista: 'Total Comisión',
+        'Tarifa aplicada': '',
+        Items: resumenPorComisionista.reduce((total, com) => total + com.items, 0),
+        'Comisión total': Number(totalComision.toFixed(2)),
+      },
+    ];
+
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Totales');
+    XLSX.writeFile(wb, 'Liquidacion_Totales_Comisionistas.xlsx');
+    toast.success('Totales exportados');
   };
 
   const queryClient = useQueryClient();
@@ -370,8 +399,17 @@ export function LiquidacionTab() {
       </div>
 
       <Card className="card-elevated rounded-2xl overflow-hidden">
-        <CardHeader className="pb-3">
+        <CardHeader className="pb-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <CardTitle className="text-base text-slate-900">Resumen por Comisionista</CardTitle>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleExportTotalesExcel}
+            className="rounded-xl border-slate-200 sm:w-auto w-full"
+          >
+            <FileSpreadsheet className="h-4 w-4 mr-2 text-emerald-600" />
+            Exportar Totales
+          </Button>
         </CardHeader>
         <CardContent className="p-0">
           <div className="overflow-x-auto">
