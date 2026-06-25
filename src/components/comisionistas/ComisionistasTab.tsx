@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { Plus, Pencil, Trash2, Percent, Weight, Search, Users, TrendingUp, FileText, X, PlusCircle } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { Comisionista, TarifaComision } from '@/types';
-import { calcularComision, calcularComisionTotalItem } from '@/lib/export-utils';
+import { calcularDetalleComision } from '@/lib/export-utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -21,7 +21,7 @@ import {
 import { toast } from 'sonner';
 
 export function ComisionistasTab() {
-  const { comisionistas, addComisionista, updateComisionista, deleteComisionista, ordenItems, liquidaciones } = useApp();
+  const { comisionistas, addComisionista, updateComisionista, deleteComisionista, ordenItems, liquidaciones, tarifasClienteProducto } = useApp();
   const [search, setSearch] = useState('');
   const [editing, setEditing] = useState<Comisionista | null>(null);
   const [form, setForm] = useState<{
@@ -41,8 +41,9 @@ export function ComisionistasTab() {
   const statsPorComisionista = (c: Comisionista) => {
     const allItems = [...ordenItems, ...liquidaciones.flatMap(l => l.items)];
     const items = allItems.filter(i => i.comisionistas.some(a => a.comisionistaId === c.id));
-    const total = items.reduce((s, i) => s + calcularComision(i, c), 0);
-    return { ordenes: items.length, total };
+    const total = items.reduce((s, i) => s + calcularDetalleComision(i, c, tarifasClienteProducto).comision, 0);
+    const ordenes = new Set(items.map(i => i.numeroOrden)).size;
+    return { ordenes, total };
   };
 
   const resetForm = () => {
