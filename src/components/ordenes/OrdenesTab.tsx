@@ -245,14 +245,14 @@ export function OrdenesTab() {
   const [globalComisionistaIds, setGlobalComisionistaIds] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [pdfPreview, setPdfPreview] = useState<{
+  const [pdfPreviews, setPdfPreviews] = useState<{
     fileName: string;
     fecha: string;
     numeroOrden: string;
     proveedor: string;
     semana: string;
     items: OrdenItem[];
-  } | null>(null);
+  }[]>([]);
   const [isProcessingPDF, setIsProcessingPDF] = useState(false);
   const [uploadType, setUploadType] = useState<'pdf' | 'imagen'>('pdf');
   const [pdfClienteId, setPdfClienteId] = useState<string>('');
@@ -441,56 +441,68 @@ export function OrdenesTab() {
   }
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const lowerName = file.name.toLowerCase();
-    const isPdf = lowerName.endsWith('.pdf');
-    const isImage = lowerName.endsWith('.jpg') || lowerName.endsWith('.jpeg') || lowerName.endsWith('.png');
-    if (!isPdf && !isImage) {
-      toast.error('Solo se permiten archivos PDF o imágenes (JPG, PNG)');
-      return;
-    }
+    const files = Array.from(e.target.files ?? []);
+    if (files.length === 0) return;
 
-    setUploadType(isPdf ? 'pdf' : 'imagen');
     setIsProcessingPDF(true);
-    try {
-      const result = isPdf ? await uploadPDF(file, pdfClienteId || undefined) : await uploadImage(file, pdfClienteId || undefined);
-      setPdfPreview({
-        fileName: file.name,
-        fecha: result.fecha,
-        numeroOrden: result.numeroOrden,
-        proveedor: result.proveedor,
-        semana: result.semana,
-        items: (result.items as OrdenItemExtraido[]).map((item, idx) => ({
-          ...item,
-          id: item.id || `preview-${Date.now()}-${idx}`,
-        })),
-      });
-      toast.success(`${result.items.length} productos extraídos del ${isPdf ? 'PDF' : 'imagen'}`);
-    } catch (err) {
-      console.error(err);
-      toast.error(`Error al procesar el ${isPdf ? 'PDF' : 'imagen'}. Verifica que sea una orden de compra válida.`);
-    } finally {
-      setIsProcessingPDF(false);
-      if (fileInputRef.current) fileInputRef.current.value = '';
+    let okCount = 0;
+    let totalItems = 0;
+    // ponytail: procesa archivos en serie; con cientos a la vez, paralelizar con Promise.all
+    for (const file of files) {
+      const lowerName = file.name.toLowerCase();
+      const isPdf = lowerName.endsWith('.pdf');
+      const isImage = lowerName.endsWith('.jpg') || lowerName.endsWith('.jpeg') || lowerName.endsWith('.png');
+      if (!isPdf && !isImage) {
+        toast.error(`${file.name}: solo se permiten PDF o imágenes (JPG, PNG)`);
+        continue;
+      }
+      setUploadType(isPdf ? 'pdf' : 'imagen');
+      try {
+        const result = isPdf ? await uploadPDF(file, pdfClienteId || undefined) : await uploadImage(file, pdfClienteId || undefined);
+        setPdfPreviews(prev => [...prev, {
+          fileName: file.name,
+          fecha: result.fecha,
+          numeroOrden: result.numeroOrden,
+          proveedor: result.proveedor,
+          semana: result.semana,
+          items: (result.items as OrdenItemExtraido[]).map((item, idx) => ({
+            ...item,
+            id: item.id || `preview-${file.name}-${idx}`,
+          })),
+        }]);
+        okCount++;
+        totalItems += result.items.length;
+      } catch (err) {
+        console.error(err);
+        toast.error(`Error al procesar ${file.name}. Verifica que sea una orden de compra válida.`);
+      }
     }
+    setIsProcessingPDF(false);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+    if (okCount > 0) toast.success(`${okCount} orden(es), ${totalItems} productos extraídos`);
   };
 
   const handleConfirmPDF = () => {
-    if (!pdfPreview || pdfPreview.items.length === 0) return;
-    const itemsConCliente = pdfPreview.items.map(item => ({
-      ...item,
-      clienteId: pdfClienteId || item.clienteId,
-      proveedor: pdfPreview.proveedor || item.proveedor,
-    }));
+    const itemsConCliente = pdfPreviews.flatMap(preview =>
+      preview.items.map(item => ({
+        ...item,
+        clienteId: pdfClienteId || item.clienteId,
+        proveedor: preview.proveedor || item.proveedor,
+      }))
+    );
+    if (itemsConCliente.length === 0) return;
     addOrdenItems(itemsConCliente);
-    setPdfPreview(null);
+    setPdfPreviews([]);
     setPdfClienteId('');
   };
 
   const handleDiscardPDF = () => {
-    setPdfPreview(null);
+    setPdfPreviews([]);
     setPdfClienteId('');
+  };
+
+  const removePdfPreview = (fileName: string) => {
+    setPdfPreviews(prev => prev.filter(p => p.fileName !== fileName));
   };
 
   const handleEdit = (item: OrdenItem) => {
@@ -785,20 +797,21 @@ export function OrdenesTab() {
                   </SelectContent>
                 </Select>
               </div>
-              {!pdfPreview ? (
+              {pdfPreviews.length === 0 ? (
                 <>
                   <div
                     className="border-2 border-dashed border-slate-200 rounded-2xl p-8 text-center hover:border-slate-400 hover:bg-slate-50 transition-all cursor-pointer"
                     onClick={() => fileInputRef.current?.click()}
                   >
                     <FileUp className="h-10 w-10 text-slate-400 mx-auto mb-3" />
-                    <p className="text-sm font-medium text-slate-700">Haz clic para subir el PDF o imagen de la orden de compra</p>
+                    <p className="text-sm font-medium text-slate-700">Haz clic para subir uno o varios PDF o imágenes de órdenes de compra</p>
                     <p className="text-xs text-slate-500 mt-1">Soporta órdenes de compra tipo INDUSTRIAL ACUICOLA OCHOA & BARCIA DINACUAMAR CIA.LTDA.</p>
                   </div>
                   <input
                     ref={fileInputRef}
                     type="file"
                     accept=".pdf,.jpg,.jpeg,.png"
+                    multiple
                     className="hidden"
                     onChange={handleFileSelect}
                   />
@@ -811,54 +824,70 @@ export function OrdenesTab() {
                 </>
               ) : (
                 <div className="space-y-4">
-                  <div className="bg-slate-50 rounded-xl p-4 border border-slate-200">
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <p className="text-sm font-medium text-slate-900">{pdfPreview.fileName}</p>
-                        <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-xs text-slate-600">
-                          <span><strong>Orden:</strong> {pdfPreview.numeroOrden}</span>
-                          <span><strong>Fecha:</strong> {pdfPreview.fecha}</span>
-                          {pdfPreview.semana && <span><strong>Semana:</strong> {pdfPreview.semana}</span>}
-                          {pdfPreview.proveedor && <span><strong>Proveedor:</strong> {pdfPreview.proveedor}</span>}
+                  {pdfPreviews.map(preview => (
+                    <div key={preview.fileName} className="space-y-3">
+                      <div className="bg-slate-50 rounded-xl p-4 border border-slate-200">
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <p className="text-sm font-medium text-slate-900">{preview.fileName}</p>
+                            <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-xs text-slate-600">
+                              <span><strong>Orden:</strong> {preview.numeroOrden}</span>
+                              <span><strong>Fecha:</strong> {preview.fecha}</span>
+                              {preview.semana && <span><strong>Semana:</strong> {preview.semana}</span>}
+                              {preview.proveedor && <span><strong>Proveedor:</strong> {preview.proveedor}</span>}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Badge variant="secondary" className="bg-slate-100 text-slate-700">{preview.items.length} productos</Badge>
+                            <Button variant="ghost" size="sm" onClick={() => removePdfPreview(preview.fileName)} className="rounded-lg text-slate-500 hover:text-red-600">
+                              <X className="h-4 w-4" />
+                            </Button>
+                          </div>
                         </div>
                       </div>
-                      <Badge variant="secondary" className="bg-slate-100 text-slate-700">{pdfPreview.items.length} productos</Badge>
-                    </div>
-                  </div>
 
-                  <div className="overflow-x-auto border border-slate-200 rounded-xl">
-                    <table className="w-full text-sm">
-                      <thead className="bg-slate-50 border-b border-slate-200">
-                        <tr>
-                          <th className="text-left px-3 py-2 font-medium text-slate-600">Finca</th>
-                          <th className="text-left px-3 py-2 font-medium text-slate-600">Producto</th>
-                          <th className="text-right px-3 py-2 font-medium text-slate-600">Cantidad</th>
-                          <th className="text-right px-3 py-2 font-medium text-slate-600">Precio Unit.</th>
-                          <th className="text-right px-3 py-2 font-medium text-slate-600">Total</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100">
-                        {pdfPreview.items.map(item => (
-                          <tr key={item.id} className="hover:bg-slate-50/50 transition-colors">
-                            <td className="px-3 py-2 text-slate-700">{item.finca}</td>
-                            <td className="px-3 py-2 text-slate-900 font-medium">{item.producto}</td>
-                            <td className="px-3 py-2 text-right text-slate-700">{item.cantidad.toLocaleString('es-ES')} {item.unidad}</td>
-                            <td className="px-3 py-2 text-right text-slate-700">${item.precioUnitario.toFixed(2)}</td>
-                            <td className="px-3 py-2 text-right font-medium text-slate-900">${item.total.toFixed(2)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                      <div className="overflow-x-auto border border-slate-200 rounded-xl">
+                        <table className="w-full text-sm">
+                          <thead className="bg-slate-50 border-b border-slate-200">
+                            <tr>
+                              <th className="text-left px-3 py-2 font-medium text-slate-600">Finca</th>
+                              <th className="text-left px-3 py-2 font-medium text-slate-600">Producto</th>
+                              <th className="text-right px-3 py-2 font-medium text-slate-600">Cantidad</th>
+                              <th className="text-right px-3 py-2 font-medium text-slate-600">Precio Unit.</th>
+                              <th className="text-right px-3 py-2 font-medium text-slate-600">Total</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100">
+                            {preview.items.map(item => (
+                              <tr key={item.id} className="hover:bg-slate-50/50 transition-colors">
+                                <td className="px-3 py-2 text-slate-700">{item.finca}</td>
+                                <td className="px-3 py-2 text-slate-900 font-medium">{item.producto}</td>
+                                <td className="px-3 py-2 text-right text-slate-700">{item.cantidad.toLocaleString('es-ES')} {item.unidad}</td>
+                                <td className="px-3 py-2 text-right text-slate-700">${item.precioUnitario.toFixed(2)}</td>
+                                <td className="px-3 py-2 text-right font-medium text-slate-900">${item.total.toFixed(2)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  ))}
+
+                  {isProcessingPDF && (
+                    <div className="text-center py-4">
+                      <div className="inline-block h-6 w-6 animate-spin rounded-full border-2 border-solid border-slate-900 border-r-transparent align-[-0.125em] motion-reduce:animate-[spin_1.5s_linear_infinite]" />
+                      <p className="text-sm text-slate-500 mt-2">{uploadType === 'pdf' ? 'Procesando PDF...' : 'Procesando imagen...'}</p>
+                    </div>
+                  )}
 
                   <div className="flex justify-end gap-2">
                     <Button variant="outline" onClick={handleDiscardPDF} className="rounded-xl border-slate-200">
                       <X className="h-4 w-4 mr-2" />
-                      Descartar
+                      Descartar todo
                     </Button>
-                    <Button onClick={handleConfirmPDF} className="btn-primary-dark rounded-xl">
+                    <Button onClick={handleConfirmPDF} disabled={isProcessingPDF} className="btn-primary-dark rounded-xl">
                       <Check className="h-4 w-4 mr-2" />
-                      Confirmar y Agregar
+                      Confirmar y Agregar ({pdfPreviews.reduce((n, p) => n + p.items.length, 0)})
                     </Button>
                   </div>
                 </div>
@@ -1233,7 +1262,7 @@ export function OrdenesTab() {
         </Card>
       )}
 
-      {ordenItems.length === 0 && !pdfPreview && (
+      {ordenItems.length === 0 && pdfPreviews.length === 0 && (
         <div className="text-center py-16 bg-white rounded-2xl border border-dashed border-slate-200">
           <Calculator className="h-12 w-12 text-slate-300 mx-auto mb-4" />
           <h3 className="text-lg font-medium text-slate-700">Sin órdenes cargadas</h3>
