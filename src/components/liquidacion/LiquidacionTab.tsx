@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { FileText, FileSpreadsheet, Save, Calculator, Filter, ChevronRight, ChevronDown } from 'lucide-react';
+import { FileText, FileSpreadsheet, Save, Calculator, Filter, ChevronRight } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import * as XLSX from 'xlsx';
 import { useApp } from '@/context/AppContext';
@@ -410,7 +410,7 @@ export function LiquidacionTab() {
                             className="flex items-center gap-1 font-medium text-slate-900 hover:text-slate-600"
                             aria-expanded={expandida}
                           >
-                            {expandida ? <ChevronDown className="h-4 w-4 text-slate-400 shrink-0" /> : <ChevronRight className="h-4 w-4 text-slate-400 shrink-0" />}
+                            <ChevronRight className={`h-4 w-4 text-slate-400 shrink-0 transition-transform duration-200 ${expandida ? 'rotate-90' : ''}`} />
                             {cab.numeroOrden}
                           </button>
                         </td>
@@ -425,7 +425,7 @@ export function LiquidacionTab() {
                     ];
                     if (expandida) {
                       grupo.forEach(item => filas.push(
-                        <tr key={item.id} className={`transition-colors ${seleccionado ? 'hover:bg-slate-50/50' : 'bg-slate-50/40 text-slate-400'}`}>
+                        <tr key={item.id} className={`animate-in fade-in slide-in-from-top-1 duration-200 transition-colors ${seleccionado ? 'hover:bg-slate-50/50' : 'bg-slate-50/40 text-slate-400'}`}>
                           <td className="px-4 py-2" />
                           <td className="px-4 py-2" />
                           <td className="px-4 py-2" />
