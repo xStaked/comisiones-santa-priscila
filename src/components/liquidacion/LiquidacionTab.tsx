@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { FileText, FileSpreadsheet, Save, Calculator, Filter } from 'lucide-react';
+import { FileText, FileSpreadsheet, Save, Calculator, Filter, ChevronRight, ChevronDown } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import * as XLSX from 'xlsx';
 import { useApp } from '@/context/AppContext';
@@ -30,8 +30,15 @@ export function LiquidacionTab() {
   // La selección es por ORDEN (no por ítem): destildar saca la orden completa con todos sus productos.
   // Por defecto todo está seleccionado; el usuario destilda lo que NO quiere liquidar.
   const [excludedIds, setExcludedIds] = useState<Set<string>>(new Set());
+  // Acordeones: default vacío = todas las órdenes cerradas.
+  const [expandedOrdenIds, setExpandedOrdenIds] = useState<Set<string>>(new Set());
   const ordenKey = (item: { ordenId?: string | null; fecha: string; numeroOrden: string; clienteId?: string | null }) =>
     item.ordenId || `${item.fecha}-${item.numeroOrden}-${item.clienteId || ''}`;
+  const toggleCollapse = (key: string) => setExpandedOrdenIds(prev => {
+    const next = new Set(prev);
+    if (next.has(key)) next.delete(key); else next.add(key);
+    return next;
+  });
 
   const comisionistaMap = useMemo(() =>
     new Map(comisionistas.map(c => [c.id, c])),
@@ -379,52 +386,82 @@ export function LiquidacionTab() {
                 ) : (
                   gruposPorOrden.flatMap(([key, grupo]) => {
                     const seleccionado = !excludedIds.has(key);
-                    return grupo.map((item, idx) => (
-                    <tr key={item.id} className={`transition-colors ${seleccionado ? 'hover:bg-slate-50/50' : 'bg-slate-50/60 text-slate-400'} ${idx === 0 ? 'border-t-2 border-slate-200' : ''}`}>
-                      {idx === 0 && (
-                        <td rowSpan={grupo.length} className="px-4 py-3 align-top">
+                    const expandida = expandedOrdenIds.has(key);
+                    const cab = grupo[0];
+                    const cantOrden = grupo.reduce((s, i) => s + i.cantidad, 0);
+                    const totOrden = grupo.reduce((s, i) => s + i.total, 0);
+                    const comOrden = grupo.reduce((s, i) => s + i.comisionTotal, 0);
+                    const filas = [
+                      <tr key={key} className={`border-t-2 border-slate-200 transition-colors ${seleccionado ? 'hover:bg-slate-50/50' : 'bg-slate-50/60 text-slate-400'}`}>
+                        <td className="px-4 py-3">
                           <input
                             type="checkbox"
                             className="h-4 w-4 cursor-pointer accent-emerald-600 align-middle"
                             checked={seleccionado}
                             onChange={() => toggleOrden(key)}
-                            aria-label={`Seleccionar orden ${item.numeroOrden}`}
+                            aria-label={`Seleccionar orden ${cab.numeroOrden}`}
                           />
                         </td>
-                      )}
-                      <td className="px-4 py-3 text-slate-500">{item.fecha}</td>
-                      <td className="px-4 py-3 text-slate-900 font-medium">{item.numeroOrden}</td>
-                      <td className="px-4 py-3 text-slate-500">{item.cliente?.nombre || '-'}</td>
-                      <td className="px-4 py-3 text-slate-500">{item.fincaRel?.nombre || item.finca}</td>
-                      <td className="px-4 py-3 text-slate-700">{item.productoRel?.nombre || item.producto}</td>
-                      <td className="px-4 py-3 text-right text-slate-700">
-                        {item.cantidad.toLocaleString('es-ES')} <span className="text-xs text-slate-400">{item.unidad}</span>
-                      </td>
-                      <td className="px-4 py-3 text-right text-slate-500">${item.total.toFixed(2)}</td>
-                      <td className="px-4 py-3">
-                        {item.comisionesAsignadas.length > 0 ? (
-                          <div className="space-y-1">
-                            {item.comisionesAsignadas.map(com => (
-                              <Badge key={com.id} variant="outline" className="flex w-fit gap-1 text-xs bg-white text-slate-700 border-slate-200">
-                                <span>{com.nombre}</span>
-                                <span className="text-slate-400">·</span>
-                                <span>{com.tarifasLabel}</span>
-                                <span className="text-slate-400">·</span>
-                                <span className={com.comision > 0 ? 'text-emerald-700' : 'text-amber-700'}>
-                                  ${com.comision.toFixed(2)}
-                                </span>
-                              </Badge>
-                            ))}
-                          </div>
-                        ) : (
-                          <span className="text-xs text-slate-400">-</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-right font-semibold text-slate-900">
-                        ${item.comisionTotal.toFixed(2)}
-                      </td>
-                    </tr>
-                    ));
+                        <td className="px-4 py-3 text-slate-500">{cab.fecha}</td>
+                        <td className="px-4 py-3">
+                          <button
+                            type="button"
+                            onClick={() => toggleCollapse(key)}
+                            className="flex items-center gap-1 font-medium text-slate-900 hover:text-slate-600"
+                            aria-expanded={expandida}
+                          >
+                            {expandida ? <ChevronDown className="h-4 w-4 text-slate-400 shrink-0" /> : <ChevronRight className="h-4 w-4 text-slate-400 shrink-0" />}
+                            {cab.numeroOrden}
+                          </button>
+                        </td>
+                        <td className="px-4 py-3 text-slate-500">{cab.cliente?.nombre || '-'}</td>
+                        <td className="px-4 py-3 text-slate-400">—</td>
+                        <td className="px-4 py-3 text-slate-500">{grupo.length} producto{grupo.length === 1 ? '' : 's'}</td>
+                        <td className="px-4 py-3 text-right text-slate-700">{cantOrden.toLocaleString('es-ES')}</td>
+                        <td className="px-4 py-3 text-right text-slate-500">${totOrden.toFixed(2)}</td>
+                        <td className="px-4 py-3" />
+                        <td className="px-4 py-3 text-right font-semibold text-slate-900">${comOrden.toFixed(2)}</td>
+                      </tr>
+                    ];
+                    if (expandida) {
+                      grupo.forEach(item => filas.push(
+                        <tr key={item.id} className={`transition-colors ${seleccionado ? 'hover:bg-slate-50/50' : 'bg-slate-50/40 text-slate-400'}`}>
+                          <td className="px-4 py-2" />
+                          <td className="px-4 py-2" />
+                          <td className="px-4 py-2" />
+                          <td className="px-4 py-2" />
+                          <td className="px-4 py-2 text-slate-500">{item.fincaRel?.nombre || item.finca}</td>
+                          <td className="px-4 py-2 text-slate-700">{item.productoRel?.nombre || item.producto}</td>
+                          <td className="px-4 py-2 text-right text-slate-700">
+                            {item.cantidad.toLocaleString('es-ES')} <span className="text-xs text-slate-400">{item.unidad}</span>
+                          </td>
+                          <td className="px-4 py-2 text-right text-slate-500">${item.total.toFixed(2)}</td>
+                          <td className="px-4 py-2">
+                            {item.comisionesAsignadas.length > 0 ? (
+                              <div className="space-y-1">
+                                {item.comisionesAsignadas.map(com => (
+                                  <Badge key={com.id} variant="outline" className="flex w-fit gap-1 text-xs bg-white text-slate-700 border-slate-200">
+                                    <span>{com.nombre}</span>
+                                    <span className="text-slate-400">·</span>
+                                    <span>{com.tarifasLabel}</span>
+                                    <span className="text-slate-400">·</span>
+                                    <span className={com.comision > 0 ? 'text-emerald-700' : 'text-amber-700'}>
+                                      ${com.comision.toFixed(2)}
+                                    </span>
+                                  </Badge>
+                                ))}
+                              </div>
+                            ) : (
+                              <span className="text-xs text-slate-400">-</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-2 text-right font-semibold text-slate-900">
+                            ${item.comisionTotal.toFixed(2)}
+                          </td>
+                        </tr>
+                      ));
+                    }
+                    return filas;
                   })
                 )}
               </tbody>
