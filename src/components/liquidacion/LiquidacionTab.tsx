@@ -103,6 +103,17 @@ export function LiquidacionTab() {
     [itemsConComision, excludedIds]
   );
 
+  // Agrupa los productos por orden (contiguos) para mostrar un solo checkbox por orden.
+  const gruposPorOrden = useMemo(() => {
+    const map = new Map<string, typeof itemsConComision>();
+    itemsConComision.forEach(item => {
+      const k = ordenKey(item);
+      const arr = map.get(k);
+      if (arr) arr.push(item); else map.set(k, [item]);
+    });
+    return Array.from(map.entries());
+  }, [itemsConComision]);
+
   const resumenPorComisionista = useMemo(() => {
     const map = new Map<string, { id: string; nombre: string; tarifasLabel: string; items: number; comision: number }>();
     selectedItemsConComision.forEach(item => {
@@ -366,19 +377,21 @@ export function LiquidacionTab() {
                     </td>
                   </tr>
                 ) : (
-                  itemsConComision.map(item => {
-                    const seleccionado = !excludedIds.has(ordenKey(item));
-                    return (
-                    <tr key={item.id} className={`transition-colors ${seleccionado ? 'hover:bg-slate-50/50' : 'bg-slate-50/60 text-slate-400'}`}>
-                      <td className="px-4 py-3">
-                        <input
-                          type="checkbox"
-                          className="h-4 w-4 cursor-pointer accent-emerald-600 align-middle"
-                          checked={seleccionado}
-                          onChange={() => toggleOrden(ordenKey(item))}
-                          aria-label={`Seleccionar orden ${item.numeroOrden}`}
-                        />
-                      </td>
+                  gruposPorOrden.flatMap(([key, grupo]) => {
+                    const seleccionado = !excludedIds.has(key);
+                    return grupo.map((item, idx) => (
+                    <tr key={item.id} className={`transition-colors ${seleccionado ? 'hover:bg-slate-50/50' : 'bg-slate-50/60 text-slate-400'} ${idx === 0 ? 'border-t-2 border-slate-200' : ''}`}>
+                      {idx === 0 && (
+                        <td rowSpan={grupo.length} className="px-4 py-3 align-top">
+                          <input
+                            type="checkbox"
+                            className="h-4 w-4 cursor-pointer accent-emerald-600 align-middle"
+                            checked={seleccionado}
+                            onChange={() => toggleOrden(key)}
+                            aria-label={`Seleccionar orden ${item.numeroOrden}`}
+                          />
+                        </td>
+                      )}
                       <td className="px-4 py-3 text-slate-500">{item.fecha}</td>
                       <td className="px-4 py-3 text-slate-900 font-medium">{item.numeroOrden}</td>
                       <td className="px-4 py-3 text-slate-500">{item.cliente?.nombre || '-'}</td>
@@ -411,7 +424,7 @@ export function LiquidacionTab() {
                         ${item.comisionTotal.toFixed(2)}
                       </td>
                     </tr>
-                    );
+                    ));
                   })
                 )}
               </tbody>
