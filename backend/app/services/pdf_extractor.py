@@ -364,48 +364,53 @@ def extraer_orden_de_pdf(
 
     for fila in filas_tabla:
         celdas = fila["cells"]
+        if not celdas:
+            continue
 
-        # 6. Detectar fila de ítem por cantidad, precio y total en rangos X esperados
-        cantidad_celda = next(
+        # 6. Detectar fila de ítem por sus montos decimales.
+        # El layout de columnas varía entre PDFs (distintos márgenes desplazan
+        # las X), por lo que en vez de rangos X fijos usamos el ORDEN de las
+        # celdas decimales de la fila: primera = cantidad, segunda = precio
+        # unitario, última = total. Así es robusto ante el corrimiento.
+        decimales = sorted(
             (
                 c
                 for c in celdas
-                if 270 <= c["x"] <= 300
-                and re.match(r"^[\d,]+\.\d+$", c["text"].replace(",", ""))
+                if re.match(r"^[\d,]+\.\d+$", c["text"].replace(",", ""))
             ),
-            None,
+            key=lambda c: c["x"],
         )
-        precio_celda = next(
-            (
-                c
-                for c in celdas
-                if 365 <= c["x"] <= 395
-                and re.match(r"^[\d,]+\.\d+$", c["text"].replace(",", ""))
-            ),
-            None,
-        )
-        total_celda = next(
-            (
-                c
-                for c in celdas
-                if 485 <= c["x"] <= 510
-                and re.match(r"^[\d,]+\.\d+$", c["text"].replace(",", ""))
-            ),
-            None,
-        )
-
-        es_fila_item = cantidad_celda is not None and precio_celda is not None and total_celda is not None
+        es_fila_item = len(decimales) >= 3
 
         if es_fila_item:
-            # 7. producto, descripcion, codigo
-            celdas_producto = [c for c in celdas if 110 <= c["x"] < 270]
+            cantidad_celda = decimales[0]
+            precio_celda = decimales[1]
+            total_celda = decimales[-1]
+
+            # 7. producto = texto a la izquierda de la cantidad (sin los enteros
+            # de pedido/semana). descripcion (medida) = texto entre cantidad y precio.
+            celdas_producto = [
+                c
+                for c in celdas
+                if c["x"] < cantidad_celda["x"] and not re.match(r"^\d+$", c["text"])
+            ]
             producto = " ".join(c["text"] for c in celdas_producto).strip()
 
-            celdas_desc = [c for c in celdas if 300 <= c["x"] < 365]
+            celdas_desc = [
+                c
+                for c in celdas
+                if cantidad_celda["x"] < c["x"] < precio_celda["x"]
+                and not re.match(r"^[\d,]+\.\d+$", c["text"].replace(",", ""))
+            ]
             descripcion = " ".join(c["text"] for c in celdas_desc).strip()
 
+            # codigo: primer entero puro a la izquierda de la cantidad (nº de pedido).
             codigo_celda = next(
-                (c for c in celdas if 70 <= c["x"] <= 100 and re.match(r"^\d+$", c["text"])),
+                (
+                    c
+                    for c in celdas
+                    if c["x"] < cantidad_celda["x"] and re.match(r"^\d+$", c["text"])
+                ),
                 None,
             )
 
@@ -423,15 +428,12 @@ def extraer_orden_de_pdf(
             # 8. Detectar fila de finca
             # Como ya sabemos que NO es item, si no tiene decimales y empieza
             # en la zona izquierda, es probablemente una finca.
-            tiene_decimal = any(
-                re.match(r"^[\d,]+\.\d+$", c["text"].replace(",", ""))
-                for c in celdas
-            )
+            tiene_decimal = bool(decimales)
             primera_celda = celdas[0] if celdas else None
             parece_finca = (
                 not tiene_decimal
                 and primera_celda is not None
-                and 70 <= primera_celda["x"] <= 130
+                and primera_celda["x"] <= 130
                 and not re.match(r"^\d+$", primera_celda["text"])
             )
 
