@@ -27,6 +27,8 @@ export function LiquidacionTab() {
   const [filterFactura, setFilterFactura] = useState('');
   const [nombreLiquidacion, setNombreLiquidacion] = useState('');
   const [previewOpen, setPreviewOpen] = useState(false);
+  // Por defecto todo lo filtrado está seleccionado; el usuario destilda lo que NO quiere liquidar.
+  const [excludedIds, setExcludedIds] = useState<Set<string>>(new Set());
 
   const comisionistaMap = useMemo(() =>
     new Map(comisionistas.map(c => [c.id, c])),
@@ -50,9 +52,28 @@ export function LiquidacionTab() {
   }, [ordenItemsPagados, filterComisionista, filterFactura]);
 
   const cantidadOrdenes = useMemo(() => {
-    const ids = new Set(filteredItems.map(item => item.ordenId || `${item.fecha}-${item.numeroOrden}-${item.clienteId || ''}`));
+    const ids = new Set(
+      filteredItems
+        .filter(i => !excludedIds.has(i.id))
+        .map(item => item.ordenId || `${item.fecha}-${item.numeroOrden}-${item.clienteId || ''}`)
+    );
     return ids.size;
-  }, [filteredItems]);
+  }, [filteredItems, excludedIds]);
+
+  const toggleItem = (id: string) => setExcludedIds(prev => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
+
+  const todosSeleccionados = filteredItems.length > 0 && filteredItems.every(i => !excludedIds.has(i.id));
+
+  const toggleTodos = () => setExcludedIds(prev => {
+    const next = new Set(prev);
+    if (todosSeleccionados) filteredItems.forEach(i => next.add(i.id));
+    else filteredItems.forEach(i => next.delete(i.id));
+    return next;
+  });
 
 
 
@@ -71,9 +92,15 @@ export function LiquidacionTab() {
     });
   }, [filteredItems, comisionistaMap, tarifasClienteProducto]);
 
+  // Ítems marcados por el usuario (base para totales, resumen, exportación y guardado).
+  const selectedItemsConComision = useMemo(
+    () => itemsConComision.filter(i => !excludedIds.has(i.id)),
+    [itemsConComision, excludedIds]
+  );
+
   const resumenPorComisionista = useMemo(() => {
     const map = new Map<string, { id: string; nombre: string; tarifasLabel: string; items: number; comision: number }>();
-    itemsConComision.forEach(item => {
+    selectedItemsConComision.forEach(item => {
       item.comisionesAsignadas.forEach(com => {
         const existente = map.get(com.id);
         if (existente) {
@@ -91,29 +118,34 @@ export function LiquidacionTab() {
       });
     });
     return Array.from(map.values()).sort((a, b) => b.comision - a.comision);
-  }, [itemsConComision]);
+  }, [selectedItemsConComision]);
 
-  const totalComision = itemsConComision.reduce((s, i) => s + i.comisionTotal, 0);
-  const totalCantidad = itemsConComision.reduce((s, i) => s + i.cantidad, 0);
-  const totalOrden = itemsConComision.reduce((s, i) => s + i.total, 0);
+  const totalComision = selectedItemsConComision.reduce((s, i) => s + i.comisionTotal, 0);
+  const totalCantidad = selectedItemsConComision.reduce((s, i) => s + i.cantidad, 0);
+  const totalOrden = selectedItemsConComision.reduce((s, i) => s + i.total, 0);
+
+  const selectedFiltered = useMemo(
+    () => filteredItems.filter(i => !excludedIds.has(i.id)),
+    [filteredItems, excludedIds]
+  );
 
   const handleExportPDF = () => {
-    if (itemsConComision.length === 0) {
+    if (selectedFiltered.length === 0) {
       toast.error('No hay datos para exportar');
       return;
     }
     const com = filterComisionista ? comisionistaMap.get(filterComisionista) : undefined;
-    exportarPDF(filteredItems, comisionistas, 'Liquidacion', com?.nombre, tarifasClienteProducto);
+    exportarPDF(selectedFiltered, comisionistas, 'Liquidacion', com?.nombre, tarifasClienteProducto);
     toast.success('PDF generado');
   };
 
   const handleExportExcel = () => {
-    if (itemsConComision.length === 0) {
+    if (selectedFiltered.length === 0) {
       toast.error('No hay datos para exportar');
       return;
     }
     const com = filterComisionista ? comisionistaMap.get(filterComisionista) : undefined;
-    exportarExcel(filteredItems, comisionistas, 'Liquidacion', com?.nombre, tarifasClienteProducto);
+    exportarExcel(selectedFiltered, comisionistas, 'Liquidacion', com?.nombre, tarifasClienteProducto);
     toast.success('Excel generado');
   };
 
@@ -155,16 +187,13 @@ export function LiquidacionTab() {
     // Refrescar datos para reducir el riesgo de enviar ítems stale; el backend revalida el estado.
     await queryClient.refetchQueries({ queryKey: ['ordenes'] });
     const ordenesActualizadas = queryClient.getQueryData<typeof ordenItems>(['ordenes']) ?? ordenItems;
+    const seleccionados = new Set(selectedFiltered.map(i => i.id));
     const ids = ordenesActualizadas
       .filter(item => item.estado === 'pagada')
-      .filter(i => {
-        const matchComisionista = !filterComisionista || i.comisionistas.some(a => a.comisionistaId === filterComisionista);
-        const matchFactura = !filterFactura || i.numeroOrden.toLowerCase().includes(filterFactura.toLowerCase());
-        return matchComisionista && matchFactura;
-      })
+      .filter(item => seleccionados.has(item.id))
       .map((i) => i.id);
     if (ids.length === 0) {
-      toast.error('No hay órdenes pagadas para guardar');
+      toast.error('No hay órdenes pagadas seleccionadas para guardar');
       return;
     }
     saveLiquidacion(nombreLiquidacion, ids);
@@ -173,8 +202,8 @@ export function LiquidacionTab() {
   };
 
   const handlePreviewSave = () => {
-    if (filteredItems.length === 0) {
-      toast.error('No hay órdenes pagadas para guardar');
+    if (selectedFiltered.length === 0) {
+      toast.error('Selecciona al menos una orden pagada para guardar');
       return;
     }
     setNombreLiquidacion(`Liquidación ${new Date().toLocaleDateString('es-ES')}`);
@@ -297,13 +326,22 @@ export function LiquidacionTab() {
 
       <Card className="card-elevated rounded-2xl overflow-hidden">
         <CardHeader className="pb-3">
-            <CardTitle className="text-base text-slate-900">Vista de Liquidación: {cantidadOrdenes} orden{cantidadOrdenes === 1 ? '' : 'es'} pagada{cantidadOrdenes === 1 ? '' : 's'} / {itemsConComision.length} producto{itemsConComision.length === 1 ? '' : 's'}</CardTitle>
+            <CardTitle className="text-base text-slate-900">Vista de Liquidación: {cantidadOrdenes} orden{cantidadOrdenes === 1 ? '' : 'es'} pagada{cantidadOrdenes === 1 ? '' : 's'} / {selectedItemsConComision.length} de {itemsConComision.length} producto{itemsConComision.length === 1 ? '' : 's'} seleccionado{selectedItemsConComision.length === 1 ? '' : 's'}</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-slate-900 text-white">
                 <tr>
+                  <th className="px-4 py-3 w-10">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 cursor-pointer accent-emerald-600 align-middle"
+                      checked={todosSeleccionados}
+                      onChange={toggleTodos}
+                      aria-label="Seleccionar todo"
+                    />
+                  </th>
                   <th className="text-left px-4 py-3 font-medium">Fecha</th>
                   <th className="text-left px-4 py-3 font-medium">Factura</th>
                   <th className="text-left px-4 py-3 font-medium">Cliente</th>
@@ -318,13 +356,24 @@ export function LiquidacionTab() {
               <tbody className="divide-y divide-slate-100">
                 {itemsConComision.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="px-4 py-8 text-center text-slate-500">
+                    <td colSpan={10} className="px-4 py-8 text-center text-slate-500">
                       No hay registros con el filtro seleccionado
                     </td>
                   </tr>
                 ) : (
-                  itemsConComision.map(item => (
-                    <tr key={item.id} className="hover:bg-slate-50/50 transition-colors">
+                  itemsConComision.map(item => {
+                    const seleccionado = !excludedIds.has(item.id);
+                    return (
+                    <tr key={item.id} className={`transition-colors ${seleccionado ? 'hover:bg-slate-50/50' : 'bg-slate-50/60 text-slate-400'}`}>
+                      <td className="px-4 py-3">
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 cursor-pointer accent-emerald-600 align-middle"
+                          checked={seleccionado}
+                          onChange={() => toggleItem(item.id)}
+                          aria-label={`Seleccionar orden ${item.numeroOrden}`}
+                        />
+                      </td>
                       <td className="px-4 py-3 text-slate-500">{item.fecha}</td>
                       <td className="px-4 py-3 text-slate-900 font-medium">{item.numeroOrden}</td>
                       <td className="px-4 py-3 text-slate-500">{item.cliente?.nombre || '-'}</td>
@@ -357,12 +406,13 @@ export function LiquidacionTab() {
                         ${item.comisionTotal.toFixed(2)}
                       </td>
                     </tr>
-                  ))
+                    );
+                  })
                 )}
               </tbody>
               <tfoot className="bg-slate-50 border-t-2 border-slate-200">
                 <tr>
-                  <td colSpan={5} className="px-4 py-3 font-medium text-slate-700">Totales</td>
+                  <td colSpan={6} className="px-4 py-3 font-medium text-slate-700">Totales</td>
                   <td className="px-4 py-3 text-right font-bold text-slate-900 tabular-nums">
                     {totalCantidad.toLocaleString('es-ES')}
                   </td>
