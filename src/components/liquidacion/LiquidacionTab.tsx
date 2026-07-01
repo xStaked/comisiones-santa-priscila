@@ -27,8 +27,11 @@ export function LiquidacionTab() {
   const [filterFactura, setFilterFactura] = useState('');
   const [nombreLiquidacion, setNombreLiquidacion] = useState('');
   const [previewOpen, setPreviewOpen] = useState(false);
-  // Por defecto todo lo filtrado está seleccionado; el usuario destilda lo que NO quiere liquidar.
+  // La selección es por ORDEN (no por ítem): destildar saca la orden completa con todos sus productos.
+  // Por defecto todo está seleccionado; el usuario destilda lo que NO quiere liquidar.
   const [excludedIds, setExcludedIds] = useState<Set<string>>(new Set());
+  const ordenKey = (item: { ordenId?: string | null; fecha: string; numeroOrden: string; clienteId?: string | null }) =>
+    item.ordenId || `${item.fecha}-${item.numeroOrden}-${item.clienteId || ''}`;
 
   const comisionistaMap = useMemo(() =>
     new Map(comisionistas.map(c => [c.id, c])),
@@ -53,25 +56,27 @@ export function LiquidacionTab() {
 
   const cantidadOrdenes = useMemo(() => {
     const ids = new Set(
-      filteredItems
-        .filter(i => !excludedIds.has(i.id))
-        .map(item => item.ordenId || `${item.fecha}-${item.numeroOrden}-${item.clienteId || ''}`)
+      filteredItems.filter(i => !excludedIds.has(ordenKey(i))).map(ordenKey)
     );
     return ids.size;
   }, [filteredItems, excludedIds]);
 
-  const toggleItem = (id: string) => setExcludedIds(prev => {
+  const toggleOrden = (key: string) => setExcludedIds(prev => {
     const next = new Set(prev);
-    if (next.has(id)) next.delete(id); else next.add(id);
+    if (next.has(key)) next.delete(key); else next.add(key);
     return next;
   });
 
-  const todosSeleccionados = filteredItems.length > 0 && filteredItems.every(i => !excludedIds.has(i.id));
+  const ordenesFiltradas = useMemo(
+    () => Array.from(new Set(filteredItems.map(ordenKey))),
+    [filteredItems]
+  );
+  const todosSeleccionados = ordenesFiltradas.length > 0 && ordenesFiltradas.every(k => !excludedIds.has(k));
 
   const toggleTodos = () => setExcludedIds(prev => {
     const next = new Set(prev);
-    if (todosSeleccionados) filteredItems.forEach(i => next.add(i.id));
-    else filteredItems.forEach(i => next.delete(i.id));
+    if (todosSeleccionados) ordenesFiltradas.forEach(k => next.add(k));
+    else ordenesFiltradas.forEach(k => next.delete(k));
     return next;
   });
 
@@ -94,7 +99,7 @@ export function LiquidacionTab() {
 
   // Ítems marcados por el usuario (base para totales, resumen, exportación y guardado).
   const selectedItemsConComision = useMemo(
-    () => itemsConComision.filter(i => !excludedIds.has(i.id)),
+    () => itemsConComision.filter(i => !excludedIds.has(ordenKey(i))),
     [itemsConComision, excludedIds]
   );
 
@@ -125,7 +130,7 @@ export function LiquidacionTab() {
   const totalOrden = selectedItemsConComision.reduce((s, i) => s + i.total, 0);
 
   const selectedFiltered = useMemo(
-    () => filteredItems.filter(i => !excludedIds.has(i.id)),
+    () => filteredItems.filter(i => !excludedIds.has(ordenKey(i))),
     [filteredItems, excludedIds]
   );
 
@@ -362,7 +367,7 @@ export function LiquidacionTab() {
                   </tr>
                 ) : (
                   itemsConComision.map(item => {
-                    const seleccionado = !excludedIds.has(item.id);
+                    const seleccionado = !excludedIds.has(ordenKey(item));
                     return (
                     <tr key={item.id} className={`transition-colors ${seleccionado ? 'hover:bg-slate-50/50' : 'bg-slate-50/60 text-slate-400'}`}>
                       <td className="px-4 py-3">
@@ -370,7 +375,7 @@ export function LiquidacionTab() {
                           type="checkbox"
                           className="h-4 w-4 cursor-pointer accent-emerald-600 align-middle"
                           checked={seleccionado}
-                          onChange={() => toggleItem(item.id)}
+                          onChange={() => toggleOrden(ordenKey(item))}
                           aria-label={`Seleccionar orden ${item.numeroOrden}`}
                         />
                       </td>
