@@ -221,6 +221,10 @@ function EditFincaSelect({ clienteId, value, onChange }: { clienteId: string; va
     queryFn: () => fetchFincas(clienteId),
     enabled: !!clienteId,
   });
+  const nombreFincaSeleccionada = value
+    ? (fincas || []).find((x: { id: string; nombre: string }) => x.id === value)?.nombre || 'Finca no encontrada'
+    : 'Seleccionar finca';
+
   return (
     <Select value={value} onValueChange={(v) => {
       const id = v ?? '';
@@ -228,7 +232,9 @@ function EditFincaSelect({ clienteId, value, onChange }: { clienteId: string; va
       onChange(id, f?.nombre || '');
     }}>
       <SelectTrigger className="w-full rounded-xl border-slate-200 bg-white h-10 text-sm text-slate-900">
-        <SelectValue placeholder="Seleccionar finca" />
+        <SelectValue placeholder="Seleccionar finca">
+          {nombreFincaSeleccionada}
+        </SelectValue>
       </SelectTrigger>
       <SelectContent>
         {(fincas || []).map((f: { id: string; nombre: string }) => (
@@ -348,6 +354,14 @@ export function OrdenesTab() {
   }, [ordenItems, search, comisionistas, filterFechaDesde, filterFechaHasta, filterEstado, filterComisionistaId]);
 
   const ordenesAgrupadas = agruparOrdenes(filteredOrdenItems, sortField, sortDir);
+  const etiquetaFiltroEstado = filterEstado === 'todos'
+    ? 'Todos los estados'
+    : ESTADOS_ORDEN.find((estado) => estado.value === filterEstado)?.label || filterEstado;
+  const etiquetaFiltroComisionista = filterComisionistaId === 'todos'
+    ? 'Todos los comisionistas'
+    : comisionistas.find((c) => c.id === filterComisionistaId)?.nombre || 'Comisionista no encontrado';
+  const getEtiquetaEstado = (estado: EstadoOrden) =>
+    ESTADOS_ORDEN.find((item) => item.value === estado)?.label || estado;
 
   const totalPages = Math.max(1, Math.ceil(ordenesAgrupadas.length / ITEMS_PER_PAGE));
   const safePage = Math.min(currentPage, totalPages);
@@ -947,7 +961,9 @@ export function OrdenesTab() {
                 <Label className="text-xs text-slate-500">Estado</Label>
                 <Select value={filterEstado} onValueChange={v => { setFilterEstado(v ?? 'todos'); setCurrentPage(1); }}>
                   <SelectTrigger className="bg-white border-slate-200 rounded-xl h-9 text-sm">
-                    <SelectValue />
+                    <SelectValue>
+                      {etiquetaFiltroEstado}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="todos">Todos los estados</SelectItem>
@@ -961,7 +977,9 @@ export function OrdenesTab() {
                 <Label className="text-xs text-slate-500">Comisionista</Label>
                 <Select value={filterComisionistaId} onValueChange={v => { setFilterComisionistaId(v ?? 'todos'); setCurrentPage(1); }}>
                   <SelectTrigger className="bg-white border-slate-200 rounded-xl h-9 text-sm">
-                    <SelectValue />
+                    <SelectValue>
+                      {etiquetaFiltroComisionista}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="todos">Todos los comisionistas</SelectItem>
@@ -1199,7 +1217,9 @@ export function OrdenesTab() {
                               disabled={orden.estado === 'liquidada' || orden.items.some(item => item.estado === 'liquidada')}
                             >
                               <SelectTrigger className="h-7 w-40 rounded-lg border-slate-200 bg-white text-xs">
-                                <SelectValue />
+                                <SelectValue>
+                                  {getEtiquetaEstado(orden.estado)}
+                                </SelectValue>
                               </SelectTrigger>
                               <SelectContent>
                                 {ESTADOS_ORDEN.filter((estado) => estado.value !== 'liquidada').map((estado) => (

@@ -186,7 +186,9 @@ export function ProductosTab() {
                   }
                 >
                   <SelectTrigger className="w-full rounded-xl border-slate-200 bg-white h-10 text-sm text-slate-900">
-                    <SelectValue placeholder="Unidad" />
+                    <SelectValue placeholder="Unidad">
+                      {unidadLabels[form.unidadComision] || 'Unidad'}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="kg">Kilogramo (kg)</SelectItem>

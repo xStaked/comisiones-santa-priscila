@@ -32,6 +32,9 @@ export function LiquidacionTab() {
     new Map(comisionistas.map(c => [c.id, c])),
     [comisionistas]
   );
+  const nombreComisionistaFiltro = filterComisionista
+    ? comisionistaMap.get(filterComisionista)?.nombre || 'Comisionista no encontrado'
+    : 'Todos los comisionistas';
 
   const ordenItemsPagados = useMemo(
     () => ordenItems.filter(item => item.estado === 'pagada'),
@@ -208,7 +211,9 @@ export function LiquidacionTab() {
               <Label className="text-xs text-slate-500">Filtrar por comisionista</Label>
               <Select value={filterComisionista} onValueChange={(value) => setFilterComisionista(value ?? '')}>
                 <SelectTrigger className="mt-1 h-10 rounded-xl border-slate-200 bg-white text-sm text-slate-900 w-64">
-                  <SelectValue placeholder="Todos los comisionistas" />
+                  <SelectValue placeholder="Todos los comisionistas">
+                    {nombreComisionistaFiltro}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="">Todos los comisionistas</SelectItem>

@@ -255,7 +255,9 @@ export function ClientesTab() {
                     onValueChange={(value) => setForm({ ...form, tipo: value as 'grupo' | 'individual' })}
                   >
                     <SelectTrigger className="w-full rounded-xl border-slate-200 bg-white h-10 text-sm text-slate-900">
-                      <SelectValue placeholder="Tipo" />
+                      <SelectValue placeholder="Tipo">
+                        {form.tipo === 'individual' ? 'Individual' : 'Grupo'}
+                      </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="individual">Individual</SelectItem>

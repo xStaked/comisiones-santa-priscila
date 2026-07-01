@@ -20,6 +20,12 @@ import {
 } from '@/components/ui/select';
 import { toast } from 'sonner';
 
+const getEtiquetaTipoTarifa = (tipo: 'porcentaje' | 'fijo_kg' | 'fijo_unidad') => {
+  if (tipo === 'porcentaje') return 'Porcentaje (%)';
+  if (tipo === 'fijo_kg') return 'USD/kg';
+  return 'USD/unidad';
+};
+
 export function ComisionistasTab() {
   const { comisionistas, addComisionista, updateComisionista, deleteComisionista, ordenItems, liquidaciones, tarifasClienteProducto } = useApp();
   const [search, setSearch] = useState('');
@@ -165,7 +171,9 @@ export function ComisionistasTab() {
                         onValueChange={(value) => updateTarifa(idx, 'tipo', value as 'porcentaje' | 'fijo_kg' | 'fijo_unidad')}
                       >
                         <SelectTrigger className="w-40 rounded-xl border-slate-200 bg-white h-10 text-sm text-slate-900">
-                          <SelectValue placeholder="Tipo" />
+                          <SelectValue placeholder="Tipo">
+                            {getEtiquetaTipoTarifa(tarifa.tipo)}
+                          </SelectValue>
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="porcentaje">Porcentaje (%)</SelectItem>
