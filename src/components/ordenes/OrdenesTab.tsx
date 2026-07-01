@@ -93,6 +93,11 @@ function agruparOrdenes(
   const extraerNumero = (s: string) => { const m = s.match(/\d+/); return m ? parseInt(m[0], 10) : NaN; };
 
   return Array.from(map.values()).sort((a, b) => {
+    // Las liquidadas siempre al fondo, sin importar el orden elegido
+    const aLiq = a.estado === 'liquidada' ? 1 : 0;
+    const bLiq = b.estado === 'liquidada' ? 1 : 0;
+    if (aLiq !== bLiq) return aLiq - bLiq;
+
     let cmp = 0;
     if (sortField === 'fecha') cmp = a.fecha.localeCompare(b.fecha);
     else if (sortField === 'total') cmp = a.total - b.total;
