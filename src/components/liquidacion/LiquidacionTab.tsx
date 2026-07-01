@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, type ReactNode } from 'react';
 import { FileText, FileSpreadsheet, Save, Calculator, Filter, ChevronRight } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import * as XLSX from 'xlsx';
@@ -20,6 +20,18 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { toast } from 'sonner';
+
+// Celda cuyo contenido se despliega/colapsa animando la altura (grid-rows 0fr→1fr).
+// Funciona en tablas donde transform no anima bien las filas.
+function CeldaColapsable({ children, abierta, className }: { children: ReactNode; abierta: boolean; className?: string }) {
+  return (
+    <td className="px-4 py-0">
+      <div className={`grid transition-[grid-template-rows] duration-200 ease-out ${abierta ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}>
+        <div className={`overflow-hidden py-2 ${className || ''}`}>{children}</div>
+      </div>
+    </td>
+  );
+}
 
 export function LiquidacionTab() {
   const { comisionistas, ordenItems, saveLiquidacion, tarifasClienteProducto } = useApp();
@@ -376,7 +388,7 @@ export function LiquidacionTab() {
                   <th className="text-right px-4 py-3 font-medium">Comisión Total</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody>
                 {itemsConComision.length === 0 ? (
                   <tr>
                     <td colSpan={10} className="px-4 py-8 text-center text-slate-500">
@@ -423,44 +435,42 @@ export function LiquidacionTab() {
                         <td className="px-4 py-3 text-right font-semibold text-slate-900">${comOrden.toFixed(2)}</td>
                       </tr>
                     ];
-                    if (expandida) {
-                      grupo.forEach(item => filas.push(
-                        <tr key={item.id} className={`animate-in fade-in slide-in-from-top-1 duration-200 transition-colors ${seleccionado ? 'hover:bg-slate-50/50' : 'bg-slate-50/40 text-slate-400'}`}>
-                          <td className="px-4 py-2" />
-                          <td className="px-4 py-2" />
-                          <td className="px-4 py-2" />
-                          <td className="px-4 py-2" />
-                          <td className="px-4 py-2 text-slate-500">{item.fincaRel?.nombre || item.finca}</td>
-                          <td className="px-4 py-2 text-slate-700">{item.productoRel?.nombre || item.producto}</td>
-                          <td className="px-4 py-2 text-right text-slate-700">
-                            {item.cantidad.toLocaleString('es-ES')} <span className="text-xs text-slate-400">{item.unidad}</span>
-                          </td>
-                          <td className="px-4 py-2 text-right text-slate-500">${item.total.toFixed(2)}</td>
-                          <td className="px-4 py-2">
-                            {item.comisionesAsignadas.length > 0 ? (
-                              <div className="space-y-1">
-                                {item.comisionesAsignadas.map(com => (
-                                  <Badge key={com.id} variant="outline" className="flex w-fit gap-1 text-xs bg-white text-slate-700 border-slate-200">
-                                    <span>{com.nombre}</span>
-                                    <span className="text-slate-400">·</span>
-                                    <span>{com.tarifasLabel}</span>
-                                    <span className="text-slate-400">·</span>
-                                    <span className={com.comision > 0 ? 'text-emerald-700' : 'text-amber-700'}>
-                                      ${com.comision.toFixed(2)}
-                                    </span>
-                                  </Badge>
-                                ))}
-                              </div>
-                            ) : (
-                              <span className="text-xs text-slate-400">-</span>
-                            )}
-                          </td>
-                          <td className="px-4 py-2 text-right font-semibold text-slate-900">
-                            ${item.comisionTotal.toFixed(2)}
-                          </td>
-                        </tr>
-                      ));
-                    }
+                    grupo.forEach(item => filas.push(
+                      <tr key={item.id} className={`transition-colors ${seleccionado ? 'hover:bg-slate-50/50' : 'bg-slate-50/40 text-slate-400'}`}>
+                        <td className="p-0" />
+                        <td className="p-0" />
+                        <td className="p-0" />
+                        <td className="p-0" />
+                        <CeldaColapsable abierta={expandida} className="text-slate-500">{item.fincaRel?.nombre || item.finca}</CeldaColapsable>
+                        <CeldaColapsable abierta={expandida} className="text-slate-700">{item.productoRel?.nombre || item.producto}</CeldaColapsable>
+                        <CeldaColapsable abierta={expandida} className="text-right text-slate-700">
+                          {item.cantidad.toLocaleString('es-ES')} <span className="text-xs text-slate-400">{item.unidad}</span>
+                        </CeldaColapsable>
+                        <CeldaColapsable abierta={expandida} className="text-right text-slate-500">${item.total.toFixed(2)}</CeldaColapsable>
+                        <CeldaColapsable abierta={expandida}>
+                          {item.comisionesAsignadas.length > 0 ? (
+                            <div className="space-y-1">
+                              {item.comisionesAsignadas.map(com => (
+                                <Badge key={com.id} variant="outline" className="flex w-fit gap-1 text-xs bg-white text-slate-700 border-slate-200">
+                                  <span>{com.nombre}</span>
+                                  <span className="text-slate-400">·</span>
+                                  <span>{com.tarifasLabel}</span>
+                                  <span className="text-slate-400">·</span>
+                                  <span className={com.comision > 0 ? 'text-emerald-700' : 'text-amber-700'}>
+                                    ${com.comision.toFixed(2)}
+                                  </span>
+                                </Badge>
+                              ))}
+                            </div>
+                          ) : (
+                            <span className="text-xs text-slate-400">-</span>
+                          )}
+                        </CeldaColapsable>
+                        <CeldaColapsable abierta={expandida} className="text-right font-semibold text-slate-900">
+                          ${item.comisionTotal.toFixed(2)}
+                        </CeldaColapsable>
+                      </tr>
+                    ));
                     return filas;
                   })
                 )}
