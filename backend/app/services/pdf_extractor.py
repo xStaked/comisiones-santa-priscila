@@ -433,7 +433,7 @@ def extraer_orden_de_pdf(
             parece_finca = (
                 not tiene_decimal
                 and primera_celda is not None
-                and primera_celda["x"] <= 130
+                and primera_celda["x"] <= 160
                 and not re.match(r"^\d+$", primera_celda["text"])
             )
 
@@ -457,8 +457,9 @@ def extraer_orden_de_pdf(
                     fincas.append({"y": fila["y"], "nombre": nombre})
 
     # 9. Asignar fincas a ítems
-    # Buscar la finca más cercana que esté ARRIBA del ítem (menor Y, hasta 25 unidades).
-    # Las fincas actúan como encabezados: solo afectan a ítems que aparecen debajo de ellas.
+    # Las fincas actúan como encabezados de sección: cada ítem hereda la finca
+    # más cercana que esté ARRIBA de él. Sin tope de distancia fijo para ser
+    # independiente de la escala del PDF (el interlineado varía con el tamaño).
     orden_items: list[dict[str, Any]] = []
     for item in items_crudos:
         finca = "-"
@@ -467,7 +468,7 @@ def extraer_orden_de_pdf(
         for f in fincas:
             # La finca debe estar arriba del ítem (f["y"] < item["y"])
             diff = item["y"] - f["y"]
-            if 0 < diff <= 35:
+            if diff > 0:
                 if (
                     finca_cercana is None
                     or diff < min_diff
@@ -492,6 +493,17 @@ def extraer_orden_de_pdf(
             "total": item["total"],
             "comisionistas": [],
         })
+
+    # Fallback: si el parser posicional no reconoció ningún ítem (plantilla o
+    # escala inesperada) y hay IA configurada, reintentar con IA.
+    if not orden_items and settings.AI_EXTRACTION_ENABLED:
+        return _extraer_con_ia(
+            contenido,
+            nombre_archivo=nombre_archivo,
+            db=db,
+            texto_override=texto_pdf,
+            cliente_id=cliente_id,
+        )
 
     return _normalizar_respuesta_posicional(db, {
         "fecha": date.fromisoformat(fecha),
