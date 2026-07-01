@@ -302,7 +302,8 @@ export function OrdenesTab() {
   const [editForm, setEditForm] = useState<Partial<OrdenItem>>({});
   const [editOpen, setEditOpen] = useState(false);
   const [search, setSearch] = useState('');
-  const [collapsedOrdenIds, setCollapsedOrdenIds] = useState<Set<string>>(new Set());
+  // Rastrea las expandidas: default vacío = todas cerradas (incluidas las nuevas)
+  const [expandedOrdenIds, setExpandedOrdenIds] = useState<Set<string>>(new Set());
   const [currentPage, setCurrentPage] = useState(1);
   const [filterEstado, setFilterEstado] = useState<string>('todos');
   const [filterFechaDesde, setFilterFechaDesde] = useState('');
@@ -313,7 +314,7 @@ export function OrdenesTab() {
   const [showFilters, setShowFilters] = useState(false);
 
   const toggleCollapse = (id: string) => {
-    setCollapsedOrdenIds(prev => {
+    setExpandedOrdenIds(prev => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
@@ -322,11 +323,11 @@ export function OrdenesTab() {
   };
 
   const expandAll = () => {
-    setCollapsedOrdenIds(new Set());
+    setExpandedOrdenIds(new Set(ordenesAgrupadas.map(o => o.id)));
   };
 
   const collapseAll = () => {
-    setCollapsedOrdenIds(new Set(ordenesAgrupadas.map(o => o.id)));
+    setExpandedOrdenIds(new Set());
   };
 
   const filteredOrdenItems = useMemo(() => {
@@ -1098,7 +1099,7 @@ export function OrdenesTab() {
 
             <div className="divide-y divide-slate-100">
               {paginatedOrdenes.map(orden => {
-                const collapsed = collapsedOrdenIds.has(orden.id);
+                const collapsed = !expandedOrdenIds.has(orden.id);
                 return (
                   <div key={orden.id} className="group">
                     <button
