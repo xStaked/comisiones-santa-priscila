@@ -1,9 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { LayoutDashboard, Calculator, Users, FileText, Download, History, RotateCcw, BarChart3, LogOut, UserCircle, Building2, Package, Percent } from 'lucide-react';
+import { LayoutDashboard, Calculator, Users, FileText, Download, History, BarChart3, LogOut, UserCircle, Building2, Package, Percent } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { useApp } from '@/context/AppContext';
 import { useAuth } from '@/context/AuthContext';
 
 interface HeaderProps {
@@ -23,7 +22,6 @@ const tabs = [
 ];
 
 export function Header({ activeTab }: HeaderProps) {
-  const { resetDemoData } = useApp();
   const { user, logout } = useAuth();
 
   return (
@@ -40,20 +38,6 @@ export function Header({ activeTab }: HeaderProps) {
             </div>
           </Link>
           <div className="hidden sm:flex items-center gap-3">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                if (confirm('¿Cargar los datos reales del Excel? Se eliminarán órdenes y liquidaciones existentes.')) {
-                  resetDemoData();
-                }
-              }}
-              className="text-slate-500 hover:text-slate-900 gap-1.5 h-8 text-xs"
-            >
-              <RotateCcw className="h-3.5 w-3.5" />
-              Cargar datos reales
-            </Button>
-            <div className="h-4 w-px bg-slate-200" />
             {user && (
               <div className="flex items-center gap-3">
                 <div className="flex items-center gap-1.5">
