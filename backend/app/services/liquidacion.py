@@ -361,6 +361,25 @@ def _calcular_comision_especifica(
     return Decimal("0")
 
 
+def _comision_con_umbral(
+    orden_item: OrdenItem,
+    tarifa: Tarifa | TarifaClienteProducto,
+    kg_acumulado: Decimal,
+) -> tuple[str, Decimal, Decimal] | None:
+    """Regla por volumen: si el comisionista acumula >= umbral_kg en la liquidación,
+    la comisión del ítem se paga como fijo_kg con valor_sobre_umbral.
+
+    Devuelve (tipo_snapshot, valor_snapshot, comision) o None si no aplica.
+    Debe mantenerse en paridad con comisionConUmbral() de src/lib/export-utils.ts.
+    """
+    if tarifa.umbral_kg is None or tarifa.valor_sobre_umbral is None:
+        return None
+    if kg_acumulado < tarifa.umbral_kg:
+        return None
+    comision = _cantidad_para_tarifa_kg(orden_item) * tarifa.valor_sobre_umbral
+    return (TipoTarifa.fijo_kg.value, tarifa.valor_sobre_umbral, comision)
+
+
 def crear_liquidacion(
     db: Session, nombre: str, orden_item_ids: list[UUID]
 ) -> tuple[Liquidacion, list[dict]]:
@@ -415,6 +434,15 @@ def crear_liquidacion(
     db.add(liquidacion)
     db.flush()
 
+    # Volumen acumulado por comisionista dentro de ESTA liquidación (regla por umbral).
+    kg_por_comisionista: dict[UUID, Decimal] = {}
+    for oi in orden_items_pagados:
+        for asignacion in oi.asignaciones:
+            cid = asignacion.comisionista_id
+            kg_por_comisionista[cid] = (
+                kg_por_comisionista.get(cid, Decimal("0")) + _cantidad_para_tarifa_kg(oi)
+            )
+
     for oi in orden_items_pagados:
         li = LiquidacionItem(
             liquidacion_id=liquidacion.id,
@@ -443,13 +471,21 @@ def crear_liquidacion(
             tarifa_esp = _buscar_tarifa_especifica(db, oi, comisionista.id)
 
             if tarifa_esp:
-                comision = _calcular_comision_especifica(db, oi, tarifa_esp)
+                umbral = _comision_con_umbral(
+                    oi, tarifa_esp, kg_por_comisionista.get(comisionista.id, Decimal("0"))
+                )
+                if umbral:
+                    tipo_snapshot, valor_snapshot, comision = umbral
+                else:
+                    comision = _calcular_comision_especifica(db, oi, tarifa_esp)
+                    tipo_snapshot = tarifa_esp.tipo.value
+                    valor_snapshot = tarifa_esp.valor
                 lit = LiquidacionItemTarifa(
                     liquidacion_item_id=li.id,
                     comisionista_id=comisionista.id,
                     comisionista_nombre_snapshot=comisionista.nombre,
-                    tipo_snapshot=tarifa_esp.tipo.value,
-                    valor_snapshot=tarifa_esp.valor,
+                    tipo_snapshot=tipo_snapshot,
+                    valor_snapshot=valor_snapshot,
                     comision_calculada=comision,
                 )
                 db.add(lit)
@@ -478,13 +514,21 @@ def crear_liquidacion(
                             ]
                             if proveedor_orden in excluidos:
                                 continue
-                        comision = _calcular_comision_con_tarifa(oi, tarifa)
+                        umbral = _comision_con_umbral(
+                            oi, tarifa, kg_por_comisionista.get(comisionista.id, Decimal("0"))
+                        )
+                        if umbral:
+                            tipo_snapshot, valor_snapshot, comision = umbral
+                        else:
+                            comision = _calcular_comision_con_tarifa(oi, tarifa)
+                            tipo_snapshot = tarifa.tipo.value
+                            valor_snapshot = tarifa.valor
                         lit = LiquidacionItemTarifa(
                             liquidacion_item_id=li.id,
                             comisionista_id=comisionista.id,
                             comisionista_nombre_snapshot=comisionista.nombre,
-                            tipo_snapshot=tarifa.tipo.value,
-                            valor_snapshot=tarifa.valor,
+                            tipo_snapshot=tipo_snapshot,
+                            valor_snapshot=valor_snapshot,
                             comision_calculada=comision,
                         )
                         db.add(lit)

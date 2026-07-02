@@ -763,3 +763,68 @@ def test_restaurar_liquidacion_recrea_orden_y_items_en_pagada(db_session):
     assert nuevos_items[0].estado == EstadoOrden.pagada
     assert nuevos_items[0].orden is not None
     assert nuevos_items[0].orden.estado == EstadoOrden.pagada
+
+
+def _setup_umbral(db_session, umbral, valor_sobre_umbral):
+    cliente = Cliente(nombre="Cliente Umbral", tipo="individual", retencion_porcentaje=Decimal("1.75"))
+    comisionista = Comisionista(nombre="NARANJO")
+    producto = Producto(nombre="Producto Umbral", unidad_comision="kg")
+    db_session.add_all([cliente, comisionista, producto])
+    db_session.flush()
+    tarifa = TarifaClienteProducto(
+        comisionista_id=comisionista.id,
+        cliente_id=cliente.id,
+        producto_id=producto.id,
+        tipo=TipoTarifa.porcentaje,
+        valor=Decimal("2"),
+        umbral_kg=umbral,
+        valor_sobre_umbral=valor_sobre_umbral,
+    )
+    db_session.add(tarifa)
+    return cliente, comisionista, producto
+
+
+def _orden_pagada(db_session, cliente, producto, comisionista, numero, cantidad_kg):
+    orden = Orden(fecha=date.today(), numero_orden=numero, origen="manual", estado=EstadoOrden.pagada)
+    db_session.add(orden)
+    db_session.flush()
+    oi = OrdenItem(
+        orden_id=orden.id, fecha=date.today(), numero_orden=numero,
+        finca="-", producto=producto.nombre, cantidad=cantidad_kg, unidad="kg",
+        precio_unitario=Decimal("1"), total=cantidad_kg,
+        estado=EstadoOrden.pagada, cliente_id=cliente.id, producto_id=producto.id,
+    )
+    db_session.add(oi)
+    db_session.flush()
+    db_session.add(Asignacion(orden_item_id=oi.id, comisionista_id=comisionista.id))
+    return oi
+
+
+def test_umbral_alcanzado_aplica_valor_sobre_umbral(db_session):
+    cliente, comisionista, producto = _setup_umbral(db_session, Decimal("1000"), Decimal("3.50"))
+    i1 = _orden_pagada(db_session, cliente, producto, comisionista, "UMB-1", Decimal("600"))
+    i2 = _orden_pagada(db_session, cliente, producto, comisionista, "UMB-2", Decimal("600"))
+    db_session.commit()
+
+    liq, _ = crear_liquidacion(db_session, "Liquidación umbral", [i1.id, i2.id])
+
+    tarifas = [t for li in liq.items for t in li.tarifas]
+    assert len(tarifas) == 2
+    # 1200 kg acumulados >= 1000 → toda la comisión a 3.50 $/kg
+    assert all(t.tipo_snapshot == "fijo_kg" for t in tarifas)
+    assert all(t.valor_snapshot == Decimal("3.50") for t in tarifas)
+    assert sum(t.comision_calculada for t in tarifas) == Decimal("4200.00")
+
+
+def test_umbral_no_alcanzado_usa_tarifa_normal(db_session):
+    cliente, comisionista, producto = _setup_umbral(db_session, Decimal("1000"), Decimal("3.50"))
+    i1 = _orden_pagada(db_session, cliente, producto, comisionista, "UMB-3", Decimal("400"))
+    db_session.commit()
+
+    liq, _ = crear_liquidacion(db_session, "Liquidación sin umbral", [i1.id])
+
+    tarifas = [t for li in liq.items for t in li.tarifas]
+    assert len(tarifas) == 1
+    # 400 kg < 1000 → tarifa porcentaje normal: 400 * (1 - 1.75%) * 2% = 7.86
+    assert tarifas[0].tipo_snapshot == "porcentaje"
+    assert tarifas[0].comision_calculada == Decimal("400") * (Decimal("1") - Decimal("0.0175")) * Decimal("0.02")
