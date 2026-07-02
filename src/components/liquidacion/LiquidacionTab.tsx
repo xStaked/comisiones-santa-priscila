@@ -2,10 +2,12 @@
 
 import { useState, useMemo } from 'react';
 import { FileText, FileSpreadsheet, Save, Calculator, Filter, ChevronRight } from 'lucide-react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import * as XLSX from 'xlsx';
 import { useApp } from '@/context/AppContext';
 import { exportarPDF, exportarExcel, calcularDetalleComision, getCantidadParaTarifaKg } from '@/lib/export-utils';
+import { fetchProveedores } from '@/lib/api';
+import type { Proveedor } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -38,6 +40,11 @@ export function LiquidacionTab() {
     const next = new Set(prev);
     if (next.has(key)) next.delete(key); else next.add(key);
     return next;
+  });
+
+  const { data: proveedores = [] } = useQuery<Proveedor[]>({
+    queryKey: ['proveedores'],
+    queryFn: fetchProveedores,
   });
 
   const comisionistaMap = useMemo(() =>
@@ -180,7 +187,7 @@ export function LiquidacionTab() {
       return;
     }
     const com = filterComisionista ? comisionistaMap.get(filterComisionista) : undefined;
-    exportarExcel(selectedFiltered, comisionistas, 'Liquidacion', com?.nombre, tarifasClienteProducto, undefined, kgPorComisionista);
+    exportarExcel(selectedFiltered, comisionistas, 'Liquidacion', com?.nombre, tarifasClienteProducto, undefined, kgPorComisionista, proveedores);
     toast.success('Excel generado');
   };
 

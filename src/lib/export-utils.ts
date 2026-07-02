@@ -1,7 +1,7 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
-import { OrdenItem, Comisionista, TarifaClienteProducto } from '@/types';
+import { OrdenItem, Comisionista, TarifaClienteProducto, Proveedor } from '@/types';
 import {
   normalizarTexto,
   normalizarNombreFinca,
@@ -536,6 +536,19 @@ export function exportarPDF(
   doc.save(`${titulo.replace(/\s+/g, '_')}.pdf`);
 }
 
+function nombreHojaValido(nombre: string, usados: Set<string>): string {
+  // Excel: máx 31 chars, sin []:*?/\
+  const base = nombre.replace(/[\[\]:*?\/\\]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 31) || 'Sin proveedor';
+  let candidato = base;
+  let n = 2;
+  while (usados.has(candidato)) {
+    candidato = `${base.slice(0, 28)} ${n}`;
+    n += 1;
+  }
+  usados.add(candidato);
+  return candidato;
+}
+
 export function exportarExcel(
   items: OrdenItem[],
   comisionistas: Comisionista[],
@@ -543,130 +556,138 @@ export function exportarExcel(
   nombreComisionista?: string,
   tarifasClienteProducto: TarifaClienteProducto[] = [],
   comisionesSnapshot?: Map<string, { comision: number; tarifasLabel: string }>,
-  kgAcumuladoPorComisionista?: Map<string, number>
+  kgAcumuladoPorComisionista?: Map<string, number>,
+  proveedores: Proveedor[] = []
 ) {
   const comisionistaMap = new Map(comisionistas.map(c => [c.id, c]));
   const wb = XLSX.utils.book_new();
 
   const nombresMes = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 
-  // Agrupar items por comisionista, luego por mes
-  const itemsPorComisionista = new Map<string, Map<string, OrdenItem[]>>();
+  // Razón social = proveedor. Grupo del proveedor vía catálogo (match normalizado).
+  const grupoPorProveedor = new Map(
+    proveedores.map(p => [normalizarTexto(p.nombre), p.grupo || 'N/A'])
+  );
+
+  // Agrupar ítems por proveedor (una hoja por razón social)
+  const itemsPorProveedor = new Map<string, OrdenItem[]>();
   items.forEach(item => {
-    item.comisionistas.forEach(asig => {
-      const comId = asig.comisionistaId || 'sin-asignar';
-      if (!itemsPorComisionista.has(comId)) {
-        itemsPorComisionista.set(comId, new Map());
-      }
-      const fecha = new Date(item.fecha);
-      const mesKey = `${fecha.getFullYear()}-${String(fecha.getMonth() + 1).padStart(2, '0')}`;
-      const mesMap = itemsPorComisionista.get(comId)!;
-      if (!mesMap.has(mesKey)) {
-        mesMap.set(mesKey, []);
-      }
-      mesMap.get(mesKey)!.push(item);
-    });
-    if (item.comisionistas.length === 0) {
-      const comId = 'sin-asignar';
-      if (!itemsPorComisionista.has(comId)) {
-        itemsPorComisionista.set(comId, new Map());
-      }
-      const fecha = new Date(item.fecha);
-      const mesKey = `${fecha.getFullYear()}-${String(fecha.getMonth() + 1).padStart(2, '0')}`;
-      const mesMap = itemsPorComisionista.get(comId)!;
-      if (!mesMap.has(mesKey)) {
-        mesMap.set(mesKey, []);
-      }
-      mesMap.get(mesKey)!.push(item);
-    }
+    const prov = item.proveedor?.trim() || 'Sin proveedor';
+    const arr = itemsPorProveedor.get(prov);
+    if (arr) arr.push(item); else itemsPorProveedor.set(prov, [item]);
   });
 
-  // Ordenar comisionistas y meses
-  const comisionistaIds = Array.from(itemsPorComisionista.keys()).sort((a, b) => {
-    const comA = comisionistaMap.get(a);
-    const comB = comisionistaMap.get(b);
-    return (comA?.nombre || '').localeCompare(comB?.nombre || '');
-  });
+  const nombresProveedor = Array.from(itemsPorProveedor.keys()).sort((a, b) => a.localeCompare(b, 'es'));
+  const nombresHojaUsados = new Set<string>();
 
-  const data: any[] = [];
-  let totalGeneral = 0;
+  nombresProveedor.forEach(nombreProveedor => {
+    const itemsProveedor = itemsPorProveedor.get(nombreProveedor)!;
+    const grupo = grupoPorProveedor.get(normalizarTexto(nombreProveedor)) || 'N/A';
 
-  comisionistaIds.forEach(comId => {
-    const com = comisionistaMap.get(comId);
-    const comNombre = com?.nombre || 'Sin asignar';
-    const mesesMap = itemsPorComisionista.get(comId)!;
-    const meses = Array.from(mesesMap.keys()).sort();
-
-    meses.forEach(mesKey => {
-      const itemsDelGrupo = mesesMap.get(mesKey)!;
-      const [anio, mes] = mesKey.split('-');
-      const nombreMes = nombresMes[parseInt(mes) - 1];
-      const ultimoDia = getUltimoDiaMes(parseInt(mes), parseInt(anio));
-
-      // Encabezado para cada grupo
-      data.push(['INDUSTRIAL ACUICOLA OCHOA & BARCIA DINACUAMAR CIA.LTDA.']);
-      data.push(['Sistema de Liquidación de Comisiones']);
-      data.push([`Comisionista: ${comNombre} del 1 al ${ultimoDia} de ${nombreMes} ${anio}`]);
-      data.push([]);
-
-      // Headers de tabla
-      data.push(['Fecha', 'Factura', 'Nombre', 'Cantidad', 'Tipo Comisión', 'Valor de Comisión', 'Estado', 'Sector']);
-
-      // Filas de datos
-      let totalGrupo = 0;
-      itemsDelGrupo.forEach(item => {
-        let comision = 0;
-        let tarifasLabel = '-';
-        const snapshotKey = `${item.id}|${comId}`;
-        if (comisionesSnapshot?.has(snapshotKey)) {
-          const snap = comisionesSnapshot.get(snapshotKey)!;
-          comision = snap.comision;
-          tarifasLabel = snap.tarifasLabel;
-        } else {
-          const detalle = com ? calcularDetalleComision(item, com, tarifasClienteProducto, kgAcumuladoPorComisionista?.get(comId)) : undefined;
-          comision = detalle?.comision || 0;
-          tarifasLabel = detalle?.tarifasLabel || '-';
+    // Agrupar items por comisionista, luego por mes (formato original por hoja)
+    const itemsPorComisionista = new Map<string, Map<string, OrdenItem[]>>();
+    itemsProveedor.forEach(item => {
+      const comIds = item.comisionistas.length > 0
+        ? item.comisionistas.map(asig => asig.comisionistaId || 'sin-asignar')
+        : ['sin-asignar'];
+      comIds.forEach(comId => {
+        if (!itemsPorComisionista.has(comId)) {
+          itemsPorComisionista.set(comId, new Map());
         }
-        totalGrupo += comision;
-        data.push([
-          item.fecha,
-          item.numeroOrden,
-          item.producto,
-          item.cantidad,
-          tarifasLabel,
-          `$ ${comision.toFixed(2).replace('.', ',')}`,
-          item.estado || 'pagada',
-          item.sector || item.finca || '-',
-        ]);
+        const fecha = new Date(item.fecha);
+        const mesKey = `${fecha.getFullYear()}-${String(fecha.getMonth() + 1).padStart(2, '0')}`;
+        const mesMap = itemsPorComisionista.get(comId)!;
+        if (!mesMap.has(mesKey)) {
+          mesMap.set(mesKey, []);
+        }
+        mesMap.get(mesKey)!.push(item);
       });
-
-      // Total del grupo
-      data.push(['', '', '', '', '', `$ ${totalGrupo.toFixed(2).replace('.', ',')}`, '', '']);
-      data.push([]);
-
-      totalGeneral += totalGrupo;
     });
+
+    const comisionistaIds = Array.from(itemsPorComisionista.keys()).sort((a, b) => {
+      const comA = comisionistaMap.get(a);
+      const comB = comisionistaMap.get(b);
+      return (comA?.nombre || '').localeCompare(comB?.nombre || '');
+    });
+
+    const data: any[] = [];
+    let totalProveedor = 0;
+
+    data.push([`Razón social: ${nombreProveedor}`, '', `Grupo: ${grupo}`]);
+    data.push([]);
+
+    comisionistaIds.forEach(comId => {
+      const com = comisionistaMap.get(comId);
+      const comNombre = com?.nombre || 'Sin asignar';
+      const mesesMap = itemsPorComisionista.get(comId)!;
+      const meses = Array.from(mesesMap.keys()).sort();
+
+      meses.forEach(mesKey => {
+        const itemsDelGrupo = mesesMap.get(mesKey)!;
+        const [anio, mes] = mesKey.split('-');
+        const nombreMes = nombresMes[parseInt(mes) - 1];
+        const ultimoDia = getUltimoDiaMes(parseInt(mes), parseInt(anio));
+
+        data.push(['INDUSTRIAL ACUICOLA OCHOA & BARCIA DINACUAMAR CIA.LTDA.']);
+        data.push(['Sistema de Liquidación de Comisiones']);
+        data.push([`Comisionista: ${comNombre} del 1 al ${ultimoDia} de ${nombreMes} ${anio}`]);
+        data.push([]);
+        data.push(['Fecha', 'Factura', 'Nombre', 'Cantidad', 'Tipo Comisión', 'Valor de Comisión', 'Estado', 'Sector', 'Grupo']);
+
+        let totalGrupo = 0;
+        itemsDelGrupo.forEach(item => {
+          let comision = 0;
+          let tarifasLabel = '-';
+          const snapshotKey = `${item.id}|${comId}`;
+          if (comisionesSnapshot?.has(snapshotKey)) {
+            const snap = comisionesSnapshot.get(snapshotKey)!;
+            comision = snap.comision;
+            tarifasLabel = snap.tarifasLabel;
+          } else {
+            const detalle = com
+              ? calcularDetalleComision(item, com, tarifasClienteProducto, kgAcumuladoPorComisionista?.get(comId))
+              : undefined;
+            comision = detalle?.comision || 0;
+            tarifasLabel = detalle?.tarifasLabel || '-';
+          }
+          totalGrupo += comision;
+          data.push([
+            item.fecha,
+            item.numeroOrden,
+            item.producto,
+            item.cantidad,
+            tarifasLabel,
+            `$ ${comision.toFixed(2).replace('.', ',')}`,
+            item.estado || 'pagada',
+            item.sector || item.finca || '-',
+            grupo,
+          ]);
+        });
+
+        data.push(['', '', '', '', '', `$ ${totalGrupo.toFixed(2).replace('.', ',')}`, '', '', '']);
+        data.push([]);
+
+        totalProveedor += totalGrupo;
+      });
+    });
+
+    data.push(['', '', '', '', '', 'TOTAL', `$ ${totalProveedor.toFixed(2).replace('.', ',')}`, '', '']);
+
+    const ws = XLSX.utils.aoa_to_sheet(data);
+    ws['!cols'] = [
+      { wch: 12 },
+      { wch: 20 },
+      { wch: 25 },
+      { wch: 10 },
+      { wch: 16 },
+      { wch: 16 },
+      { wch: 10 },
+      { wch: 10 },
+      { wch: 18 },
+    ];
+    XLSX.utils.book_append_sheet(wb, ws, nombreHojaValido(nombreProveedor, nombresHojaUsados));
   });
 
-  // Total general
-  data.push(['', '', '', '', '', '', '', '']);
-  data.push(['', '', '', '', '', 'TOTAL', `$ ${totalGeneral.toFixed(2).replace('.', ',')}`, '']);
-
-  const ws = XLSX.utils.aoa_to_sheet(data);
-
-  // Ajustar anchos de columna
-  ws['!cols'] = [
-    { wch: 12 },
-    { wch: 20 },
-    { wch: 25 },
-    { wch: 10 },
-    { wch: 16 },
-    { wch: 16 },
-    { wch: 10 },
-    { wch: 10 },
-  ];
-
-  XLSX.utils.book_append_sheet(wb, ws, 'Liquidación');
   XLSX.writeFile(wb, `${titulo.replace(/\s+/g, '_')}.xlsx`);
 }
 
