@@ -28,6 +28,8 @@ const NUMERIC_RESPONSE_KEYS = new Set([
   'totalSnapshot',
   'valor',
   'valorSnapshot',
+  'umbralKg',
+  'valorSobreUmbral',
   'comision',
   'comisionCalculada',
   'totalComision',
