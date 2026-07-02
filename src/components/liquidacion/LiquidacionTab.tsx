@@ -140,7 +140,7 @@ export function LiquidacionTab() {
         }
       });
     });
-    return Array.from(map.values()).sort((a, b) => b.comision - a.comision);
+    return Array.from(map.values()).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
   }, [selectedItemsConComision]);
 
   const totalComision = selectedItemsConComision.reduce((s, i) => s + i.comisionTotal, 0);

@@ -729,7 +729,7 @@ export function agruparPorFinca(
       map.set(finca, { nombre: finca, ordenes: 1, cantidad: item.cantidad, total: item.total, comision });
     }
   });
-  return Array.from(map.values()).sort((a, b) => b.total - a.total);
+  return Array.from(map.values()).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
 }
 
 export interface ResumenPorProducto {
@@ -759,7 +759,7 @@ export function agruparPorProducto(
       map.set(producto, { nombre: producto, ordenes: 1, cantidad: item.cantidad, total: item.total, comision });
     }
   });
-  return Array.from(map.values()).sort((a, b) => b.total - a.total);
+  return Array.from(map.values()).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
 }
 
 export interface ResumenPorComisionista {
@@ -800,7 +800,7 @@ export function agruparPorComisionista(
       }
     });
   });
-  return Array.from(map.values()).sort((a, b) => b.totalComision - a.totalComision);
+  return Array.from(map.values()).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
 }
 
 export interface ResumenPorCliente {
@@ -830,7 +830,7 @@ export function agruparPorCliente(
       map.set(cliente, { nombre: cliente, ordenes: 1, cantidad: item.cantidad, total: item.total, comision });
     }
   });
-  return Array.from(map.values()).sort((a, b) => b.total - a.total);
+  return Array.from(map.values()).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
 }
 
 export function getTrimestreActual(): { inicio: string; fin: string } {
