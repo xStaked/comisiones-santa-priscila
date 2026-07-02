@@ -13,6 +13,7 @@ import {
   createOrdenes,
   updateOrden as apiUpdateOrden,
   updateEstadoOrdenGrupo as apiUpdateEstadoOrdenGrupo,
+  updateEstadoOrdenesMasivo as apiUpdateEstadoOrdenesMasivo,
   deleteOrden as apiDeleteOrden,
   asignarComisionista as apiAsignarComisionista,
   desasignarComisionista as apiDesasignarComisionista,
@@ -49,6 +50,7 @@ interface AppContextType {
   addOrdenItems: (items: OrdenItem[]) => void;
   updateOrdenItem: (id: string, item: Partial<OrdenItem>) => void;
   updateEstadoOrden: (ordenId: string, estado: EstadoOrden) => void;
+  updateEstadoOrdenesMasivo: (ordenIds: string[], estado: EstadoOrden) => void;
   deleteOrdenItem: (id: string) => void;
   clearOrdenItems: () => void;
   assignComisionistasGlobal: (comisionistaIds: string[]) => void;
@@ -207,6 +209,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     },
     onError: (err: any) => {
       toast.error(err?.response?.data?.detail || 'Error al actualizar estado de orden');
+    },
+  });
+
+  const updateEstadoOrdenesMasivoMutation = useMutation({
+    mutationFn: ({ ordenIds, estado }: { ordenIds: string[]; estado: EstadoOrden }) =>
+      apiUpdateEstadoOrdenesMasivo(ordenIds, estado),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['ordenes'] });
+      if (data.omitidas.length > 0) {
+        toast.success(`${data.actualizadas} orden(es) actualizadas; ${data.omitidas.length} omitida(s) por tener ítems liquidados`);
+      } else {
+        toast.success(`${data.actualizadas} orden(es) actualizadas`);
+      }
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.detail || 'Error al actualizar órdenes');
     },
   });
 
@@ -473,6 +491,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [updateEstadoOrdenMutation]
   );
 
+  const updateEstadoOrdenesMasivo = useCallback(
+    (ordenIds: string[], estado: EstadoOrden) => {
+      updateEstadoOrdenesMasivoMutation.mutate({ ordenIds, estado });
+    },
+    [updateEstadoOrdenesMasivoMutation]
+  );
+
   const clearOrdenItems = useCallback(() => {
     limpiarOrdenesMutation.mutate();
   }, [limpiarOrdenesMutation]);
@@ -603,6 +628,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         addOrdenItems,
         updateOrdenItem,
         updateEstadoOrden,
+        updateEstadoOrdenesMasivo,
         deleteOrdenItem,
         clearOrdenItems,
         assignComisionistasGlobal,

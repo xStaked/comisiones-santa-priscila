@@ -164,6 +164,11 @@ export async function updateEstadoOrdenGrupo(id: string, estado: EstadoOrden) {
   return toCamelCase(res.data);
 }
 
+export async function updateEstadoOrdenesMasivo(ordenIds: string[], estado: EstadoOrden) {
+  const res = await api.put('/api/v1/ordenes/grupos/estado-masivo', toSnakeCase({ ordenIds, estado }));
+  return toCamelCase<{ actualizadas: number; omitidas: string[] }>(res.data);
+}
+
 export async function deleteOrden(id: string) {
   await api.delete(`/api/v1/ordenes/${id}`);
 }

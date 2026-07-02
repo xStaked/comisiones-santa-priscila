@@ -251,7 +251,7 @@ function EditFincaSelect({ clienteId, value, onChange }: { clienteId: string; va
 }
 
 export function OrdenesTab() {
-  const { comisionistas, ordenItems, addOrdenItems, updateOrdenItem, updateEstadoOrden, deleteOrdenItem, clearOrdenItems, assignComisionistasGlobal, clientes, productos, tarifasClienteProducto } = useApp();
+  const { comisionistas, ordenItems, addOrdenItems, updateOrdenItem, updateEstadoOrden, updateEstadoOrdenesMasivo, deleteOrdenItem, clearOrdenItems, assignComisionistasGlobal, clientes, productos, tarifasClienteProducto } = useApp();
   const [activeForm, setActiveForm] = useState<'manual' | 'pdf'>('manual');
   const [globalComisionistaIds, setGlobalComisionistaIds] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -304,6 +304,7 @@ export function OrdenesTab() {
   const [search, setSearch] = useState('');
   // Rastrea las expandidas: default vacío = todas cerradas (incluidas las nuevas)
   const [expandedOrdenIds, setExpandedOrdenIds] = useState<Set<string>>(new Set());
+  const [selectedOrdenIds, setSelectedOrdenIds] = useState<Set<string>>(new Set());
   const [currentPage, setCurrentPage] = useState(1);
   const [filterEstado, setFilterEstado] = useState<string>('todos');
   const [filterFechaDesde, setFilterFechaDesde] = useState('');
@@ -321,6 +322,12 @@ export function OrdenesTab() {
       return next;
     });
   };
+
+  const toggleSeleccionOrden = (id: string) => setSelectedOrdenIds(prev => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
 
   const expandAll = () => {
     setExpandedOrdenIds(new Set(ordenesAgrupadas.map(o => o.id)));
@@ -373,6 +380,17 @@ export function OrdenesTab() {
   const safePage = Math.min(currentPage, totalPages);
   const start = (safePage - 1) * ITEMS_PER_PAGE;
   const paginatedOrdenes = ordenesAgrupadas.slice(start, start + ITEMS_PER_PAGE);
+
+  const ordenesSeleccionables = ordenesAgrupadas.filter(o => o.estado !== 'liquidada');
+  const todasSeleccionadas = ordenesSeleccionables.length > 0 &&
+    ordenesSeleccionables.every(o => selectedOrdenIds.has(o.id));
+  const toggleSeleccionarTodas = () => {
+    setSelectedOrdenIds(todasSeleccionadas ? new Set() : new Set(ordenesSeleccionables.map(o => o.id)));
+  };
+  const handleMarcarPagadas = () => {
+    updateEstadoOrdenesMasivo(Array.from(selectedOrdenIds), 'pagada');
+    setSelectedOrdenIds(new Set());
+  };
 
   const resetManualForm = () => {
     setManualHeader({
@@ -1074,12 +1092,28 @@ export function OrdenesTab() {
           <CardContent className="p-0">
             <div className="flex items-center justify-between px-4 py-2 bg-slate-50 border-b border-slate-200">
               <div className="flex items-center gap-3">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 cursor-pointer accent-emerald-600"
+                  checked={todasSeleccionadas}
+                  onChange={toggleSeleccionarTodas}
+                  aria-label="Seleccionar todas las órdenes"
+                />
                 <span className="text-sm font-medium text-slate-700">
                   {filteredOrdenItems.length === ordenItems.length
                     ? `${cantidadOrdenes} orden${cantidadOrdenes === 1 ? '' : 'es'}`
                     : `${ordenesAgrupadas.length} de ${cantidadOrdenes} orden${cantidadOrdenes === 1 ? '' : 'es'}`
                   }
                 </span>
+                {selectedOrdenIds.size > 0 && (
+                  <Button
+                    size="sm"
+                    onClick={handleMarcarPagadas}
+                    className="btn-primary-dark rounded-lg h-7 text-xs"
+                  >
+                    Marcar como pagadas ({selectedOrdenIds.size})
+                  </Button>
+                )}
               </div>
               <div className="flex items-center gap-1">
                 <Button variant="ghost" size="sm" onClick={() => toggleSort('fecha')} className="text-xs text-slate-600 h-7 rounded-lg">
@@ -1102,11 +1136,20 @@ export function OrdenesTab() {
                 const collapsed = !expandedOrdenIds.has(orden.id);
                 return (
                   <div key={orden.id} className="group">
-                    <button
-                      type="button"
-                      onClick={() => toggleCollapse(orden.id)}
-                      className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-50/70 transition-colors text-left"
-                    >
+                    <div className="flex items-center pl-4 hover:bg-slate-50/70 transition-colors">
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 cursor-pointer accent-emerald-600 shrink-0"
+                        checked={selectedOrdenIds.has(orden.id)}
+                        disabled={orden.estado === 'liquidada'}
+                        onChange={() => toggleSeleccionOrden(orden.id)}
+                        aria-label={`Seleccionar orden ${orden.numeroOrden}`}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => toggleCollapse(orden.id)}
+                        className="flex-1 flex items-center gap-3 px-3 py-3 text-left min-w-0"
+                      >
                       {collapsed ? <ChevronRight className="h-4 w-4 text-slate-400 shrink-0" /> : <ChevronDown className="h-4 w-4 text-slate-400 shrink-0" />}
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
@@ -1145,7 +1188,8 @@ export function OrdenesTab() {
                         </div>
                       </div>
                       <span className="text-sm font-semibold text-slate-900 tabular-nums shrink-0">${orden.total.toFixed(2)}</span>
-                    </button>
+                      </button>
+                    </div>
 
                     {!collapsed && (
                       <div className="border-t border-slate-100">
