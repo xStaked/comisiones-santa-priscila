@@ -16,6 +16,8 @@ class TarifaClienteProductoBase(BaseModel):
     proveedores_excluidos: List[str] = Field(default=[], alias="proveedoresExcluidos")
     tipo: str
     valor: Decimal
+    umbral_kg: Optional[Decimal] = Field(default=None, alias="umbralKg")
+    valor_sobre_umbral: Optional[Decimal] = Field(default=None, alias="valorSobreUmbral")
 
     model_config = ConfigDict(populate_by_name=True)
 
@@ -39,6 +41,8 @@ class TarifaClienteProductoResponse(BaseModel):
     tipo: str
     valor: Decimal
     activo: bool
+    umbral_kg: Optional[Decimal] = Field(default=None, alias="umbralKg")
+    valor_sobre_umbral: Optional[Decimal] = Field(default=None, alias="valorSobreUmbral")
     comisionista: Optional[str] = None
     cliente: Optional[str] = None
     producto: Optional[str] = None

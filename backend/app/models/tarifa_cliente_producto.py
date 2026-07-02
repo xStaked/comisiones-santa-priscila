@@ -45,6 +45,8 @@ class TarifaClienteProducto(BaseModel):
     )
     valor = Column(Numeric(10, 4), nullable=False)
     activo = Column(Boolean, nullable=False, default=True)
+    umbral_kg = Column(Numeric(12, 2), nullable=True)
+    valor_sobre_umbral = Column(Numeric(10, 4), nullable=True)
 
     comisionista = relationship("Comisionista")
     cliente = relationship("Cliente")

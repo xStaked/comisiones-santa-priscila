@@ -37,6 +37,8 @@ def _enriquecer_respuesta(
         tipo=tarifa.tipo.value if hasattr(tarifa.tipo, "value") else tarifa.tipo,
         valor=tarifa.valor,
         activo=tarifa.activo,
+        umbralKg=tarifa.umbral_kg,
+        valorSobreUmbral=tarifa.valor_sobre_umbral,
         comisionista=tarifa.comisionista.nombre if tarifa.comisionista else None,
         cliente=tarifa.cliente.nombre if tarifa.cliente else None,
         producto=tarifa.producto.nombre if tarifa.producto else None,
@@ -96,6 +98,8 @@ def crear_tarifa_cliente_producto(
         proveedores_excluidos=data.proveedores_excluidos or [],
         tipo=data.tipo,
         valor=data.valor,
+        umbral_kg=data.umbral_kg,
+        valor_sobre_umbral=data.valor_sobre_umbral,
     )
     db.add(tarifa)
     try:
@@ -187,6 +191,8 @@ def actualizar_tarifa_cliente_producto(
     tarifa.proveedores_excluidos = data.proveedores_excluidos or []
     tarifa.tipo = data.tipo
     tarifa.valor = data.valor
+    tarifa.umbral_kg = data.umbral_kg
+    tarifa.valor_sobre_umbral = data.valor_sobre_umbral
 
     try:
         db.commit()

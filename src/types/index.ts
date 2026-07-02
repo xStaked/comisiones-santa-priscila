@@ -9,6 +9,8 @@ export interface TarifaComision {
   tipo: 'porcentaje' | 'fijo_kg' | 'fijo_unidad';
   valor: number;
   proveedoresExcluidos?: string[];
+  umbralKg?: number;
+  valorSobreUmbral?: number;
 }
 
 export interface Comisionista {
@@ -112,6 +114,8 @@ export interface TarifaClienteProducto {
   tipo: 'porcentaje' | 'fijo_kg' | 'fijo_unidad';
   valor: number;
   activo: boolean;
+  umbralKg?: number;
+  valorSobreUmbral?: number;
   createdAt: string;
   // Relaciones opcionales (populadas por el backend)
   comisionista?: string | { id: string; nombre: string };

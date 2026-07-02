@@ -117,6 +117,8 @@ export function TarifasTab() {
     tipo: 'porcentaje' | 'fijo_kg' | 'fijo_unidad';
     valor: string;
     activo: boolean;
+    umbralKg: string;
+    valorSobreUmbral: string;
   }>({
     comisionistaId: '',
     clienteId: '',
@@ -126,6 +128,8 @@ export function TarifasTab() {
     tipo: 'porcentaje',
     valor: '',
     activo: true,
+    umbralKg: '',
+    valorSobreUmbral: '',
   });
 
   // Cargar fincas del cliente seleccionado en el filtro
@@ -224,6 +228,8 @@ export function TarifasTab() {
       tipo: 'porcentaje',
       valor: '',
       activo: true,
+      umbralKg: '',
+      valorSobreUmbral: '',
     });
     setProveedoresSeleccionados([]);
     setEditing(null);
@@ -259,6 +265,8 @@ export function TarifasTab() {
       tipo: form.tipo,
       valor: parseFloat(form.valor),
       activo: form.activo,
+      umbralKg: form.umbralKg ? parseFloat(form.umbralKg) : undefined,
+      valorSobreUmbral: form.valorSobreUmbral ? parseFloat(form.valorSobreUmbral) : undefined,
     };
 
     if (editing) {
@@ -281,6 +289,8 @@ export function TarifasTab() {
       tipo: t.tipo,
       valor: t.valor.toString(),
       activo: t.activo,
+      umbralKg: t.umbralKg?.toString() || '',
+      valorSobreUmbral: t.valorSobreUmbral?.toString() || '',
     });
     setProveedoresSeleccionados(t.proveedoresExcluidos || []);
     setOpen(true);
@@ -642,6 +652,38 @@ export function TarifasTab() {
                 />
               </div>
             </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="umbralKg">Umbral (kg, opcional)</Label>
+                <Input
+                  id="umbralKg"
+                  type="number"
+                  step="1"
+                  min="0"
+                  value={form.umbralKg}
+                  onChange={(e) => setForm({ ...form, umbralKg: e.target.value })}
+                  placeholder="Ej: 1000"
+                  className="bg-white border-slate-200 rounded-xl"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="valorSobreUmbral">Valor sobre umbral ($/kg)</Label>
+                <Input
+                  id="valorSobreUmbral"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={form.valorSobreUmbral}
+                  onChange={(e) => setForm({ ...form, valorSobreUmbral: e.target.value })}
+                  placeholder="Ej: 3.50"
+                  className="bg-white border-slate-200 rounded-xl"
+                />
+              </div>
+            </div>
+            <p className="text-xs text-slate-500">
+              Si el comisionista acumula el umbral en kg dentro de una liquidación, toda su comisión se paga a $/kg con el valor sobre umbral.
+            </p>
 
             <div className="flex items-center gap-2">
               <input

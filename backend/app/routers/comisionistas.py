@@ -43,6 +43,8 @@ def crear_comisionista(data: ComisionistaCreate, db: Session = Depends(get_db), 
                 tipo=TipoTarifa(t.tipo),
                 valor=t.valor,
                 proveedores_excluidos=t.proveedores_excluidos or [],
+                umbral_kg=t.umbral_kg,
+                valor_sobre_umbral=t.valor_sobre_umbral,
             )
         )
 
@@ -83,6 +85,8 @@ def actualizar_comisionista(
                 tipo=TipoTarifa(t.tipo),
                 valor=t.valor,
                 proveedores_excluidos=t.proveedores_excluidos or [],
+                umbral_kg=t.umbral_kg,
+                valor_sobre_umbral=t.valor_sobre_umbral,
             )
         )
 

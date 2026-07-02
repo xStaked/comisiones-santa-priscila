@@ -34,5 +34,9 @@ class Tarifa(BaseModel):
     tipo = Column(SAEnum(TipoTarifa, name="tipo_tarifa"), nullable=False)
     valor = Column(Numeric(10, 4), nullable=False)
     proveedores_excluidos = Column(JSON, nullable=False, default=list)
+    # Regla por volumen: si el comisionista acumula >= umbral_kg en la liquidación,
+    # la comisión pasa a fijo_kg con valor_sobre_umbral (caso Naranjo).
+    umbral_kg = Column(Numeric(12, 2), nullable=True)
+    valor_sobre_umbral = Column(Numeric(10, 4), nullable=True)
 
     comisionista = relationship("Comisionista", back_populates="tarifas")
