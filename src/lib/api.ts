@@ -384,6 +384,14 @@ export async function deleteTarifaClienteProducto(id: string) {
   await api.delete(`/api/v1/tarifas-cliente-producto/${id}`);
 }
 
+export async function updateTarifasClienteProductoMasivo(
+  ids: string[],
+  cambios: { tipo?: string; valor?: number; activo?: boolean }
+) {
+  const res = await api.put('/api/v1/tarifas-cliente-producto/masivo', toSnakeCase({ ids, cambios }));
+  return toCamelCase<{ actualizadas: number }>(res.data);
+}
+
 // Proveedores
 export async function fetchProveedores() {
   const res = await api.get('/api/v1/proveedores/');

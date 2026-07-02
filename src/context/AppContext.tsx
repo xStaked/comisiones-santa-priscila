@@ -38,6 +38,7 @@ import {
   createTarifaClienteProducto,
   updateTarifaClienteProducto as apiUpdateTarifaClienteProducto,
   deleteTarifaClienteProducto as apiDeleteTarifaClienteProducto,
+  updateTarifasClienteProductoMasivo as apiUpdateTarifasMasivo,
 } from '@/lib/api';
 
 interface AppContextType {
@@ -76,6 +77,7 @@ interface AppContextType {
   tarifasClienteProducto: TarifaClienteProducto[];
   addTarifa: (data: Omit<TarifaClienteProducto, 'id' | 'createdAt'>) => void;
   updateTarifa: (id: string, data: Partial<TarifaClienteProducto>) => void;
+  updateTarifasMasivo: (ids: string[], cambios: { tipo?: 'porcentaje' | 'fijo_kg' | 'fijo_unidad'; valor?: number; activo?: boolean }) => Promise<{ actualizadas: number }>;
   deleteTarifa: (id: string) => void;
 }
 
@@ -430,6 +432,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     },
   });
 
+  const updateTarifasMasivoMutation = useMutation({
+    mutationFn: ({ ids, cambios }: { ids: string[]; cambios: { tipo?: string; valor?: number; activo?: boolean } }) =>
+      apiUpdateTarifasMasivo(ids, cambios),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['tarifas-cliente-producto'] });
+      toast.success(`${data.actualizadas} tarifas actualizadas`);
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.detail || 'Error al actualizar tarifas');
+    },
+  });
+
   const deleteTarifaMutation = useMutation({
     mutationFn: apiDeleteTarifaClienteProducto,
     onSuccess: () => {
@@ -609,6 +623,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [updateTarifaMutation]
   );
 
+  const updateTarifasMasivo = useCallback(
+    (ids: string[], cambios: { tipo?: 'porcentaje' | 'fijo_kg' | 'fijo_unidad'; valor?: number; activo?: boolean }) =>
+      updateTarifasMasivoMutation.mutateAsync({ ids, cambios }),
+    [updateTarifasMasivoMutation]
+  );
+
   const deleteTarifa = useCallback(
     (id: string) => {
       deleteTarifaMutation.mutate(id);
@@ -649,6 +669,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         tarifasClienteProducto,
         addTarifa,
         updateTarifa,
+        updateTarifasMasivo,
         deleteTarifa,
       }}
     >
