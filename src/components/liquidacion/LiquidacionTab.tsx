@@ -5,7 +5,7 @@ import { FileText, FileSpreadsheet, Save, Calculator, Filter, ChevronRight } fro
 import { useQueryClient } from '@tanstack/react-query';
 import * as XLSX from 'xlsx';
 import { useApp } from '@/context/AppContext';
-import { exportarPDF, exportarExcel, calcularDetalleComision } from '@/lib/export-utils';
+import { exportarPDF, exportarExcel, calcularDetalleComision, getCantidadParaTarifaKg } from '@/lib/export-utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -87,7 +87,19 @@ export function LiquidacionTab() {
     return next;
   });
 
-
+  // Volumen acumulado por comisionista sobre las órdenes SELECCIONADAS
+  // (paridad con crear_liquidacion del backend, que acumula sobre los ítems enviados).
+  const kgPorComisionista = useMemo(() => {
+    const map = new Map<string, number>();
+    filteredItems
+      .filter(i => !excludedIds.has(ordenKey(i)))
+      .forEach(item => {
+        item.comisionistas.forEach(a => {
+          map.set(a.comisionistaId, (map.get(a.comisionistaId) || 0) + getCantidadParaTarifaKg(item));
+        });
+      });
+    return map;
+  }, [filteredItems, excludedIds]);
 
   const itemsConComision = useMemo(() => {
     return filteredItems.map(item => {
@@ -96,13 +108,13 @@ export function LiquidacionTab() {
         if (!comisionista) return [];
         return [{
           ...comisionista,
-          ...calcularDetalleComision(item, comisionista, tarifasClienteProducto),
+          ...calcularDetalleComision(item, comisionista, tarifasClienteProducto, kgPorComisionista.get(a.comisionistaId)),
         }];
       });
       const comisionTotal = comisionesAsignadas.reduce((total, asignacion) => total + asignacion.comision, 0);
       return { ...item, comisionTotal, comisionesAsignadas };
     });
-  }, [filteredItems, comisionistaMap, tarifasClienteProducto]);
+  }, [filteredItems, comisionistaMap, tarifasClienteProducto, kgPorComisionista]);
 
   // Ítems marcados por el usuario (base para totales, resumen, exportación y guardado).
   const selectedItemsConComision = useMemo(
@@ -158,7 +170,7 @@ export function LiquidacionTab() {
       return;
     }
     const com = filterComisionista ? comisionistaMap.get(filterComisionista) : undefined;
-    exportarPDF(selectedFiltered, comisionistas, 'Liquidacion', com?.nombre, tarifasClienteProducto);
+    exportarPDF(selectedFiltered, comisionistas, 'Liquidacion', com?.nombre, tarifasClienteProducto, undefined, kgPorComisionista);
     toast.success('PDF generado');
   };
 
@@ -168,7 +180,7 @@ export function LiquidacionTab() {
       return;
     }
     const com = filterComisionista ? comisionistaMap.get(filterComisionista) : undefined;
-    exportarExcel(selectedFiltered, comisionistas, 'Liquidacion', com?.nombre, tarifasClienteProducto);
+    exportarExcel(selectedFiltered, comisionistas, 'Liquidacion', com?.nombre, tarifasClienteProducto, undefined, kgPorComisionista);
     toast.success('Excel generado');
   };
 

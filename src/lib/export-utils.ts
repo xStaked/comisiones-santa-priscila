@@ -49,7 +49,7 @@ function getKgPorTachoDesdeUnidad(unidad?: string): number | undefined {
   return Number(match[1]);
 }
 
-function getCantidadParaTarifaKg(item: OrdenItem): number {
+export function getCantidadParaTarifaKg(item: OrdenItem): number {
   const unidadLower = item.unidad?.toLowerCase() || '';
   const producto = item.productoRel;
   const kgPorTacho = getKgPorTachoDesdeUnidad(item.unidad);
@@ -114,6 +114,24 @@ function getCantidadParaTarifaKg(item: OrdenItem): number {
   }
 
   return item.cantidad;
+}
+
+// Regla por volumen: paridad obligatoria con _comision_con_umbral() de
+// backend/app/services/liquidacion.py. El acumulado es por comisionista
+// dentro de la liquidación en curso.
+function comisionConUmbral(
+  item: OrdenItem,
+  tarifa: { umbralKg?: number | string | null; valorSobreUmbral?: number | string | null },
+  kgAcumulado?: number
+): { comision: number; tarifasLabel: string } | undefined {
+  if (tarifa.umbralKg == null || tarifa.valorSobreUmbral == null) return undefined;
+  const umbralKg = Number(tarifa.umbralKg);
+  const valorSobreUmbral = Number(tarifa.valorSobreUmbral);
+  if ((kgAcumulado ?? 0) < umbralKg) return undefined;
+  return {
+    comision: getCantidadParaTarifaKg(item) * valorSobreUmbral,
+    tarifasLabel: `$${valorSobreUmbral.toFixed(3)}/kg (≥${umbralKg} kg)`,
+  };
 }
 
 export function calcularComisionPorTarifaEspecifica(
@@ -246,7 +264,7 @@ export function encontrarTarifaEspecifica(
   return fallback;
 }
 
-export function calcularComision(item: OrdenItem, comisionista: Comisionista | undefined): number {
+export function calcularComision(item: OrdenItem, comisionista: Comisionista | undefined, kgAcumulado?: number): number {
   if (!comisionista) return 0;
   const proveedorOrden = normalizarTexto(item.proveedor || '');
   return comisionista.tarifas.reduce((sum, tarifa) => {
@@ -256,6 +274,8 @@ export function calcularComision(item: OrdenItem, comisionista: Comisionista | u
         return sum;
       }
     }
+    const umbral = comisionConUmbral(item, tarifa, kgAcumulado);
+    if (umbral) return sum + umbral.comision;
     return sum + calcularComisionPorTarifa(item, tarifa);
   }, 0);
 }
@@ -298,10 +318,13 @@ export function getTarifasLabel(comisionista: Comisionista): string {
 export function calcularDetalleComision(
   item: OrdenItem,
   comisionista: Comisionista,
-  tarifas: TarifaClienteProducto[]
+  tarifas: TarifaClienteProducto[],
+  kgAcumulado?: number
 ): { comision: number; tarifasLabel: string } {
   const tarifaEspecifica = encontrarTarifaEspecifica(item, comisionista.id, tarifas);
   if (tarifaEspecifica) {
+    const umbral = comisionConUmbral(item, tarifaEspecifica, kgAcumulado);
+    if (umbral) return umbral;
     return {
       comision: calcularComisionPorTarifaEspecifica(item, tarifaEspecifica),
       tarifasLabel: getTarifaLabel(tarifaEspecifica),
@@ -318,7 +341,7 @@ export function calcularDetalleComision(
   }
 
   return {
-    comision: calcularComision(item, comisionista),
+    comision: calcularComision(item, comisionista, kgAcumulado),
     tarifasLabel: getTarifasLabel(comisionista) || 'Sin tarifa configurada',
   };
 }
@@ -329,7 +352,8 @@ export function exportarPDF(
   titulo: string,
   nombreComisionista?: string,
   tarifasClienteProducto: TarifaClienteProducto[] = [],
-  comisionesSnapshot?: Map<string, { comision: number; tarifasLabel: string }>
+  comisionesSnapshot?: Map<string, { comision: number; tarifasLabel: string }>,
+  kgAcumuladoPorComisionista?: Map<string, number>
 ) {
   const doc = new jsPDF({ orientation: 'portrait', format: 'letter' });
   const comisionistaMap = new Map(comisionistas.map(c => [c.id, c]));
@@ -423,7 +447,7 @@ export function exportarPDF(
           comision = snap.comision;
           tarifasLabel = snap.tarifasLabel;
         } else {
-          const detalle = com ? calcularDetalleComision(item, com, tarifasClienteProducto) : undefined;
+          const detalle = com ? calcularDetalleComision(item, com, tarifasClienteProducto, kgAcumuladoPorComisionista?.get(comId)) : undefined;
           comision = detalle?.comision || 0;
           tarifasLabel = detalle?.tarifasLabel || '-';
         }
@@ -444,7 +468,7 @@ export function exportarPDF(
         if (comisionesSnapshot?.has(snapshotKey)) {
           return sum + (comisionesSnapshot.get(snapshotKey)!.comision || 0);
         }
-        return sum + (com ? calcularDetalleComision(item, com, tarifasClienteProducto).comision : 0);
+        return sum + (com ? calcularDetalleComision(item, com, tarifasClienteProducto, kgAcumuladoPorComisionista?.get(comId)).comision : 0);
       }, 0);
 
       totalGeneral += totalComisionGrupo;
@@ -518,7 +542,8 @@ export function exportarExcel(
   titulo: string,
   nombreComisionista?: string,
   tarifasClienteProducto: TarifaClienteProducto[] = [],
-  comisionesSnapshot?: Map<string, { comision: number; tarifasLabel: string }>
+  comisionesSnapshot?: Map<string, { comision: number; tarifasLabel: string }>,
+  kgAcumuladoPorComisionista?: Map<string, number>
 ) {
   const comisionistaMap = new Map(comisionistas.map(c => [c.id, c]));
   const wb = XLSX.utils.book_new();
@@ -598,7 +623,7 @@ export function exportarExcel(
           comision = snap.comision;
           tarifasLabel = snap.tarifasLabel;
         } else {
-          const detalle = com ? calcularDetalleComision(item, com, tarifasClienteProducto) : undefined;
+          const detalle = com ? calcularDetalleComision(item, com, tarifasClienteProducto, kgAcumuladoPorComisionista?.get(comId)) : undefined;
           comision = detalle?.comision || 0;
           tarifasLabel = detalle?.tarifasLabel || '-';
         }
