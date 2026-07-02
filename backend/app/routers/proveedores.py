@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.database import get_db
 from app.dependencies import get_current_user
+from app.models.grupo import Grupo
 from app.models.proveedor import Proveedor
 from app.models.user import User
 from app.schemas.proveedor import ProveedorResponse, ProveedorUpdate
@@ -49,6 +50,12 @@ def actualizar_proveedor(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Proveedor no encontrado"
         )
+    if data.grupo_id is not None:
+        grupo = db.query(Grupo).filter(Grupo.id == data.grupo_id).first()
+        if not grupo:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Grupo no encontrado"
+            )
     proveedor.grupo_id = data.grupo_id
     db.commit()
     db.refresh(proveedor)

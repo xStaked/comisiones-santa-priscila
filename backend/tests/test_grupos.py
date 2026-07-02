@@ -41,6 +41,19 @@ def test_crud_grupos_y_asignacion_a_proveedor(authenticated_client, db_session):
     assert resp.status_code == 204
 
 
+def test_asignar_grupo_inexistente_a_proveedor(authenticated_client, db_session):
+    proveedor = Proveedor(nombre="PROVEEDOR GRUPO INEXISTENTE")
+    db_session.add(proveedor)
+    db_session.commit()
+
+    resp = authenticated_client.put(
+        f"/api/v1/proveedores/{proveedor.id}",
+        json={"grupo_id": "00000000-0000-0000-0000-000000000000"},
+    )
+    assert resp.status_code == 404
+    assert resp.json()["detail"] == "Grupo no encontrado"
+
+
 def test_grupo_nombre_duplicado(authenticated_client):
     resp = authenticated_client.post("/api/v1/grupos/", json={"nombre": "Repetido"})
     assert resp.status_code == 201
