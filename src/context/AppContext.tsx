@@ -50,7 +50,7 @@ interface AppContextType {
   addOrdenItems: (items: OrdenItem[]) => void;
   updateOrdenItem: (id: string, item: Partial<OrdenItem>) => void;
   updateEstadoOrden: (ordenId: string, estado: EstadoOrden) => void;
-  updateEstadoOrdenesMasivo: (ordenIds: string[], estado: EstadoOrden) => void;
+  updateEstadoOrdenesMasivo: (ordenIds: string[], estado: EstadoOrden) => Promise<{ actualizadas: number; omitidas: string[] }>;
   deleteOrdenItem: (id: string) => void;
   clearOrdenItems: () => void;
   assignComisionistasGlobal: (comisionistaIds: string[]) => void;
@@ -492,9 +492,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   );
 
   const updateEstadoOrdenesMasivo = useCallback(
-    (ordenIds: string[], estado: EstadoOrden) => {
-      updateEstadoOrdenesMasivoMutation.mutate({ ordenIds, estado });
-    },
+    (ordenIds: string[], estado: EstadoOrden) =>
+      updateEstadoOrdenesMasivoMutation.mutateAsync({ ordenIds, estado }),
     [updateEstadoOrdenesMasivoMutation]
   );
 

@@ -388,8 +388,10 @@ export function OrdenesTab() {
     setSelectedOrdenIds(todasSeleccionadas ? new Set() : new Set(ordenesSeleccionables.map(o => o.id)));
   };
   const handleMarcarPagadas = () => {
-    updateEstadoOrdenesMasivo(Array.from(selectedOrdenIds), 'pagada');
-    setSelectedOrdenIds(new Set());
+    // Limpiar la selección solo si la mutación tiene éxito; el toast de error ya lo maneja el contexto
+    updateEstadoOrdenesMasivo(Array.from(selectedOrdenIds), 'pagada')
+      .then(() => setSelectedOrdenIds(new Set()))
+      .catch(() => {});
   };
 
   const resetManualForm = () => {
