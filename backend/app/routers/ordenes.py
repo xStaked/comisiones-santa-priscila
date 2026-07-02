@@ -59,6 +59,11 @@ class EstadoOrdenBody(BaseModel):
     estado: str
 
 
+class EstadoMasivoBody(BaseModel):
+    orden_ids: List[UUID]
+    estado: str
+
+
 def _parse_estado_orden(value: str) -> EstadoOrden:
     try:
         return EstadoOrden(value)
@@ -404,6 +409,48 @@ def asignar_comisionistas_a_orden(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
         ) from exc
+
+
+@router.put("/grupos/estado-masivo")
+def actualizar_estado_ordenes_masivo(
+    body: EstadoMasivoBody,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    nuevo_estado = _parse_estado_orden(body.estado)
+    if nuevo_estado == EstadoOrden.liquidada:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="El estado liquidada se asigna al guardar una liquidación",
+        )
+
+    ordenes = (
+        db.query(Orden)
+        .options(selectinload(Orden.items))
+        .filter(Orden.id.in_(body.orden_ids))
+        .all()
+    )
+    encontradas = {orden.id for orden in ordenes}
+    omitidas = [str(oid) for oid in body.orden_ids if oid not in encontradas]
+
+    actualizadas = 0
+    try:
+        for orden in ordenes:
+            if any(item.estado == EstadoOrden.liquidada for item in orden.items):
+                omitidas.append(str(orden.id))
+                continue
+            orden.estado = nuevo_estado
+            for item in orden.items:
+                item.estado = nuevo_estado
+            actualizadas += 1
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
+        ) from exc
+
+    return {"actualizadas": actualizadas, "omitidas": omitidas}
 
 
 @router.put("/grupos/{id}/estado")

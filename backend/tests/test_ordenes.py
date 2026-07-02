@@ -1,6 +1,9 @@
 from datetime import date
+from decimal import Decimal
 
 import pytest
+
+from app.models.orden import EstadoOrden, Orden, OrdenItem
 
 
 def test_list_ordenes_unauthenticated(client):
@@ -820,3 +823,44 @@ def test_delete_orden(authenticated_client):
     list_resp = authenticated_client.get("/api/v1/ordenes/")
     ordenes = list_resp.json()
     assert all(o["id"] != oid for o in ordenes)
+
+
+def test_estado_masivo_marca_pagadas_y_omite_liquidadas(authenticated_client, db_session):
+    o1 = Orden(fecha=date.today(), numero_orden="MAS-1", origen="manual", estado=EstadoOrden.pendiente)
+    o2 = Orden(fecha=date.today(), numero_orden="MAS-2", origen="manual", estado=EstadoOrden.liquidada)
+    db_session.add_all([o1, o2])
+    db_session.flush()
+    i1 = OrdenItem(
+        orden_id=o1.id, fecha=date.today(), numero_orden="MAS-1", finca="F", producto="P",
+        cantidad=Decimal("1"), unidad="kg", precio_unitario=Decimal("1"), total=Decimal("1"),
+        estado=EstadoOrden.pendiente,
+    )
+    i2 = OrdenItem(
+        orden_id=o2.id, fecha=date.today(), numero_orden="MAS-2", finca="F", producto="P",
+        cantidad=Decimal("1"), unidad="kg", precio_unitario=Decimal("1"), total=Decimal("1"),
+        estado=EstadoOrden.liquidada,
+    )
+    db_session.add_all([i1, i2])
+    db_session.commit()
+
+    resp = authenticated_client.put(
+        "/api/v1/ordenes/grupos/estado-masivo",
+        json={"orden_ids": [str(o1.id), str(o2.id)], "estado": "pagada"},
+    )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["actualizadas"] == 1
+    assert str(o2.id) in data["omitidas"]
+    db_session.refresh(o1)
+    db_session.refresh(i1)
+    assert o1.estado == EstadoOrden.pagada
+    assert i1.estado == EstadoOrden.pagada
+
+
+def test_estado_masivo_rechaza_liquidada_como_destino(authenticated_client):
+    resp = authenticated_client.put(
+        "/api/v1/ordenes/grupos/estado-masivo",
+        json={"orden_ids": [], "estado": "liquidada"},
+    )
+    assert resp.status_code == 400
