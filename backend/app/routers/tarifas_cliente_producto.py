@@ -17,6 +17,7 @@ from app.schemas.tarifa_cliente_producto import (
     TarifaClienteProductoCreate,
     TarifaClienteProductoResponse,
     TarifaClienteProductoUpdate,
+    TarifaUpdateMasivo,
 )
 
 router = APIRouter()
@@ -114,6 +115,44 @@ def crear_tarifa_cliente_producto(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
         ) from exc
+
+
+@router.put("/masivo")
+def actualizar_tarifas_masivo(
+    data: TarifaUpdateMasivo,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    cambios = data.cambios.model_dump(exclude_none=True)
+    if not cambios:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No se especificó ningún cambio",
+        )
+
+    tarifas = (
+        db.query(TarifaClienteProducto)
+        .filter(TarifaClienteProducto.id.in_(data.ids))
+        .all()
+    )
+    if len(tarifas) != len(set(data.ids)):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Alguna de las tarifas seleccionadas no existe",
+        )
+
+    try:
+        for tarifa in tarifas:
+            for campo, valor in cambios.items():
+                setattr(tarifa, campo, valor)
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
+        ) from exc
+
+    return {"actualizadas": len(tarifas)}
 
 
 @router.put("/{id}", response_model=TarifaClienteProductoResponse)

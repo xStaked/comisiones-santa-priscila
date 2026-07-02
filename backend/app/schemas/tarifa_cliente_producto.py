@@ -45,3 +45,14 @@ class TarifaClienteProductoResponse(BaseModel):
     finca: Optional[str] = None
 
     model_config = ConfigDict(populate_by_name=True, from_attributes=True)
+
+
+class TarifaCambiosMasivos(BaseModel):
+    tipo: Optional[str] = None
+    valor: Optional[Decimal] = None
+    activo: Optional[bool] = None
+
+
+class TarifaUpdateMasivo(BaseModel):
+    ids: List[UUID]
+    cambios: TarifaCambiosMasivos
