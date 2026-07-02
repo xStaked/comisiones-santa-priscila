@@ -1,8 +1,15 @@
 export type EstadoOrden = 'pendiente' | 'parcialmente_pagada' | 'pagada' | 'liquidada';
 
+export interface Grupo {
+  id: string;
+  nombre: string;
+}
+
 export interface Proveedor {
   id: string;
   nombre: string;
+  grupoId?: string;
+  grupo?: string;
 }
 
 export interface TarifaComision {

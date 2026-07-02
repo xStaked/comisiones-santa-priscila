@@ -13,6 +13,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
     pathname.startsWith('/productos') ? 'productos' :
     pathname.startsWith('/tarifas') ? 'tarifas' :
     pathname.startsWith('/comisionistas') ? 'comisionistas' :
+    pathname.startsWith('/proveedores') ? 'proveedores' :
     pathname.startsWith('/ordenes') ? 'ordenes' :
     pathname.startsWith('/liquidacion') ? 'liquidacion' :
     pathname.startsWith('/reportes') ? 'reportes' :

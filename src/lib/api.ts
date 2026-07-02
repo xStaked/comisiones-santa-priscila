@@ -1,6 +1,6 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 import { toCamelCase, toSnakeCase } from './transform';
-import type { EstadoOrden, Liquidacion, OrdenItem } from '@/types';
+import type { EstadoOrden, Grupo, Liquidacion, OrdenItem } from '@/types';
 
 const API_BASE_URL = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000').replace(/\/+$/, '');
 
@@ -396,6 +396,25 @@ export async function updateTarifasClienteProductoMasivo(
 export async function fetchProveedores() {
   const res = await api.get('/api/v1/proveedores/');
   return toCamelCase(res.data);
+}
+
+export async function updateProveedor(id: string, grupoId: string | null) {
+  const res = await api.put(`/api/v1/proveedores/${id}`, toSnakeCase({ grupoId }));
+  return toCamelCase(res.data);
+}
+
+export async function fetchGrupos() {
+  const res = await api.get('/api/v1/grupos/');
+  return toCamelCase<Grupo[]>(res.data);
+}
+
+export async function createGrupo(nombre: string) {
+  const res = await api.post('/api/v1/grupos/', { nombre });
+  return toCamelCase<Grupo>(res.data);
+}
+
+export async function deleteGrupo(id: string) {
+  await api.delete(`/api/v1/grupos/${id}`);
 }
 
 // Admin

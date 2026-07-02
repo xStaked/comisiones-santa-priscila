@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { LayoutDashboard, Calculator, Users, FileText, Download, History, BarChart3, LogOut, UserCircle, Building2, Package, Percent } from 'lucide-react';
+import { LayoutDashboard, Calculator, Users, FileText, Download, History, BarChart3, LogOut, UserCircle, Building2, Package, Percent, Truck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/context/AuthContext';
 
@@ -15,6 +15,7 @@ const tabs = [
   { value: 'productos', label: 'Productos', href: '/productos', icon: Package },
   { value: 'tarifas', label: 'Tarifas', href: '/tarifas', icon: Percent },
   { value: 'comisionistas', label: 'Comisionistas', href: '/comisionistas', icon: Users },
+  { value: 'proveedores', label: 'Proveedores', href: '/proveedores', icon: Truck },
   { value: 'ordenes', label: 'Órdenes', href: '/ordenes', icon: FileText },
   { value: 'liquidacion', label: 'Liquidación', href: '/liquidacion', icon: Download },
   { value: 'historial', label: 'Historial', href: '/historial', icon: History },
