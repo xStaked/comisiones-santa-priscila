@@ -8,6 +8,7 @@ from app.models.cliente import Cliente, Finca
 from app.models.producto import Producto
 from app.models.tarifa_cliente_producto import TarifaClienteProducto
 from app.models.proveedor import Proveedor
+from app.models.grupo import Grupo
 
 __all__ = [
     "BaseModel",
@@ -28,4 +29,5 @@ __all__ = [
     "Producto",
     "TarifaClienteProducto",
     "Proveedor",
+    "Grupo",
 ]
