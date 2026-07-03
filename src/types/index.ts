@@ -8,8 +8,6 @@ export interface Grupo {
 export interface Proveedor {
   id: string;
   nombre: string;
-  grupoId?: string;
-  grupo?: string;
 }
 
 export interface TarifaComision {
@@ -86,6 +84,8 @@ export interface Cliente {
   tipo: 'grupo' | 'individual';
   retencionPorcentaje: number;
   activo: boolean;
+  grupoId?: string;
+  grupo?: Grupo;
   createdAt: string;
   fincas?: Finca[];
 }

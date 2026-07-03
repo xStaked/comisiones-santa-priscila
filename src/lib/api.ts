@@ -398,11 +398,6 @@ export async function fetchProveedores() {
   return toCamelCase(res.data);
 }
 
-export async function updateProveedor(id: string, grupoId: string | null) {
-  const res = await api.put(`/api/v1/proveedores/${id}`, toSnakeCase({ grupoId }));
-  return toCamelCase(res.data);
-}
-
 export async function fetchGrupos() {
   const res = await api.get('/api/v1/grupos/');
   return toCamelCase<Grupo[]>(res.data);

@@ -10,6 +10,7 @@ El cliente entregó una lista de observaciones agrupadas en: órdenes y liquidac
 - Regla de Naranjo: umbral sobre volumen **acumulado dentro de la liquidación**, valor **3,50 $/kg** (`fijo_kg`). "Naranjo" no existe aún en el sistema; la regla se configura como dato, no como código.
 - "Razón social" = **Proveedor** (no Cliente).
 - Grupos: modelado **plano** (sin entidad sector por ahora).
+- **Corrección (2026-07-02):** los grupos son conjuntos de **clientes**, no de proveedores. `grupo_id` vive en `clientes`; la columna "Grupo" del export muestra el grupo del cliente de cada fila y las hojas siguen siendo por razón social (proveedor).
 
 ## Alcance (6 ítems, en orden de ejecución)
 

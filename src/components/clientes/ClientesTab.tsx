@@ -5,7 +5,7 @@ import { isAxiosError } from 'axios';
 import { Plus, Pencil, Trash2, Search, Building2, X, PlusCircle, ToggleLeft, ToggleRight, Tag } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useApp } from '@/context/AppContext';
-import { Cliente, Finca } from '@/types';
+import { Cliente, Finca, Grupo } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -20,7 +20,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { toast } from 'sonner';
-import { fetchFincas, createFinca, updateFinca as apiUpdateFinca, deleteFinca as apiDeleteFinca } from '@/lib/api';
+import { fetchFincas, createFinca, updateFinca as apiUpdateFinca, deleteFinca as apiDeleteFinca, fetchGrupos, createGrupo, deleteGrupo } from '@/lib/api';
 
 function mostrarErrorFinca(error: unknown, mensaje: string) {
   const detalle = isAxiosError<{ detail?: string }>(error) ? error.response?.data?.detail : undefined;
@@ -39,6 +39,7 @@ export function ClientesTab() {
     tipo: 'grupo' | 'individual';
     retencionPorcentaje: string;
     activo: boolean;
+    grupoId: string;
     fincas: { id?: string; nombre: string }[];
     nuevaFinca: string;
   }>({
@@ -46,9 +47,45 @@ export function ClientesTab() {
     tipo: 'individual',
     retencionPorcentaje: '0',
     activo: true,
+    grupoId: '',
     fincas: [],
     nuevaFinca: '',
   });
+  const [nuevoGrupo, setNuevoGrupo] = useState('');
+
+  const { data: grupos = [] } = useQuery<Grupo[]>({
+    queryKey: ['grupos'],
+    queryFn: fetchGrupos,
+  });
+
+  const crearGrupoMutation = useMutation({
+    mutationFn: createGrupo,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['grupos'] });
+      setNuevoGrupo('');
+      toast.success('Grupo creado');
+    },
+    onError: (err) => mostrarErrorFinca(err, 'Error al crear grupo'),
+  });
+
+  const eliminarGrupoMutation = useMutation({
+    mutationFn: deleteGrupo,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['grupos'] });
+      queryClient.invalidateQueries({ queryKey: ['clientes'] });
+      toast.success('Grupo eliminado');
+    },
+    onError: (err) => mostrarErrorFinca(err, 'Error al eliminar grupo'),
+  });
+
+  const handleCrearGrupo = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!nuevoGrupo.trim()) {
+      toast.error('Ingresa un nombre de grupo');
+      return;
+    }
+    crearGrupoMutation.mutate(nuevoGrupo.trim());
+  };
 
   const fincasQuery = useQuery({
     queryKey: ['fincas', editing?.id],
@@ -97,6 +134,7 @@ export function ClientesTab() {
       tipo: 'individual',
       retencionPorcentaje: '0',
       activo: true,
+      grupoId: '',
       fincas: [],
       nuevaFinca: '',
     });
@@ -121,6 +159,7 @@ export function ClientesTab() {
       tipo: form.tipo,
       retencionPorcentaje: retencion,
       activo: form.activo,
+      grupoId: form.grupoId || undefined,
     };
 
     if (editing) {
@@ -170,6 +209,7 @@ export function ClientesTab() {
       tipo: c.tipo,
       retencionPorcentaje: c.retencionPorcentaje.toString(),
       activo: c.activo,
+      grupoId: c.grupoId || '',
       fincas: fincasCliente.map((f) => ({ id: f.id, nombre: f.nombre })),
       nuevaFinca: '',
     });
@@ -281,6 +321,28 @@ export function ClientesTab() {
                 </div>
               </div>
 
+              <div className="space-y-2">
+                <Label>Grupo empresarial</Label>
+                <Select
+                  value={form.grupoId}
+                  onValueChange={(value) => setForm({ ...form, grupoId: value || '' })}
+                >
+                  <SelectTrigger className="w-full rounded-xl border-slate-200 bg-white h-10 text-sm text-slate-900">
+                    <span className="flex flex-1 truncate text-left">
+                      {grupos.find((g) => g.id === form.grupoId)?.nombre || 'N/A (sin grupo)'}
+                    </span>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">N/A (sin grupo)</SelectItem>
+                    {grupos.map((g) => (
+                      <SelectItem key={g.id} value={g.id}>
+                        {g.nombre}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
               <div className="flex items-center gap-3">
                 <Button
                   type="button"
@@ -364,6 +426,49 @@ export function ClientesTab() {
         </Dialog>
       </div>
 
+      <Card className="rounded-2xl border-slate-200">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base text-slate-900">Grupos empresariales</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <form onSubmit={handleCrearGrupo} className="flex gap-2">
+            <Input
+              placeholder="Nombre del nuevo grupo..."
+              value={nuevoGrupo}
+              onChange={(e) => setNuevoGrupo(e.target.value)}
+              className="bg-white border-slate-200 rounded-xl w-72"
+            />
+            <Button type="submit" className="btn-primary-dark rounded-xl">
+              <Plus className="h-4 w-4 mr-2" />
+              Crear Grupo
+            </Button>
+          </form>
+          <div className="flex flex-wrap gap-2">
+            {grupos.length === 0 ? (
+              <p className="text-sm text-slate-500">No hay grupos creados</p>
+            ) : (
+              grupos.map((g) => (
+                <Badge key={g.id} variant="secondary" className="flex items-center gap-2 bg-slate-100 text-slate-700 border-0 py-1.5 px-3">
+                  {g.nombre}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (confirm(`¿Eliminar el grupo "${g.nombre}"? Los clientes asignados quedarán sin grupo.`)) {
+                        eliminarGrupoMutation.mutate(g.id);
+                      }
+                    }}
+                    className="text-slate-400 hover:text-red-600"
+                    aria-label={`Eliminar grupo ${g.nombre}`}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </Badge>
+              ))
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
       {filtered.length === 0 ? (
         <div className="text-center py-16 bg-white rounded-2xl border border-dashed border-slate-200">
           <Building2 className="h-12 w-12 text-slate-300 mx-auto mb-4" />
@@ -417,6 +522,11 @@ export function ClientesTab() {
                   <Badge variant="secondary" className="flex items-center gap-1 bg-slate-100 text-slate-700 border-0">
                     Retención: {c.retencionPorcentaje}%
                   </Badge>
+                  {c.grupo && (
+                    <Badge variant="secondary" className="flex items-center gap-1 bg-indigo-50 text-indigo-700 border-0">
+                      {c.grupo.nombre}
+                    </Badge>
+                  )}
                 </div>
                 {c.tipo === 'grupo' && (
                   <div className="pt-2 border-t border-slate-100">

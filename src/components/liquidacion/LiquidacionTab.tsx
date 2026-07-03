@@ -2,12 +2,10 @@
 
 import { useState, useMemo } from 'react';
 import { FileText, FileSpreadsheet, Save, Calculator, Filter, ChevronRight } from 'lucide-react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import * as XLSX from 'xlsx';
 import { useApp } from '@/context/AppContext';
 import { exportarPDF, exportarExcel, calcularDetalleComision, getCantidadParaTarifaKg } from '@/lib/export-utils';
-import { fetchProveedores } from '@/lib/api';
-import type { Proveedor } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -24,7 +22,7 @@ import {
 import { toast } from 'sonner';
 
 export function LiquidacionTab() {
-  const { comisionistas, ordenItems, saveLiquidacion, tarifasClienteProducto } = useApp();
+  const { comisionistas, ordenItems, saveLiquidacion, tarifasClienteProducto, clientes } = useApp();
   const [filterComisionista, setFilterComisionista] = useState('');
   const [filterFactura, setFilterFactura] = useState('');
   const [nombreLiquidacion, setNombreLiquidacion] = useState('');
@@ -40,11 +38,6 @@ export function LiquidacionTab() {
     const next = new Set(prev);
     if (next.has(key)) next.delete(key); else next.add(key);
     return next;
-  });
-
-  const { data: proveedores = [] } = useQuery<Proveedor[]>({
-    queryKey: ['proveedores'],
-    queryFn: fetchProveedores,
   });
 
   const comisionistaMap = useMemo(() =>
@@ -187,7 +180,7 @@ export function LiquidacionTab() {
       return;
     }
     const com = filterComisionista ? comisionistaMap.get(filterComisionista) : undefined;
-    exportarExcel(selectedFiltered, comisionistas, 'Liquidacion', com?.nombre, tarifasClienteProducto, undefined, kgPorComisionista, proveedores);
+    exportarExcel(selectedFiltered, comisionistas, 'Liquidacion', com?.nombre, tarifasClienteProducto, undefined, kgPorComisionista, clientes);
     toast.success('Excel generado');
   };
 

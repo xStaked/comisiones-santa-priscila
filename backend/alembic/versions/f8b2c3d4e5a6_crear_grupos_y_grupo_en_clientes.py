@@ -1,4 +1,4 @@
-"""crear grupos y grupo_id en proveedores
+"""crear grupos y grupo_id en clientes
 
 Revision ID: f8b2c3d4e5a6
 Revises: e7a1b2c3d4f5
@@ -26,13 +26,13 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("nombre"),
     )
-    op.add_column("proveedores", sa.Column("grupo_id", sa.Uuid(), nullable=True))
+    op.add_column("clientes", sa.Column("grupo_id", sa.Uuid(), nullable=True))
     op.create_foreign_key(
-        "fk_proveedores_grupo_id", "proveedores", "grupos", ["grupo_id"], ["id"], ondelete="SET NULL"
+        "fk_clientes_grupo_id", "clientes", "grupos", ["grupo_id"], ["id"], ondelete="SET NULL"
     )
 
 
 def downgrade() -> None:
-    op.drop_constraint("fk_proveedores_grupo_id", "proveedores", type_="foreignkey")
-    op.drop_column("proveedores", "grupo_id")
+    op.drop_constraint("fk_clientes_grupo_id", "clientes", type_="foreignkey")
+    op.drop_column("clientes", "grupo_id")
     op.drop_table("grupos")

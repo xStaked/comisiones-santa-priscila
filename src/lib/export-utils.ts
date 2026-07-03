@@ -1,7 +1,7 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
-import { OrdenItem, Comisionista, TarifaClienteProducto, Proveedor } from '@/types';
+import { OrdenItem, Comisionista, TarifaClienteProducto, Cliente } from '@/types';
 import {
   normalizarTexto,
   normalizarNombreFinca,
@@ -557,17 +557,20 @@ export function exportarExcel(
   tarifasClienteProducto: TarifaClienteProducto[] = [],
   comisionesSnapshot?: Map<string, { comision: number; tarifasLabel: string }>,
   kgAcumuladoPorComisionista?: Map<string, number>,
-  proveedores: Proveedor[] = []
+  clientes: Cliente[] = []
 ) {
   const comisionistaMap = new Map(comisionistas.map(c => [c.id, c]));
   const wb = XLSX.utils.book_new();
 
   const nombresMes = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 
-  // Razón social = proveedor. Grupo del proveedor vía catálogo (match normalizado).
-  const grupoPorProveedor = new Map(
-    proveedores.map(p => [normalizarTexto(p.nombre), p.grupo || 'N/A'])
-  );
+  // El grupo empresarial es del CLIENTE de cada fila (las hojas siguen siendo por razón social/proveedor).
+  const grupoPorClienteId = new Map(clientes.map(c => [c.id, c.grupo?.nombre]));
+  const grupoPorClienteNombre = new Map(clientes.map(c => [normalizarTexto(c.nombre), c.grupo?.nombre]));
+  const grupoDelItem = (item: OrdenItem) =>
+    (item.clienteId && grupoPorClienteId.get(item.clienteId)) ||
+    (item.cliente?.nombre && grupoPorClienteNombre.get(normalizarTexto(item.cliente.nombre))) ||
+    'N/A';
 
   // Agrupar ítems por proveedor (una hoja por razón social)
   const itemsPorProveedor = new Map<string, OrdenItem[]>();
@@ -582,7 +585,6 @@ export function exportarExcel(
 
   nombresProveedor.forEach(nombreProveedor => {
     const itemsProveedor = itemsPorProveedor.get(nombreProveedor)!;
-    const grupo = grupoPorProveedor.get(normalizarTexto(nombreProveedor)) || 'N/A';
 
     // Agrupar items por comisionista, luego por mes (formato original por hoja)
     const itemsPorComisionista = new Map<string, Map<string, OrdenItem[]>>();
@@ -613,7 +615,7 @@ export function exportarExcel(
     const data: any[] = [];
     let totalProveedor = 0;
 
-    data.push([`Razón social: ${nombreProveedor}`, '', `Grupo: ${grupo}`]);
+    data.push([`Razón social: ${nombreProveedor}`]);
     data.push([]);
 
     comisionistaIds.forEach(comId => {
@@ -660,7 +662,7 @@ export function exportarExcel(
             `$ ${comision.toFixed(2).replace('.', ',')}`,
             item.estado || 'pagada',
             item.sector || item.finca || '-',
-            grupo,
+            grupoDelItem(item),
           ]);
         });
 

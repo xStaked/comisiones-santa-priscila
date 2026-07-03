@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.models.cliente import Cliente, Finca
+from app.models.grupo import Grupo
 from app.models.user import User
 from app.schemas.cliente import (
     ClienteCreate,
@@ -21,6 +22,16 @@ from app.schemas.cliente import (
 router = APIRouter()
 
 
+def _validar_grupo(db: Session, grupo_id: uuid.UUID | None) -> None:
+    if grupo_id is not None:
+        grupo = db.query(Grupo).filter(Grupo.id == grupo_id).first()
+        if not grupo:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Grupo no encontrado",
+            )
+
+
 @router.get("/", response_model=list[ClienteResponse])
 def listar_clientes(
     db: Session = Depends(get_db),
@@ -28,7 +39,7 @@ def listar_clientes(
 ):
     return (
         db.query(Cliente)
-        .options(selectinload(Cliente.fincas))
+        .options(selectinload(Cliente.fincas), selectinload(Cliente.grupo))
         .all()
     )
 
@@ -41,10 +52,12 @@ def crear_cliente(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    _validar_grupo(db, data.grupo_id)
     cliente = Cliente(
         nombre=data.nombre,
         tipo=data.tipo,
         retencion_porcentaje=data.retencion_porcentaje,
+        grupo_id=data.grupo_id,
     )
     db.add(cliente)
     try:
@@ -72,9 +85,11 @@ def actualizar_cliente(
             detail="Cliente no encontrado",
         )
 
+    _validar_grupo(db, data.grupo_id)
     cliente.nombre = data.nombre
     cliente.tipo = data.tipo
     cliente.retencion_porcentaje = data.retencion_porcentaje
+    cliente.grupo_id = data.grupo_id
 
     try:
         db.commit()
