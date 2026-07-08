@@ -387,9 +387,9 @@ export function OrdenesTab() {
   const toggleSeleccionarTodas = () => {
     setSelectedOrdenIds(todasSeleccionadas ? new Set() : new Set(ordenesSeleccionables.map(o => o.id)));
   };
-  const handleMarcarPagadas = () => {
+  const handleCambiarEstadoMasivo = (estado: EstadoOrden) => {
     // Limpiar la selección solo si la mutación tiene éxito; el toast de error ya lo maneja el contexto
-    updateEstadoOrdenesMasivo(Array.from(selectedOrdenIds), 'pagada')
+    updateEstadoOrdenesMasivo(Array.from(selectedOrdenIds), estado)
       .then(() => setSelectedOrdenIds(new Set()))
       .catch(() => {});
   };
@@ -1108,13 +1108,23 @@ export function OrdenesTab() {
                   }
                 </span>
                 {selectedOrdenIds.size > 0 && (
-                  <Button
-                    size="sm"
-                    onClick={handleMarcarPagadas}
-                    className="btn-primary-dark rounded-lg h-7 text-xs"
+                  <Select
+                    value={null}
+                    onValueChange={(value) => value && handleCambiarEstadoMasivo(value as EstadoOrden)}
                   >
-                    Marcar como pagadas ({selectedOrdenIds.size})
-                  </Button>
+                    <SelectTrigger className="btn-primary-dark rounded-lg h-7 text-xs border-0 gap-1">
+                      <SelectValue>
+                        {`Marcar como... (${selectedOrdenIds.size})`}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {ESTADOS_ORDEN.filter((estado) => estado.value !== 'liquidada').map((estado) => (
+                        <SelectItem key={estado.value} value={estado.value}>
+                          {estado.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 )}
               </div>
               <div className="flex items-center gap-1">
