@@ -20,6 +20,20 @@ export function normalizarTexto(valor?: string): string | undefined {
     .replace(/\s+/g, ' ');
 }
 
+// ponytail: lista corta de sufijos vistos en órdenes reales; ampliar si aparece otro
+const SUFIJOS_SOCIETARIOS = new Set(['CIA', 'LTDA', 'SA', 'S', 'A', 'CA', 'SAS']);
+
+/**
+ * Clave de matching para razones sociales: ignora tildes, puntuación y
+ * sufijos societarios finales (CIA. LTDA., S.A., ...) para unificar variantes
+ * de la misma empresa que vienen distintas en cada PDF.
+ */
+export function normalizarRazonSocial(valor?: string): string {
+  const tokens = (normalizarTexto(valor) ?? '').split(' ').filter(Boolean);
+  while (tokens.length && SUFIJOS_SOCIETARIOS.has(tokens[tokens.length - 1])) tokens.pop();
+  return tokens.join(' ');
+}
+
 export function normalizarNombreFinca(valor?: string): string | undefined {
   return normalizarTexto(valor)
     ?.split(' ')

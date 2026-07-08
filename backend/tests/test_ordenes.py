@@ -864,3 +864,37 @@ def test_estado_masivo_rechaza_liquidada_como_destino(authenticated_client):
         json={"orden_ids": [], "estado": "liquidada"},
     )
     assert resp.status_code == 400
+
+
+def test_proveedor_se_canonicaliza_contra_variantes(authenticated_client):
+    def payload(numero, proveedor):
+        return [{
+            "fecha": str(date.today()),
+            "numero_orden": numero,
+            "finca": "Finca Test",
+            "producto": "Camarón",
+            "cantidad": "100.00",
+            "unidad": "kg",
+            "precio_unitario": "5.50",
+            "total": "550.00",
+            "comisionista_ids": [],
+            "proveedor": proveedor,
+        }]
+
+    r1 = authenticated_client.post(
+        "/api/v1/ordenes/", json=payload("ORD-PROV-1", "ACME DEL MAR CIA.LTDA.")
+    )
+    r2 = authenticated_client.post(
+        "/api/v1/ordenes/", json=payload("ORD-PROV-2", "ACME  DEL MAR CIA. LTDA.")
+    )
+    r3 = authenticated_client.post(
+        "/api/v1/ordenes/", json=payload("ORD-PROV-3", "ACME DEL MAR")
+    )
+    assert r1.status_code == r2.status_code == r3.status_code == 201
+
+    ordenes = authenticated_client.get("/api/v1/ordenes/?agrupadas=true").json()
+    proveedores = {
+        o["proveedor"] for o in ordenes if o["numero_orden"].startswith("ORD-PROV-")
+    }
+    # Las tres variantes tipográficas quedan con la razón social registrada primero
+    assert proveedores == {"ACME DEL MAR CIA.LTDA."}

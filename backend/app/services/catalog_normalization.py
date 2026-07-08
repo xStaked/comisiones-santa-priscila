@@ -90,6 +90,20 @@ def normalizar_nombre_producto(nombre: str) -> str:
     return normalizado
 
 
+# ponytail: lista corta de sufijos vistos en órdenes reales; ampliar si aparece otro
+_SUFIJOS_SOCIETARIOS = {"CIA", "LTDA", "SA", "S", "A", "CA", "SAS"}
+
+
+def normalizar_razon_social(nombre: str | None) -> str:
+    """Clave de matching para razones sociales: ignora tildes, puntuación y
+    sufijos societarios finales (CIA. LTDA., S.A., ...) para unificar variantes
+    de la misma empresa que vienen distintas en cada PDF."""
+    tokens = _normalizar_texto(nombre or "").split()
+    while tokens and tokens[-1] in _SUFIJOS_SOCIETARIOS:
+        tokens.pop()
+    return " ".join(tokens)
+
+
 def es_proveedor_comodin(proveedor: str | None) -> bool:
     return not _normalizar_texto(proveedor or "") or _normalizar_texto(proveedor or "") == "CUALQUIER PROVEEDOR"
 

@@ -12,8 +12,10 @@ from sqlalchemy.orm import Session, selectinload
 from app.database import get_db
 from app.models.user import User
 from app.models.orden import Asignacion, EstadoOrden, Orden, OrdenItem
+from app.models.proveedor import Proveedor
 from app.schemas.orden import OrdenCreate, OrdenItemCreate, OrdenItemResponse, OrdenItemUpdate
 from app.dependencies import get_current_user
+from app.services.catalog_normalization import normalizar_razon_social
 from app.services.liquidacion import (
     _buscar_tarifa_especifica,
     _tiene_tarifas_especificas,
@@ -40,6 +42,22 @@ def _comisionistas_aplicables(
         elif not _tiene_tarifas_especificas(db, cid):
             aplicables.append(cid)
     return aplicables
+
+
+def _canonicalizar_proveedor(db: Session, nombre: str | None) -> str | None:
+    """Unifica variantes tipográficas de la razón social (CIA.LTDA., espacios,
+    tildes) contra el catálogo de proveedores; si es nueva, la registra.
+    Evita hojas duplicadas por proveedor en la exportación."""
+    limpio = " ".join((nombre or "").split())
+    clave = normalizar_razon_social(limpio)
+    if not clave:
+        return nombre
+    for prov in db.query(Proveedor).all():
+        if normalizar_razon_social(prov.nombre) == clave:
+            return prov.nombre
+    db.add(Proveedor(nombre=limpio))
+    db.flush()
+    return limpio
 
 
 class ComisionistaAsignacionBody(BaseModel):
@@ -141,14 +159,15 @@ def crear_ordenes(
             ordenes_por_clave: dict[tuple[date, str, str | None], Orden] = {}
             for raw_item in payload:
                 item = OrdenItemCreate.model_validate(raw_item)
-                clave = (item.fecha, item.numero_orden, item.proveedor)
+                proveedor = _canonicalizar_proveedor(db, item.proveedor)
+                clave = (item.fecha, item.numero_orden, proveedor)
                 orden = ordenes_por_clave.get(clave)
                 if not orden:
                     orden = Orden(
                         fecha=item.fecha,
                         numero_orden=item.numero_orden,
                         cliente_id=None,
-                        proveedor=item.proveedor,
+                        proveedor=proveedor,
                         origen="manual",
                         estado=EstadoOrden.pendiente,
                     )
@@ -168,7 +187,7 @@ def crear_ordenes(
             fecha=orden_data.fecha,
             numero_orden=orden_data.numero_orden,
             cliente_id=orden_data.cliente_id,
-            proveedor=orden_data.proveedor,
+            proveedor=_canonicalizar_proveedor(db, orden_data.proveedor),
             semana=orden_data.semana,
             archivo_nombre=orden_data.archivo_nombre,
             origen=orden_data.origen,

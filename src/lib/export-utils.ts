@@ -6,6 +6,7 @@ import {
   normalizarTexto,
   normalizarNombreFinca,
   normalizarNombreProducto,
+  normalizarRazonSocial,
 } from './normalization';
 
 export function calcularComisionPorTarifa(item: OrdenItem, tarifa: { tipo: 'porcentaje' | 'fijo_kg' | 'fijo_unidad'; valor: number }): number {
@@ -572,19 +573,27 @@ export function exportarExcel(
     (item.cliente?.nombre && grupoPorClienteNombre.get(normalizarTexto(item.cliente.nombre))) ||
     'N/A';
 
-  // Agrupar ítems por proveedor (una hoja por razón social)
-  const itemsPorProveedor = new Map<string, OrdenItem[]>();
+  // Agrupar ítems por proveedor (una hoja por razón social). La clave es la
+  // razón social normalizada para que variantes tipográficas de la misma
+  // empresa (con/sin "CIA.LTDA.") caigan en la misma hoja; se muestra el
+  // nombre más largo visto (normalmente el nombre legal completo).
+  const itemsPorProveedor = new Map<string, { nombre: string; items: OrdenItem[] }>();
   items.forEach(item => {
     const prov = item.proveedor?.trim() || 'Sin proveedor';
-    const arr = itemsPorProveedor.get(prov);
-    if (arr) arr.push(item); else itemsPorProveedor.set(prov, [item]);
+    const clave = normalizarRazonSocial(prov) || 'Sin proveedor';
+    const grupo = itemsPorProveedor.get(clave);
+    if (grupo) {
+      grupo.items.push(item);
+      if (prov.length > grupo.nombre.length) grupo.nombre = prov;
+    } else {
+      itemsPorProveedor.set(clave, { nombre: prov, items: [item] });
+    }
   });
 
-  const nombresProveedor = Array.from(itemsPorProveedor.keys()).sort((a, b) => a.localeCompare(b, 'es'));
+  const gruposProveedor = Array.from(itemsPorProveedor.values()).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
   const nombresHojaUsados = new Set<string>();
 
-  nombresProveedor.forEach(nombreProveedor => {
-    const itemsProveedor = itemsPorProveedor.get(nombreProveedor)!;
+  gruposProveedor.forEach(({ nombre: nombreProveedor, items: itemsProveedor }) => {
 
     // Agrupar items por comisionista, luego por mes (formato original por hoja)
     const itemsPorComisionista = new Map<string, Map<string, OrdenItem[]>>();
