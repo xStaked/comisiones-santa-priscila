@@ -381,8 +381,17 @@ def _comision_con_umbral(
 
 
 def crear_liquidacion(
-    db: Session, nombre: str, orden_item_ids: list[UUID]
+    db: Session,
+    nombre: str,
+    orden_item_ids: list[UUID],
+    comisionista_ids: list[UUID] | None = None,
 ) -> tuple[Liquidacion, list[dict]]:
+    """Liquida las asignaciones pendientes de los ítems indicados.
+
+    La liquidación es POR PERSONA: si `comisionista_ids` viene, solo se liquidan
+    las asignaciones de esos comisionistas. El resto queda pendiente y el ítem
+    sigue en estado `pagada` hasta que todas sus asignaciones estén liquidadas.
+    """
     from sqlalchemy.orm import selectinload
 
     orden_items = (
@@ -423,6 +432,27 @@ def crear_liquidacion(
     if not orden_items_pagados:
         raise ValueError("Ninguno de los ítems seleccionados pertenece a una orden pagada")
 
+    filtro = set(comisionista_ids) if comisionista_ids else None
+
+    def _pendientes(oi: OrdenItem) -> list[Asignacion]:
+        return [
+            a
+            for a in oi.asignaciones
+            if a.liquidacion_id is None
+            and (filtro is None or a.comisionista_id in filtro)
+        ]
+
+    # Sin filtro por persona, un ítem sin asignaciones también se liquida (comisión 0).
+    orden_items_pagados = [
+        oi
+        for oi in orden_items_pagados
+        if _pendientes(oi) or (filtro is None and not oi.asignaciones)
+    ]
+    if not orden_items_pagados:
+        raise ValueError(
+            "No hay comisionistas pendientes de liquidar en los ítems seleccionados"
+        )
+
     now = datetime.now()
     mes = now.strftime("%Y-%m")
 
@@ -437,7 +467,7 @@ def crear_liquidacion(
     # Volumen acumulado por comisionista dentro de ESTA liquidación (regla por umbral).
     kg_por_comisionista: dict[UUID, Decimal] = {}
     for oi in orden_items_pagados:
-        for asignacion in oi.asignaciones:
+        for asignacion in _pendientes(oi):
             cid = asignacion.comisionista_id
             kg_por_comisionista[cid] = (
                 kg_por_comisionista.get(cid, Decimal("0")) + _cantidad_para_tarifa_kg(oi)
@@ -466,7 +496,8 @@ def crear_liquidacion(
         db.add(li)
         db.flush()
 
-        for asignacion in oi.asignaciones:
+        for asignacion in _pendientes(oi):
+            asignacion.liquidacion_id = liquidacion.id
             comisionista = asignacion.comisionista
             tarifa_esp = _buscar_tarifa_especifica(db, oi, comisionista.id)
 
@@ -535,7 +566,9 @@ def crear_liquidacion(
 
     orden_ids = {oi.orden_id for oi in orden_items_pagados if oi.orden_id is not None}
     for oi in orden_items_pagados:
-        oi.estado = EstadoOrden.liquidada
+        # El ítem solo queda liquidado cuando TODAS sus asignaciones lo están.
+        if all(a.liquidacion_id is not None for a in oi.asignaciones):
+            oi.estado = EstadoOrden.liquidada
 
     db.flush()
     for orden_id in orden_ids:
@@ -573,6 +606,11 @@ def eliminar_liquidacion(db: Session, liquidacion_id: UUID) -> bool:
         if li.orden_item_id is not None
     ]
 
+    # Devuelve las asignaciones de esta liquidación al estado pendiente.
+    db.query(Asignacion).filter(Asignacion.liquidacion_id == liquidacion_id).update(
+        {Asignacion.liquidacion_id: None}, synchronize_session=False
+    )
+
     if orden_item_ids:
         db.query(OrdenItem).filter(OrdenItem.id.in_(orden_item_ids)).update(
             {OrdenItem.estado: EstadoOrden.pagada},
@@ -601,6 +639,10 @@ def restaurar_liquidacion(db: Session, liquidacion_id: UUID) -> list[UUID]:
     )
     if not liquidacion:
         raise ValueError("Liquidación no encontrada")
+
+    db.query(Asignacion).filter(Asignacion.liquidacion_id == liquidacion_id).update(
+        {Asignacion.liquidacion_id: None}, synchronize_session=False
+    )
 
     nuevos_ids: list[UUID] = []
     ordenes_restauradas: dict[UUID, Orden] = {}

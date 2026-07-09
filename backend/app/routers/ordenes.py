@@ -92,6 +92,11 @@ def _parse_estado_orden(value: str) -> EstadoOrden:
         ) from exc
 
 
+def _tiene_asignaciones_liquidadas(item: OrdenItem) -> bool:
+    """Liquidación parcial: el ítem sigue "pagada" pero ya pagó a algún comisionista."""
+    return any(a.liquidacion_id is not None for a in item.asignaciones)
+
+
 def _item_o_grupo_tiene_items_liquidados(db: Session, item: OrdenItem) -> bool:
     if item.estado == EstadoOrden.liquidada:
         return True
@@ -360,7 +365,7 @@ def actualizar_orden(
             )
         update_data["estado"] = nuevo_estado
 
-    if _item_o_grupo_tiene_items_liquidados(db, oi):
+    if _item_o_grupo_tiene_items_liquidados(db, oi) or _tiene_asignaciones_liquidadas(oi):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="No se puede modificar un ítem liquidado",
@@ -524,7 +529,7 @@ def eliminar_orden(id: UUID, db: Session = Depends(get_db), current_user: User =
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Orden no encontrada"
         )
-    if _item_o_grupo_tiene_items_liquidados(db, oi):
+    if _item_o_grupo_tiene_items_liquidados(db, oi) or _tiene_asignaciones_liquidadas(oi):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="No se puede eliminar un ítem liquidado",
@@ -612,10 +617,11 @@ def quitar_comisionista(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Asignación no encontrada",
         )
-    if asignacion.orden_item and _item_o_grupo_tiene_items_liquidados(db, asignacion.orden_item):
+    # La liquidación es por persona: solo bloquea si ESTA asignación ya se liquidó.
+    if asignacion.liquidacion_id is not None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No se puede modificar un ítem liquidado",
+            detail="No se puede quitar un comisionista ya liquidado",
         )
 
     try:

@@ -17,6 +17,7 @@ class AsignacionBase(BaseModel):
 
 class AsignacionResponse(AsignacionBase):
     id: UUID
+    liquidacion_id: Optional[UUID] = None
 
     class Config:
         from_attributes = True

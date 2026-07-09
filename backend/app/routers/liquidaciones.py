@@ -80,7 +80,7 @@ def listar_liquidaciones(db: Session = Depends(get_db), current_user: User = Dep
 def crear(data: LiquidacionCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     try:
         liquidacion, omitidos = crear_liquidacion(
-            db, data.nombre, data.orden_item_ids
+            db, data.nombre, data.orden_item_ids, data.comisionista_ids
         )
         return {
             "id": liquidacion.id,

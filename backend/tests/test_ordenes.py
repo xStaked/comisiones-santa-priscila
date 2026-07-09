@@ -658,11 +658,11 @@ def test_rechaza_modificar_items_de_grupo_parcialmente_liquidado(authenticated_c
     assert agregar_resp.status_code == 400
     assert "No se puede modificar un ítem liquidado" in agregar_resp.json()["detail"]
 
+    # La liquidación es por persona: este comisionista aún no cobró, se puede quitar.
     quitar_resp = authenticated_client.delete(
         f"/api/v1/ordenes/{item_hermano['id']}/comisionistas/{comisionista_id}",
     )
-    assert quitar_resp.status_code == 400
-    assert "No se puede modificar un ítem liquidado" in quitar_resp.json()["detail"]
+    assert quitar_resp.status_code == 204
 
     asignar_global_resp = authenticated_client.post(
         "/api/v1/ordenes/asignar-global",

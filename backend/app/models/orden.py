@@ -64,6 +64,13 @@ class Asignacion(BaseModel):
         ForeignKey("comisionistas.id", ondelete="CASCADE"),
         nullable=False,
     )
+    # La liquidación es por persona: cada asignación se liquida por separado.
+    # NULL = pendiente de liquidar.
+    liquidacion_id = Column(
+        Uuid,
+        ForeignKey("liquidaciones.id", ondelete="SET NULL"),
+        nullable=True,
+    )
 
     orden_item = relationship("OrdenItem", back_populates="asignaciones")
     comisionista = relationship("Comisionista", back_populates="asignaciones")

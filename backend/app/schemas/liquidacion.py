@@ -50,6 +50,8 @@ class LiquidacionBase(BaseModel):
 class LiquidacionCreate(BaseModel):
     nombre: str
     orden_item_ids: List[UUID]
+    # Vacío o ausente = liquidar todas las asignaciones pendientes de esos ítems.
+    comisionista_ids: Optional[List[UUID]] = None
 
 
 class LiquidacionResponse(LiquidacionBase):

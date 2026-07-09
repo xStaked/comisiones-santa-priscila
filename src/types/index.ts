@@ -26,6 +26,8 @@ export interface Comisionista {
 
 export interface AsignacionComisionista {
   comisionistaId: string;
+  /** null = pendiente de liquidar. La liquidación es por persona, no por orden. */
+  liquidacionId?: string | null;
 }
 
 export interface OrdenItem {
