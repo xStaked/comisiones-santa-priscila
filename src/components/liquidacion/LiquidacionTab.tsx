@@ -27,6 +27,8 @@ export function LiquidacionTab() {
   const [filterFactura, setFilterFactura] = useState('');
   const [nombreLiquidacion, setNombreLiquidacion] = useState('');
   const [previewOpen, setPreviewOpen] = useState(false);
+  // A quién se le paga en esta liquidación. Vacío = nadie: hay que elegir explícitamente.
+  const [comisionistasAPagar, setComisionistasAPagar] = useState<Set<string>>(new Set());
   // La selección es por ORDEN (no por ítem): destildar saca la orden completa con todos sus productos.
   // Por defecto todo está seleccionado; el usuario destilda lo que NO quiere liquidar.
   const [excludedIds, setExcludedIds] = useState<Set<string>>(new Set());
@@ -236,6 +238,11 @@ export function LiquidacionTab() {
       toast.error('Ingresa un nombre para la liquidación');
       return;
     }
+    // Si no hay nadie pendiente, se liquida igual: saca de la lista los ítems sin comisionista.
+    if (resumenPorComisionista.length > 0 && comisionistasAPagar.size === 0) {
+      toast.error('Selecciona al menos un comisionista a pagar');
+      return;
+    }
     // Refrescar datos para reducir el riesgo de enviar ítems stale; el backend revalida el estado.
     await queryClient.refetchQueries({ queryKey: ['ordenes'] });
     const ordenesActualizadas = queryClient.getQueryData<typeof ordenItems>(['ordenes']) ?? ordenItems;
@@ -248,8 +255,15 @@ export function LiquidacionTab() {
       toast.error('No hay órdenes pagadas seleccionadas para guardar');
       return;
     }
-    // Con filtro de comisionista se liquida SOLO a esa persona; el resto queda pendiente.
-    saveLiquidacion(nombreLiquidacion, ids, filterComisionista ? [filterComisionista] : undefined);
+    // Si se paga a todos los pendientes y no hay filtro, se omite la lista: así los ítems
+    // sin comisionista asignado también quedan liquidados (comisión 0), como antes.
+    const todosLosPendientes =
+      !filterComisionista && comisionistasAPagar.size === resumenPorComisionista.length;
+    saveLiquidacion(
+      nombreLiquidacion,
+      ids,
+      todosLosPendientes ? undefined : Array.from(comisionistasAPagar)
+    );
     setNombreLiquidacion('');
     setPreviewOpen(false);
   };
@@ -260,8 +274,20 @@ export function LiquidacionTab() {
       return;
     }
     setNombreLiquidacion(`Liquidación ${new Date().toLocaleDateString('es-ES')}`);
+    // El filtro de la barra superior solo preselecciona; la decisión se toma en el modal.
+    setComisionistasAPagar(new Set(filterComisionista ? [filterComisionista] : []));
     setPreviewOpen(true);
   };
+
+  const toggleComisionistaAPagar = (id: string) => setComisionistasAPagar(prev => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
+
+  const resumenAPagar = resumenPorComisionista.filter(c => comisionistasAPagar.has(c.id));
+  const totalAPagar = resumenAPagar.reduce((s, c) => s + c.comision, 0);
+  const itemsAPagar = resumenAPagar.reduce((s, c) => s + c.items, 0);
 
   if (ordenItems.length === 0) {
     return (
@@ -336,28 +362,81 @@ export function LiquidacionTab() {
                 <DialogTitle>Confirmar Liquidación</DialogTitle>
               </DialogHeader>
               <div className="space-y-4 mt-2">
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-slate-900">¿A quién le pagas?</Label>
+                    <div className="flex gap-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 px-2 text-xs text-slate-500 hover:text-slate-900"
+                        onClick={() => setComisionistasAPagar(new Set(resumenPorComisionista.map(c => c.id)))}
+                      >
+                        Todos
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 px-2 text-xs text-slate-500 hover:text-slate-900"
+                        onClick={() => setComisionistasAPagar(new Set())}
+                      >
+                        Ninguno
+                      </Button>
+                    </div>
+                  </div>
+                  <p className="text-xs text-slate-500">
+                    Solo se liquida a los comisionistas marcados. El resto queda pendiente y podrás liquidarlo después.
+                  </p>
+                  <div className="max-h-56 overflow-y-auto rounded-xl border border-slate-200 divide-y divide-slate-100">
+                    {resumenPorComisionista.length === 0 && (
+                      <p className="px-3 py-4 text-center text-xs text-slate-500">
+                        Las órdenes seleccionadas no tienen comisionistas pendientes. Se liquidarán con comisión $0.
+                      </p>
+                    )}
+                    {resumenPorComisionista.map(com => (
+                      <label
+                        key={com.id}
+                        className="flex items-center gap-3 px-3 py-2.5 cursor-pointer hover:bg-slate-50 transition-colors"
+                      >
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 cursor-pointer accent-emerald-600 shrink-0"
+                          checked={comisionistasAPagar.has(com.id)}
+                          onChange={() => toggleComisionistaAPagar(com.id)}
+                        />
+                        <span className="flex-1 min-w-0">
+                          <span className="block text-sm font-medium text-slate-900 truncate">{com.nombre}</span>
+                          <span className="block text-xs text-slate-400">{com.tarifasLabel} · {com.items} ítem{com.items === 1 ? '' : 's'}</span>
+                        </span>
+                        <span className="text-sm font-semibold text-emerald-700 tabular-nums shrink-0">
+                          ${com.comision.toFixed(2)}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
                 <div className="bg-slate-50 rounded-xl p-4 border border-slate-200 space-y-3">
                   <div className="flex justify-between items-center">
-                    <span className="text-sm text-slate-500">Órdenes pagadas a liquidar</span>
+                    <span className="text-sm text-slate-500">Órdenes a liquidar</span>
                     <span className="text-sm font-semibold text-slate-900">{cantidadOrdenes}</span>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-sm text-slate-500">Productos a liquidar</span>
-                    <span className="text-sm font-semibold text-slate-900">{filteredItems.length}</span>
+                    <span className="text-sm text-slate-500">Comisionistas seleccionados</span>
+                    <span className="text-sm font-semibold text-slate-900">
+                      {comisionistasAPagar.size} de {resumenPorComisionista.length}
+                    </span>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-sm text-slate-500">Total vendido</span>
-                    <span className="text-sm font-semibold text-slate-900">${totalOrden.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-slate-500">Cantidad total</span>
-                    <span className="text-sm font-semibold text-slate-900">{totalCantidad.toLocaleString('es-ES')} kg</span>
+                    <span className="text-sm text-slate-500">Comisiones a pagar</span>
+                    <span className="text-sm font-semibold text-slate-900">{itemsAPagar}</span>
                   </div>
                   <div className="border-t border-slate-200 pt-3 flex justify-between items-center">
-                    <span className="text-sm font-medium text-slate-700">Comisión total</span>
-                    <span className="text-lg font-bold text-emerald-700">${totalComision.toFixed(2)}</span>
+                    <span className="text-sm font-medium text-slate-700">Total a pagar</span>
+                    <span className="text-lg font-bold text-emerald-700">${totalAPagar.toFixed(2)}</span>
                   </div>
                 </div>
+
                 <div className="space-y-2">
                   <Label>Nombre de la liquidación</Label>
                   <Input
@@ -369,7 +448,16 @@ export function LiquidacionTab() {
                 </div>
                 <div className="flex justify-end gap-2 pt-2">
                   <Button variant="outline" onClick={() => setPreviewOpen(false)} className="rounded-xl border-slate-200">Cancelar</Button>
-                  <Button onClick={handleSave} className="btn-primary-dark rounded-xl">Confirmar y Guardar</Button>
+                  <Button
+                    onClick={handleSave}
+                    disabled={
+                      (resumenPorComisionista.length > 0 && comisionistasAPagar.size === 0) ||
+                      !nombreLiquidacion.trim()
+                    }
+                    className="btn-primary-dark rounded-xl"
+                  >
+                    Confirmar y Guardar
+                  </Button>
                 </div>
               </div>
             </DialogContent>
