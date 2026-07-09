@@ -53,6 +53,7 @@ interface AppContextType {
   updateEstadoOrden: (ordenId: string, estado: EstadoOrden) => void;
   updateEstadoOrdenesMasivo: (ordenIds: string[], estado: EstadoOrden) => Promise<{ actualizadas: number; omitidas: string[] }>;
   deleteOrdenItem: (id: string) => void;
+  deleteOrdenItems: (ids: string[]) => Promise<void>;
   clearOrdenItems: () => void;
   assignComisionistasGlobal: (comisionistaIds: string[]) => void;
   addComisionistaToItem: (itemId: string, comisionistaId: string) => void;
@@ -238,6 +239,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     },
     onError: (err: any) => {
       toast.error(err?.response?.data?.detail || 'Error al eliminar orden');
+    },
+  });
+
+  const deleteOrdenesMutation = useMutation({
+    // ponytail: secuencial a propósito — el backend borra la Orden padre cuando se
+    // queda sin ítems, y dos DELETE en paralelo sobre la misma orden chocan.
+    mutationFn: async (ids: string[]) => {
+      for (const id of ids) await apiDeleteOrden(id);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['ordenes'] });
+      toast.success('Órdenes eliminadas');
+    },
+    onError: (err: any) => {
+      queryClient.invalidateQueries({ queryKey: ['ordenes'] });
+      toast.error(err?.response?.data?.detail || 'Error al eliminar órdenes');
     },
   });
 
@@ -498,6 +515,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [deleteOrdenMutation]
   );
 
+  const deleteOrdenItems = useCallback(
+    (ids: string[]) => deleteOrdenesMutation.mutateAsync(ids),
+    [deleteOrdenesMutation]
+  );
+
   const updateEstadoOrden = useCallback(
     (ordenId: string, estado: EstadoOrden) => {
       updateEstadoOrdenMutation.mutate({ ordenId, estado });
@@ -649,6 +671,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         updateEstadoOrden,
         updateEstadoOrdenesMasivo,
         deleteOrdenItem,
+        deleteOrdenItems,
         clearOrdenItems,
         assignComisionistasGlobal,
         addComisionistaToItem,

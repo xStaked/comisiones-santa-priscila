@@ -251,7 +251,7 @@ function EditFincaSelect({ clienteId, value, onChange }: { clienteId: string; va
 }
 
 export function OrdenesTab() {
-  const { comisionistas, ordenItems, addOrdenItems, updateOrdenItem, updateEstadoOrden, updateEstadoOrdenesMasivo, deleteOrdenItem, clearOrdenItems, assignComisionistasGlobal, clientes, productos, tarifasClienteProducto } = useApp();
+  const { comisionistas, ordenItems, addOrdenItems, updateOrdenItem, updateEstadoOrden, updateEstadoOrdenesMasivo, deleteOrdenItem, deleteOrdenItems, clearOrdenItems, assignComisionistasGlobal, clientes, productos, tarifasClienteProducto } = useApp();
   const [activeForm, setActiveForm] = useState<'manual' | 'pdf'>('manual');
   const [globalComisionistaIds, setGlobalComisionistaIds] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -390,6 +390,15 @@ export function OrdenesTab() {
   const handleCambiarEstadoMasivo = (estado: EstadoOrden) => {
     // Limpiar la selección solo si la mutación tiene éxito; el toast de error ya lo maneja el contexto
     updateEstadoOrdenesMasivo(Array.from(selectedOrdenIds), estado)
+      .then(() => setSelectedOrdenIds(new Set()))
+      .catch(() => {});
+  };
+  const handleEliminarMasivo = () => {
+    const itemIds = ordenesAgrupadas
+      .filter(o => selectedOrdenIds.has(o.id))
+      .flatMap(o => o.items.map(item => item.id));
+    if (!confirm(`¿Eliminar ${selectedOrdenIds.size} orden${selectedOrdenIds.size === 1 ? '' : 'es'} y sus productos?`)) return;
+    deleteOrdenItems(itemIds)
       .then(() => setSelectedOrdenIds(new Set()))
       .catch(() => {});
   };
@@ -1125,6 +1134,12 @@ export function OrdenesTab() {
                       ))}
                     </SelectContent>
                   </Select>
+                )}
+                {selectedOrdenIds.size > 0 && (
+                  <Button variant="ghost" size="sm" onClick={handleEliminarMasivo} className="h-7 text-xs text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg">
+                    <Trash2 className="h-3.5 w-3.5 mr-1" />
+                    {`Eliminar (${selectedOrdenIds.size})`}
+                  </Button>
                 )}
               </div>
               <div className="flex items-center gap-1">
