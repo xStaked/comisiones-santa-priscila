@@ -1,6 +1,8 @@
 from datetime import date
 from decimal import Decimal
 
+import pytest
+
 from app.models.cliente import Cliente, Finca
 from app.models.comisionista import Comisionista, Tarifa, TipoTarifa
 from app.models.orden import Asignacion, EstadoOrden, Orden, OrdenItem
@@ -828,3 +830,88 @@ def test_umbral_no_alcanzado_usa_tarifa_normal(db_session):
     # 400 kg < 1000 → tarifa porcentaje normal: 400 * (1 - 1.75%) * 2% = 7.86
     assert tarifas[0].tipo_snapshot == "porcentaje"
     assert tarifas[0].comision_calculada == Decimal("400") * (Decimal("1") - Decimal("0.0175")) * Decimal("0.02")
+
+
+def test_liquida_por_persona_en_la_misma_orden(db_session):
+    """Dos comisionistas en la misma factura se liquidan por separado y en fechas distintas."""
+    cliente = Cliente(nombre="Cliente Persona", tipo="grupo")
+    ana = Comisionista(nombre="ANA", tarifas=[Tarifa(tipo=TipoTarifa.fijo_kg, valor=Decimal("1"))])
+    beto = Comisionista(nombre="BETO", tarifas=[Tarifa(tipo=TipoTarifa.fijo_kg, valor=Decimal("2"))])
+    producto = Producto(nombre="Producto Persona", unidad_comision="kg")
+    db_session.add_all([cliente, ana, beto, producto])
+    db_session.flush()
+
+    orden = Orden(fecha=date.today(), numero_orden="OC-DUO", origen="manual", estado=EstadoOrden.pagada)
+    db_session.add(orden)
+    db_session.flush()
+    oi = OrdenItem(
+        orden_id=orden.id, fecha=date.today(), numero_orden="OC-DUO",
+        finca="-", producto=producto.nombre, cantidad=Decimal("100"), unidad="kg",
+        precio_unitario=Decimal("1"), total=Decimal("100"),
+        estado=EstadoOrden.pagada, cliente_id=cliente.id, producto_id=producto.id,
+    )
+    db_session.add(oi)
+    db_session.flush()
+    db_session.add_all([
+        Asignacion(orden_item_id=oi.id, comisionista_id=ana.id),
+        Asignacion(orden_item_id=oi.id, comisionista_id=beto.id),
+    ])
+    db_session.commit()
+
+    # Junio: se liquida solo a ANA.
+    liq_ana, _ = crear_liquidacion(db_session, "Junio ANA", [oi.id], [ana.id])
+    tarifas_ana = [t for li in liq_ana.items for t in li.tarifas]
+    assert [t.comisionista_nombre_snapshot for t in tarifas_ana] == ["ANA"]
+    assert tarifas_ana[0].comision_calculada == Decimal("100")
+    # El ítem sigue pagado: BETO aún no cobra.
+    db_session.refresh(oi)
+    assert oi.estado == EstadoOrden.pagada
+    assert orden.estado == EstadoOrden.pagada
+
+    # Septiembre: se liquida a BETO sobre la misma orden.
+    liq_beto, _ = crear_liquidacion(db_session, "Septiembre BETO", [oi.id], [beto.id])
+    tarifas_beto = [t for li in liq_beto.items for t in li.tarifas]
+    assert [t.comisionista_nombre_snapshot for t in tarifas_beto] == ["BETO"]
+    assert tarifas_beto[0].comision_calculada == Decimal("200")
+
+    # Ya no queda nadie pendiente → el ítem y la orden quedan liquidados.
+    db_session.refresh(oi)
+    db_session.refresh(orden)
+    assert oi.estado == EstadoOrden.liquidada
+    assert orden.estado == EstadoOrden.liquidada
+
+
+def test_no_reliquida_al_mismo_comisionista(db_session):
+    """El ítem sigue pagado (BETO pendiente), pero ANA ya cobró: no se le paga dos veces."""
+    cliente = Cliente(nombre="Cliente Doble", tipo="grupo")
+    ana = Comisionista(nombre="ANA2", tarifas=[Tarifa(tipo=TipoTarifa.fijo_kg, valor=Decimal("1"))])
+    beto = Comisionista(nombre="BETO2", tarifas=[Tarifa(tipo=TipoTarifa.fijo_kg, valor=Decimal("1"))])
+    producto = Producto(nombre="Producto Doble", unidad_comision="kg")
+    db_session.add_all([cliente, ana, beto, producto])
+    db_session.flush()
+    oi = _orden_pagada(db_session, cliente, producto, ana, "OC-DOBLE", Decimal("50"))
+    db_session.add(Asignacion(orden_item_id=oi.id, comisionista_id=beto.id))
+    db_session.commit()
+
+    crear_liquidacion(db_session, "Primera", [oi.id], [ana.id])
+
+    with pytest.raises(ValueError, match="pendientes"):
+        crear_liquidacion(db_session, "Segunda", [oi.id], [ana.id])
+
+
+def test_eliminar_liquidacion_devuelve_asignacion_a_pendiente(db_session):
+    cliente = Cliente(nombre="Cliente Reversa", tipo="grupo")
+    ana = Comisionista(nombre="ANA3", tarifas=[Tarifa(tipo=TipoTarifa.fijo_kg, valor=Decimal("1"))])
+    producto = Producto(nombre="Producto Reversa", unidad_comision="kg")
+    db_session.add_all([cliente, ana, producto])
+    db_session.flush()
+    oi = _orden_pagada(db_session, cliente, producto, ana, "OC-REV", Decimal("50"))
+    db_session.commit()
+
+    liq, _ = crear_liquidacion(db_session, "A revertir", [oi.id], [ana.id])
+    eliminar_liquidacion(db_session, liq.id)
+
+    asignacion = db_session.query(Asignacion).filter(Asignacion.orden_item_id == oi.id).one()
+    assert asignacion.liquidacion_id is None
+    db_session.refresh(oi)
+    assert oi.estado == EstadoOrden.pagada

@@ -48,17 +48,34 @@ export function LiquidacionTab() {
     ? comisionistaMap.get(filterComisionista)?.nombre || 'Comisionista no encontrado'
     : 'Todos los comisionistas';
 
+  // La liquidación es por persona: solo se muestran las asignaciones aún no liquidadas.
+  // Un ítem puede reaparecer aquí si a otro comisionista todavía no se le ha pagado.
   const ordenItemsPagados = useMemo(
-    () => ordenItems.filter(item => item.estado === 'pagada'),
+    () =>
+      ordenItems
+        .filter(item => item.estado === 'pagada')
+        // Sin asignaciones = liquidable con comisión 0; con asignaciones, al menos una pendiente.
+        .filter(item => item.comisionistas.length === 0 || item.comisionistas.some(a => !a.liquidacionId))
+        .map(item => ({
+          ...item,
+          comisionistas: item.comisionistas.filter(a => !a.liquidacionId),
+        })),
     [ordenItems]
   );
 
   const filteredItems = useMemo(() => {
-    return ordenItemsPagados.filter(i => {
-      const matchComisionista = !filterComisionista || i.comisionistas.some(a => a.comisionistaId === filterComisionista);
-      const matchFactura = !filterFactura || i.numeroOrden.toLowerCase().includes(filterFactura.toLowerCase());
-      return matchComisionista && matchFactura;
-    });
+    return ordenItemsPagados
+      .filter(i => {
+        const matchComisionista = !filterComisionista || i.comisionistas.some(a => a.comisionistaId === filterComisionista);
+        const matchFactura = !filterFactura || i.numeroOrden.toLowerCase().includes(filterFactura.toLowerCase());
+        return matchComisionista && matchFactura;
+      })
+      // Con filtro por persona, los totales y el guardado deben cubrir solo a esa persona.
+      .map(i =>
+        filterComisionista
+          ? { ...i, comisionistas: i.comisionistas.filter(a => a.comisionistaId === filterComisionista) }
+          : i
+      );
   }, [ordenItemsPagados, filterComisionista, filterFactura]);
 
   const cantidadOrdenes = useMemo(() => {
@@ -231,7 +248,8 @@ export function LiquidacionTab() {
       toast.error('No hay órdenes pagadas seleccionadas para guardar');
       return;
     }
-    saveLiquidacion(nombreLiquidacion, ids);
+    // Con filtro de comisionista se liquida SOLO a esa persona; el resto queda pendiente.
+    saveLiquidacion(nombreLiquidacion, ids, filterComisionista ? [filterComisionista] : undefined);
     setNombreLiquidacion('');
     setPreviewOpen(false);
   };
