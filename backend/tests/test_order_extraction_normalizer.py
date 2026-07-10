@@ -129,6 +129,28 @@ def test_no_inventa_ids_si_no_hay_match(db_session):
     assert item.clienteId is None
     assert item.fincaId is None
     assert item.productoId is None
+    # No inventamos un sector que no existe: la dirección extraída se descarta.
+    assert item.finca == "-"
+
+
+def test_descarta_sector_extraido_sin_match(db_session):
+    """La factura trae la dirección como 'finca'; si el cliente no tiene ese sector
+    registrado no debe quedar como sector del ítem."""
+    cliente = Cliente(nombre="INTEDECAM", tipo="externo", retencion_porcentaje=Decimal("1.75"))
+    db_session.add(cliente)
+    db_session.commit()
+
+    orden = _crear_orden(
+        "INTEDECAM",
+        "GUAYAS / DURAN / ELOY ALFARO (DURAN) / URB. LAS BRISAS SL.18A MZ A3",
+        "PRODUCTO NUEVO",
+    )
+
+    normalizada = normalizar_orden_extraida(db_session, orden)
+
+    item = normalizada.items[0]
+    assert item.fincaId is None
+    assert item.finca == "-"
 
 
 def test_asigna_finca_global_unica_sin_cliente(db_session):

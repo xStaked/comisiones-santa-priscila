@@ -208,6 +208,12 @@ def normalizar_orden_extraida(db: Session | None, orden: OrdenValidada, cliente_
             item.finca = finca.nombre
             if not item.clienteId:
                 item.clienteId = str(finca.cliente_id)
+        else:
+            # El sector viene en la descripción de la factura (una dirección, p. ej.
+            # "GUAYAS / DURAN / ..."). Si no coincide con un sector registrado, no lo
+            # inventamos: mejor dejarlo vacío que mostrar un sector inexistente.
+            item.fincaId = None
+            item.finca = "-"
         if producto:
             item.productoId = str(producto.id)
             item.producto = producto.nombre
