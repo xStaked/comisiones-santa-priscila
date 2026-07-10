@@ -40,11 +40,16 @@ def normalizar_nombre_producto(nombre: str) -> str:
     )
 
     if es_ecu_bacillus:
-        if re.search(r"\bPASTILLA\b", normalizado) and "TH" in normalizado:
-            return "PAST TH"
-        if re.search(r"\bPASTILLAS\b", normalizado) and "GRANDES" in normalizado:
-            return "PAST GRAN"
-        if re.search(r"\bPASTILLA\b", normalizado):
+        tokens = normalizado.split()
+        # Las facturas escriben PASTILLAS en plural: sin la S opcional, C1TH y
+        # C1PA caían al fallback SUELO, que es otro producto con otra tarifa.
+        if re.search(r"\bPASTILLAS?\b", normalizado):
+            if "TH" in tokens:
+                return "PAST TH"
+            if "ALIMENTADOR" in tokens or "ALIMENTACION" in tokens or "ALIM" in tokens:
+                return "PAST ALIM"
+            # "PASTILLAS GRANDES" y "SUELO PASTILLA" son el mismo producto: cada
+            # cliente lo tiene cargado con un nombre distinto en su sistema.
             return "ECU BACILLUS SUELO PASTILLA"
         if "ALIMENTACION" in normalizado or "ALIM" in normalizado:
             return "PAST ALIM"
@@ -56,8 +61,10 @@ def normalizar_nombre_producto(nombre: str) -> str:
             return "ECU-BACILLUS SUELO"
 
     # Abreviaturas sueltas que aparecen en los PDFs / Excel de tarifas
-    if normalizado in {"PAST TH", "PAST GRAN", "PAST ALIM"}:
+    if normalizado in {"PAST TH", "PAST ALIM"}:
         return normalizado
+    if normalizado == "PAST GRAN":
+        return "ECU BACILLUS SUELO PASTILLA"
     if normalizado in {"AGUA", "ECU BACILLUS AGUA"}:
         return "ECU-BACILLUS AGUA"
     if normalizado in {"SALUD", "ECU BACILLUS SALUD"}:

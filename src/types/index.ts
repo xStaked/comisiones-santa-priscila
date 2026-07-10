@@ -91,6 +91,7 @@ export interface Cliente {
   grupo?: Grupo;
   createdAt: string;
   fincas?: Finca[];
+  alias: string[];
 }
 
 export interface Finca {

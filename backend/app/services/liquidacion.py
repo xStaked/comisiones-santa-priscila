@@ -67,6 +67,12 @@ def _cantidad_para_tarifa_kg(orden_item: OrdenItem) -> Decimal:
     if "saco" in unidad_lower:
         return cantidad
 
+    # La unidad del ítem manda sobre la del producto. Las facturas vienen en kg
+    # aunque el producto se venda por tacho en las órdenes de compra: sin este
+    # corte se multiplicaría por tacho_kilos una cantidad que ya está en kilos.
+    if unidad_lower in ("kg", "litros"):
+        return cantidad
+
     if producto and producto.unidad_comision == "tacho":
         return cantidad * (producto.tacho_kilos or Decimal("15"))
 
