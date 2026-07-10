@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from decimal import Decimal
-from typing import List, Optional
+from typing import List, Literal, Optional
 from uuid import UUID
 
 from pydantic import BaseModel
@@ -28,6 +28,7 @@ class TarifaResponse(TarifaBase):
 
 class ComisionistaBase(BaseModel):
     nombre: str
+    tipo: Literal["interno", "externo"] = "externo"
 
 
 class ComisionistaCreate(ComisionistaBase):

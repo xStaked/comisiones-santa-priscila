@@ -32,7 +32,7 @@ def listar_comisionistas(db: Session = Depends(get_db), current_user: User = Dep
     "/", response_model=ComisionistaResponse, status_code=status.HTTP_201_CREATED
 )
 def crear_comisionista(data: ComisionistaCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    comisionista = Comisionista(nombre=data.nombre)
+    comisionista = Comisionista(nombre=data.nombre, tipo=data.tipo)
     db.add(comisionista)
     db.flush()
 
@@ -73,6 +73,7 @@ def actualizar_comisionista(
         )
 
     comisionista.nombre = data.nombre
+    comisionista.tipo = data.tipo
 
     db.query(Tarifa).filter(Tarifa.comisionista_id == id).delete(
         synchronize_session=False

@@ -29,18 +29,22 @@ const getEtiquetaTipoTarifa = (tipo: 'porcentaje' | 'fijo_kg' | 'fijo_unidad') =
 export function ComisionistasTab() {
   const { comisionistas, addComisionista, updateComisionista, deleteComisionista, ordenItems, liquidaciones, tarifasClienteProducto } = useApp();
   const [search, setSearch] = useState('');
+  const [filtroTipo, setFiltroTipo] = useState<'todos' | 'interno' | 'externo'>('todos');
   const [editing, setEditing] = useState<Comisionista | null>(null);
   const [form, setForm] = useState<{
     nombre: string;
+    tipo: 'interno' | 'externo';
     tarifas: { tipo: 'porcentaje' | 'fijo_kg' | 'fijo_unidad'; valor: string; proveedoresExcluidos: string }[]
   }>({
     nombre: '',
+    tipo: 'externo',
     tarifas: [{ tipo: 'porcentaje', valor: '', proveedoresExcluidos: '' }],
   });
   const [open, setOpen] = useState(false);
 
   const filtered = comisionistas.filter(c =>
-    c.nombre.toLowerCase().includes(search.toLowerCase())
+    c.nombre.toLowerCase().includes(search.toLowerCase()) &&
+    (filtroTipo === 'todos' || c.tipo === filtroTipo)
   );
 
   // Calcular stats por comisionista
@@ -53,7 +57,7 @@ export function ComisionistasTab() {
   };
 
   const resetForm = () => {
-    setForm({ nombre: '', tarifas: [{ tipo: 'porcentaje', valor: '', proveedoresExcluidos: '' }] });
+    setForm({ nombre: '', tipo: 'externo', tarifas: [{ tipo: 'porcentaje', valor: '', proveedoresExcluidos: '' }] });
     setEditing(null);
   };
 
@@ -80,9 +84,9 @@ export function ComisionistasTab() {
     }
 
     if (editing) {
-      updateComisionista(editing.id, { nombre: form.nombre, tarifas });
+      updateComisionista(editing.id, { nombre: form.nombre, tipo: form.tipo, tarifas });
     } else {
-      addComisionista({ nombre: form.nombre, tarifas });
+      addComisionista({ nombre: form.nombre, tipo: form.tipo, tarifas });
     }
     resetForm();
     setOpen(false);
@@ -92,6 +96,7 @@ export function ComisionistasTab() {
     setEditing(c);
     setForm({
       nombre: c.nombre,
+      tipo: c.tipo ?? 'externo',
       tarifas: c.tarifas.map(t => ({
         tipo: t.tipo,
         valor: t.valor.toString(),
@@ -131,14 +136,26 @@ export function ComisionistasTab() {
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div className="relative w-full sm:w-80">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-          <Input
-            placeholder="Buscar comisionista..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            className="pl-9 bg-white border-slate-200 rounded-xl focus:border-slate-900 focus:ring-slate-900/10"
-          />
+        <div className="flex w-full sm:w-auto gap-2">
+          <div className="relative w-full sm:w-80">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+            <Input
+              placeholder="Buscar comisionista..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              className="pl-9 bg-white border-slate-200 rounded-xl focus:border-slate-900 focus:ring-slate-900/10"
+            />
+          </div>
+          <Select value={filtroTipo} onValueChange={value => setFiltroTipo(value as typeof filtroTipo)}>
+            <SelectTrigger className="w-36 rounded-xl border-slate-200 bg-white h-10 text-sm text-slate-900">
+              <SelectValue>{filtroTipo === 'todos' ? 'Todos' : filtroTipo === 'interno' ? 'Internos' : 'Externos'}</SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todos">Todos</SelectItem>
+              <SelectItem value="interno">Internos</SelectItem>
+              <SelectItem value="externo">Externos</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
         <Button onClick={() => { resetForm(); setOpen(true); }} className="btn-primary-dark rounded-xl">
           <Plus className="h-4 w-4 mr-2" />
@@ -159,6 +176,22 @@ export function ComisionistasTab() {
                   placeholder="Ej: Juan Pérez"
                   className="bg-white border-slate-200 rounded-xl focus:border-slate-900 focus:ring-slate-900/10"
                 />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="tipo">Tipo</Label>
+                <Select
+                  value={form.tipo}
+                  onValueChange={value => setForm({ ...form, tipo: value as 'interno' | 'externo' })}
+                >
+                  <SelectTrigger id="tipo" className="rounded-xl border-slate-200 bg-white h-10 text-sm text-slate-900">
+                    <SelectValue>{form.tipo === 'interno' ? 'Interno' : 'Externo'}</SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="interno">Interno</SelectItem>
+                    <SelectItem value="externo">Externo</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
 
               <div className="space-y-3">
@@ -238,7 +271,17 @@ export function ComisionistasTab() {
             <Card key={c.id} className="card-elevated rounded-2xl">
               <CardHeader className="pb-3">
                 <div className="flex items-start justify-between">
-                  <CardTitle className="text-base font-semibold text-slate-900">{c.nombre}</CardTitle>
+                  <div className="space-y-1.5">
+                    <CardTitle className="text-base font-semibold text-slate-900">{c.nombre}</CardTitle>
+                    <Badge
+                      variant="secondary"
+                      className={`border-0 w-fit text-[10px] uppercase tracking-wide ${
+                        c.tipo === 'interno' ? 'bg-blue-50 text-blue-700' : 'bg-amber-50 text-amber-700'
+                      }`}
+                    >
+                      {c.tipo === 'interno' ? 'Interno' : 'Externo'}
+                    </Badge>
+                  </div>
                   <div className="flex gap-1">
                     <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg" onClick={() => handleEdit(c)}>
                       <Pencil className="h-4 w-4" />

@@ -62,6 +62,8 @@ function buildComisionistasFromSnapshot(items: any[]): Comisionista[] {
         map.set(t.comisionistaId, {
           id: t.comisionistaId,
           nombre: t.comisionistaNombreSnapshot,
+          // ponytail: el snapshot no guarda tipo y el cálculo no lo usa
+          tipo: 'externo',
           tarifas: [],
         });
       }

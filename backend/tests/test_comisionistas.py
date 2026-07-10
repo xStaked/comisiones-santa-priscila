@@ -63,3 +63,32 @@ def test_delete_comisionista_not_found(authenticated_client):
     fake_id = str(uuid_mod.uuid4())
     response = authenticated_client.delete(f"/api/v1/comisionistas/{fake_id}")
     assert response.status_code == 404
+
+
+def test_tipo_comisionista(authenticated_client):
+    tarifas = [{"tipo": "porcentaje", "valor": "2.0"}]
+
+    # Sin tipo explícito → externo
+    resp = authenticated_client.post(
+        "/api/v1/comisionistas/", json={"nombre": "Sin Tipo", "tarifas": tarifas}
+    )
+    assert resp.json()["tipo"] == "externo"
+
+    resp = authenticated_client.post(
+        "/api/v1/comisionistas/",
+        json={"nombre": "Interno", "tipo": "interno", "tarifas": tarifas},
+    )
+    assert resp.json()["tipo"] == "interno"
+    cid = resp.json()["id"]
+
+    resp = authenticated_client.put(
+        f"/api/v1/comisionistas/{cid}",
+        json={"nombre": "Interno", "tipo": "externo", "tarifas": tarifas},
+    )
+    assert resp.json()["tipo"] == "externo"
+
+    resp = authenticated_client.post(
+        "/api/v1/comisionistas/",
+        json={"nombre": "Invalido", "tipo": "socio", "tarifas": tarifas},
+    )
+    assert resp.status_code == 422

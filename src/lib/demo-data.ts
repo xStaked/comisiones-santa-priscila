@@ -2,14 +2,14 @@ import { Comisionista, OrdenItem, Liquidacion } from '@/types';
 import { generarId } from './id';
 
 export const demoComisionistas: Comisionista[] = [
-  { id: 'com-001', nombre: 'Carlos Mendoza', tarifas: [{ tipo: 'porcentaje', valor: 2.5 }] },
-  { id: 'com-002', nombre: 'María Fernanda López', tarifas: [{ tipo: 'porcentaje', valor: 3.0 }] },
-  { id: 'com-003', nombre: 'José Antonio Vargas', tarifas: [{ tipo: 'fijo_kg', valor: 0.08 }] },
-  { id: 'com-004', nombre: 'Ana Patricia Ruiz', tarifas: [{ tipo: 'porcentaje', valor: 1.8 }] },
-  { id: 'com-005', nombre: 'Roberto Carlos Sánchez', tarifas: [{ tipo: 'fijo_kg', valor: 0.12 }] },
-  { id: 'com-006', nombre: 'Diana Michelle Castro', tarifas: [{ tipo: 'porcentaje', valor: 2.0 }] },
+  { id: 'com-001', nombre: 'Carlos Mendoza', tipo: 'externo', tarifas: [{ tipo: 'porcentaje', valor: 2.5 }] },
+  { id: 'com-002', nombre: 'María Fernanda López', tipo: 'externo', tarifas: [{ tipo: 'porcentaje', valor: 3.0 }] },
+  { id: 'com-003', nombre: 'José Antonio Vargas', tipo: 'externo', tarifas: [{ tipo: 'fijo_kg', valor: 0.08 }] },
+  { id: 'com-004', nombre: 'Ana Patricia Ruiz', tipo: 'externo', tarifas: [{ tipo: 'porcentaje', valor: 1.8 }] },
+  { id: 'com-005', nombre: 'Roberto Carlos Sánchez', tipo: 'externo', tarifas: [{ tipo: 'fijo_kg', valor: 0.12 }] },
+  { id: 'com-006', nombre: 'Diana Michelle Castro', tipo: 'externo', tarifas: [{ tipo: 'porcentaje', valor: 2.0 }] },
   // Comisionista con tarifa dual (kg + %)
-  { id: 'com-007', nombre: 'Luis Fernando Vega', tarifas: [{ tipo: 'fijo_kg', valor: 0.05 }, { tipo: 'porcentaje', valor: 1.5 }] },
+  { id: 'com-007', nombre: 'Luis Fernando Vega', tipo: 'externo', tarifas: [{ tipo: 'fijo_kg', valor: 0.05 }, { tipo: 'porcentaje', valor: 1.5 }] },
 ];
 
 const productos = [

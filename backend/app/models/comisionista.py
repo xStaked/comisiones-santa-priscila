@@ -14,6 +14,8 @@ class Comisionista(BaseModel):
     __tablename__ = "comisionistas"
 
     nombre = Column(String, nullable=False)
+    # ponytail: String en vez de enum SQL — cambiar un valor no exige migración
+    tipo = Column(String, nullable=False, server_default="externo")
 
     tarifas = relationship(
         "Tarifa", back_populates="comisionista", cascade="all, delete-orphan"

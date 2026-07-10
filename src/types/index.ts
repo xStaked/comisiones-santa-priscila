@@ -21,6 +21,7 @@ export interface TarifaComision {
 export interface Comisionista {
   id: string;
   nombre: string;
+  tipo: 'interno' | 'externo';
   tarifas: TarifaComision[];
 }
 
