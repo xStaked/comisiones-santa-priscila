@@ -24,3 +24,27 @@ def test_normalizar_razon_social_ignora_sufijos_societarios():
     assert normalizar_razon_social(base) == normalizar_razon_social(f"{base} CIA. LTDA.")
     assert normalizar_razon_social("EMPRESA X S.A.") == normalizar_razon_social("Empresa X")
     assert normalizar_razon_social(None) == ""
+
+
+def test_normaliza_pastillas_en_plural_como_en_las_facturas():
+    """Las facturas escriben PASTILLAS; el catálogo, PASTILLA."""
+    from app.services.catalog_normalization import normalizar_nombre_producto as n
+
+    # Cada código de factura cae en un producto distinto del catálogo.
+    assert n("C1TH - ECU-BACILLUS (suelo) PASTILLAS TH") == n("ECU-BACILLUS SUELO PASTILLA TH")
+    assert n("C1PA - ECU-BACILLUS (suelo) PASTILLAS ALIMENTADOR") == n(
+        "ECU BACILLUS SUELO PASTILLA ALIMENTADOR"
+    )
+    # PASTILLAS GRANDES y SUELO PASTILLA son el mismo producto con dos nombres.
+    assert n("ECU-BACILLUS PASTILLAS GRANDES") == n("ECU BACILLUS SUELO PASTILLA")
+    assert n("PAST GRAN") == n("ECU BACILLUS SUELO PASTILLA")
+    assert n("C1PG - ECU-BACILLUS (suelo) PASTILLAS") == n("ECU-BACILLUS PASTILLAS GRANDES")
+
+    # Ninguno debe colapsar al polvo, que es otro producto con otra tarifa.
+    suelo = n("ECU-BACILLUS (suelo) POLVO")
+    assert n("C1TH - ECU-BACILLUS (suelo) PASTILLAS TH") != suelo
+    assert n("C1PG - ECU-BACILLUS (suelo) PASTILLAS") != suelo
+
+    # ...ni entre sí: PASTILLA a secas != PASTILLA ALIMENTADOR != PASTILLA TH.
+    assert n("ECU BACILLUS SUELO PASTILLA") != n("ECU BACILLUS SUELO PASTILLA ALIMENTADOR")
+    assert n("ECU BACILLUS SUELO PASTILLA") != n("ECU-BACILLUS SUELO PASTILLA TH")

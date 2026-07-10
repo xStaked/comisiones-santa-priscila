@@ -54,13 +54,17 @@ export function normalizarNombreProducto(valor?: string): string | undefined {
       normalizado.includes('ECU B'));
 
   if (esEcuBacillus) {
-    if (/\bPASTILLA\b/.test(normalizado) && /\bTH\b/.test(normalizado)) {
-      return 'PAST TH';
-    }
-    if (/\bPASTILLAS\b/.test(normalizado) && /\bGRANDES\b/.test(normalizado)) {
-      return 'PAST GRAN';
-    }
-    if (/\bPASTILLA\b/.test(normalizado)) {
+    // Las facturas escriben PASTILLAS en plural: sin la S opcional, C1TH y
+    // C1PA caían al fallback SUELO, que es otro producto con otra tarifa.
+    if (/\bPASTILLAS?\b/.test(normalizado)) {
+      if (/\bTH\b/.test(normalizado)) {
+        return 'PAST TH';
+      }
+      if (/\b(ALIMENTADOR|ALIMENTACION|ALIM)\b/.test(normalizado)) {
+        return 'PAST ALIM';
+      }
+      // "PASTILLAS GRANDES" y "SUELO PASTILLA" son el mismo producto: cada
+      // cliente lo tiene cargado con un nombre distinto en su sistema.
       return 'ECU BACILLUS SUELO PASTILLA';
     }
     if (normalizado.includes('ALIMENTACION') || normalizado.includes('ALIM')) {
@@ -78,10 +82,11 @@ export function normalizarNombreProducto(valor?: string): string | undefined {
   }
 
   // Abreviaturas sueltas que aparecen en PDFs / Excel de tarifas
-  if (
-    ['PAST TH', 'PAST GRAN', 'PAST ALIM'].includes(normalizado)
-  ) {
+  if (['PAST TH', 'PAST ALIM'].includes(normalizado)) {
     return normalizado;
+  }
+  if (normalizado === 'PAST GRAN') {
+    return 'ECU BACILLUS SUELO PASTILLA';
   }
   if (normalizado === 'AGUA' || normalizado === 'ECU BACILLUS AGUA') {
     return 'ECU-BACILLUS AGUA';

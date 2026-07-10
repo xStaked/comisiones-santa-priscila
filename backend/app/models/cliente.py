@@ -18,6 +18,21 @@ class Cliente(BaseModel):
     fincas = relationship(
         "Finca", back_populates="cliente", cascade="all, delete-orphan"
     )
+    alias = relationship(
+        "ClienteAlias", back_populates="cliente", cascade="all, delete-orphan"
+    )
+
+
+class ClienteAlias(BaseModel):
+    """Razones sociales tal como aparecen en las facturas (CAMARONERA FAGUILL
+    S.A.), que no coinciden con el alias corto del catálogo (FAGUILL)."""
+
+    __tablename__ = "cliente_alias"
+
+    cliente_id = Column(ForeignKey("clientes.id", ondelete="CASCADE"), nullable=False)
+    alias = Column(String, nullable=False, unique=True)
+
+    cliente = relationship("Cliente", back_populates="alias")
 
 
 class Finca(BaseModel):

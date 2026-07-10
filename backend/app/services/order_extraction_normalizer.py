@@ -3,7 +3,7 @@ from __future__ import annotations
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.models.cliente import Cliente, Finca
+from app.models.cliente import Cliente, ClienteAlias, Finca
 from app.models.producto import Producto, ProductoAlias
 from app.models.tarifa_cliente_producto import TarifaClienteProducto
 from app.services.catalog_normalization import (
@@ -11,6 +11,7 @@ from app.services.catalog_normalization import (
     es_proveedor_comodin,
     normalizar_nombre_finca,
     normalizar_nombre_producto,
+    normalizar_razon_social,
 )
 from app.services.product_matching import obtener_productos_equivalentes
 from app.services.order_extraction_models import OrdenValidada
@@ -21,10 +22,53 @@ def _limpiar(valor: str) -> str:
 
 
 def _buscar_cliente(db: Session, nombre: str) -> Cliente | None:
+    """El catálogo guarda alias cortos (FAGUILL, PLUMONT - EXPALSA) pero los PDFs
+    traen la razón social completa (CAMARONERA FAGUILL S.A., PLUMONT S.A.)."""
     limpio = _limpiar(nombre)
     if not limpio:
         return None
-    return db.query(Cliente).filter(func.lower(Cliente.nombre) == limpio.lower()).first()
+
+    exacto = db.query(Cliente).filter(func.lower(Cliente.nombre) == limpio.lower()).first()
+    if exacto:
+        return exacto
+
+    # El alias configurado a mano manda sobre cualquier heurística.
+    alias = (
+        db.query(ClienteAlias)
+        .filter(func.lower(ClienteAlias.alias) == limpio.lower())
+        .first()
+    )
+    if alias:
+        return alias.cliente
+
+    tokens = normalizar_razon_social(limpio).split()
+    if not tokens:
+        return None
+
+    for alias_row in db.query(ClienteAlias).all():
+        if normalizar_razon_social(alias_row.alias).split() == tokens:
+            return alias_row.cliente
+
+    clientes = db.query(Cliente).all()
+    claves = {c.id: normalizar_razon_social(c.nombre).split() for c in clientes}
+
+    misma_clave = [c for c in clientes if claves[c.id] == tokens]
+    if len(misma_clave) == 1:
+        return misma_clave[0]
+
+    # El alias del catálogo aparece dentro de la razón social. Ante varios
+    # candidatos gana el más largo y, a igual longitud, el que aparece más al
+    # final (ASOCIACION INTEDECAM - CAMPONIO → CAMPONIO, no INTEDECAM).
+    contenidos = [c for c in clientes if claves[c.id] and set(claves[c.id]) <= set(tokens)]
+    if contenidos:
+        return max(
+            contenidos,
+            key=lambda c: (len(claves[c.id]), max(tokens.index(t) for t in claves[c.id])),
+        )
+
+    # Caso inverso: el catálogo agrega un sufijo de grupo (PLUMONT → PLUMONT - EXPALSA).
+    extendidos = [c for c in clientes if set(tokens) <= set(claves[c.id])]
+    return extendidos[0] if len(extendidos) == 1 else None
 
 
 def _buscar_finca(db: Session, nombre: str, cliente: Cliente | None) -> Finca | None:

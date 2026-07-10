@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 from decimal import Decimal
-from typing import List, Optional
+from typing import Any, List, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, field_validator
 
 from app.schemas.grupo import GrupoResponse
 
@@ -40,6 +40,7 @@ class ClienteBase(BaseModel):
         default=Decimal("1.75"), alias="retencionPorcentaje"
     )
     grupo_id: Optional[UUID] = Field(default=None, alias="grupoId")
+    alias: list[str] = Field(default_factory=list)
 
     model_config = ConfigDict(populate_by_name=True)
 
@@ -61,5 +62,15 @@ class ClienteResponse(BaseModel):
     grupo_id: Optional[UUID] = Field(default=None, alias="grupoId")
     grupo: Optional[GrupoResponse] = None
     fincas: List[FincaResponse] = []
+    alias: list[str] = Field(default_factory=list)
 
     model_config = ConfigDict(populate_by_name=True, from_attributes=True)
+
+    @field_validator("alias", mode="before")
+    @classmethod
+    def _convertir_alias(cls, v: Any) -> list[str]:
+        if v is None:
+            return []
+        if hasattr(v, "__iter__") and not isinstance(v, str):
+            return [getattr(item, "alias", str(item)) for item in v]
+        return v

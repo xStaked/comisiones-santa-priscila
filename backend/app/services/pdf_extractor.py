@@ -83,12 +83,16 @@ def _extraer_texto_pdf(contenido: bytes) -> str:
         return "\n".join(page.get_text("text") for page in doc)
 
 
-def _debe_usar_extraccion_ia(texto_pdf: str) -> bool:
+def _es_orden_compra_dinacuamar(texto_pdf: str) -> bool:
+    """El formato propio de DINACUAMAR: se parsea por posiciones, sin IA."""
     texto = texto_pdf.upper()
-    return (
-        "FILACAS" in texto
-        or "FECHA DE EMISIÓN" in texto
-    )
+    return "ORDEN DE COMPRA" in texto and "PROVEEDOR :" in texto
+
+
+def _debe_usar_extraccion_ia(texto_pdf: str) -> bool:
+    # Cualquier documento que no sea una OC de DINACUAMAR (facturas de terceros,
+    # notas de venta, etc.) va a IA: el parser posicional no aplica.
+    return not _es_orden_compra_dinacuamar(texto_pdf)
 
 
 def _es_formato_santa_priscila(texto_pdf: str) -> bool:

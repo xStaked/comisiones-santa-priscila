@@ -915,3 +915,38 @@ def test_eliminar_liquidacion_devuelve_asignacion_a_pendiente(db_session):
     assert asignacion.liquidacion_id is None
     db_session.refresh(oi)
     assert oi.estado == EstadoOrden.pagada
+
+
+def test_factura_en_kg_no_se_multiplica_por_tacho_kilos(db_session):
+    """Las facturas vienen en kg aunque el producto se venda por tacho en las OC."""
+    producto = Producto(
+        nombre="ECU-BACILLUS SUELO PASTILLA TH",
+        unidad_comision="tacho",
+        tacho_kilos=Decimal("10"),
+    )
+    db_session.add(producto)
+    db_session.flush()
+
+    def _item(cantidad: str, unidad: str) -> OrdenItem:
+        return OrdenItem(
+            fecha=date.today(),
+            numero_orden="2209",
+            finca="-",
+            producto="ECU-BACILLUS SUELO PASTILLA TH",
+            producto_id=producto.id,
+            cantidad=Decimal(cantidad),
+            unidad=unidad,
+            precio_unitario=Decimal("65"),
+            total=Decimal(cantidad) * Decimal("65"),
+        )
+
+    factura = _item("80", "kg")
+    orden = _item("26", "tachos")
+    db_session.add_all([factura, orden])
+    db_session.commit()
+
+    tarifa = Tarifa(tipo=TipoTarifa.fijo_kg, valor=Decimal("1.00"))
+    # 80 kg son 80 kg, no 800.
+    assert _calcular_comision_con_tarifa(factura, tarifa) == Decimal("80.00")
+    # La orden en tachos sí convierte: 26 × 10 kg.
+    assert _calcular_comision_con_tarifa(orden, tarifa) == Decimal("260.00")

@@ -42,6 +42,7 @@ export function ClientesTab() {
     grupoId: string;
     fincas: { id?: string; nombre: string }[];
     nuevaFinca: string;
+    alias: string[];
   }>({
     nombre: '',
     tipo: 'individual',
@@ -50,8 +51,10 @@ export function ClientesTab() {
     grupoId: '',
     fincas: [],
     nuevaFinca: '',
+    alias: [],
   });
   const [nuevoGrupo, setNuevoGrupo] = useState('');
+  const [aliasInput, setAliasInput] = useState('');
 
   const { data: grupos = [] } = useQuery<Grupo[]>({
     queryKey: ['grupos'],
@@ -137,9 +140,19 @@ export function ClientesTab() {
       grupoId: '',
       fincas: [],
       nuevaFinca: '',
+      alias: [],
     });
     setEditing(null);
     setFincasOriginales([]);
+    setAliasInput('');
+  };
+
+  const agregarAlias = () => {
+    const limpio = aliasInput.trim();
+    if (limpio && !form.alias.includes(limpio)) {
+      setForm({ ...form, alias: [...form.alias, limpio] });
+      setAliasInput('');
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -160,6 +173,7 @@ export function ClientesTab() {
       retencionPorcentaje: retencion,
       activo: form.activo,
       grupoId: form.grupoId || undefined,
+      alias: form.alias.filter((a) => a.trim() !== ''),
     };
 
     if (editing) {
@@ -212,6 +226,7 @@ export function ClientesTab() {
       grupoId: c.grupoId || '',
       fincas: fincasCliente.map((f) => ({ id: f.id, nombre: f.nombre })),
       nuevaFinca: '',
+      alias: c.alias ?? [],
     });
     setOpen(true);
   };
@@ -341,6 +356,56 @@ export function ClientesTab() {
                     ))}
                   </SelectContent>
                 </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="alias">Alias (razón social en las facturas)</Label>
+                <div className="flex gap-2">
+                  <Input
+                    id="alias"
+                    value={aliasInput}
+                    onChange={(e) => setAliasInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        agregarAlias();
+                      }
+                    }}
+                    placeholder="Ej: CAMARONERA FAGUILL S.A."
+                    className="bg-white border-slate-200 rounded-xl focus:border-slate-900 focus:ring-slate-900/10"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={agregarAlias}
+                    className="rounded-xl border-slate-200 shrink-0"
+                  >
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </div>
+                {form.alias.length > 0 && (
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {form.alias.map((a, i) => (
+                      <Badge
+                        key={i}
+                        variant="secondary"
+                        className="flex items-center gap-1 bg-slate-100 text-slate-700 border-0 pl-2 pr-1"
+                      >
+                        <Tag className="h-3 w-3" />
+                        {a}
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setForm({ ...form, alias: form.alias.filter((_, idx) => idx !== i) })
+                          }
+                          className="ml-1 p-0.5 rounded hover:bg-slate-200"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </Badge>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <div className="flex items-center gap-3">

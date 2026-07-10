@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.database import get_db
 from app.dependencies import get_current_user
-from app.models.cliente import Cliente, Finca
+from app.models.cliente import Cliente, ClienteAlias, Finca
 from app.models.grupo import Grupo
 from app.models.user import User
 from app.schemas.cliente import (
@@ -20,6 +20,14 @@ from app.schemas.cliente import (
 )
 
 router = APIRouter()
+
+
+def _sincronizar_alias(db: Session, cliente: Cliente, alias: list[str]) -> None:
+    db.query(ClienteAlias).filter(ClienteAlias.cliente_id == cliente.id).delete()
+    for texto in alias:
+        limpio = texto.strip()
+        if limpio:
+            db.add(ClienteAlias(cliente_id=cliente.id, alias=limpio))
 
 
 def _validar_grupo(db: Session, grupo_id: uuid.UUID | None) -> None:
@@ -39,7 +47,11 @@ def listar_clientes(
 ):
     return (
         db.query(Cliente)
-        .options(selectinload(Cliente.fincas), selectinload(Cliente.grupo))
+        .options(
+            selectinload(Cliente.fincas),
+            selectinload(Cliente.grupo),
+            selectinload(Cliente.alias),
+        )
         .all()
     )
 
@@ -61,6 +73,8 @@ def crear_cliente(
     )
     db.add(cliente)
     try:
+        db.flush()
+        _sincronizar_alias(db, cliente, data.alias)
         db.commit()
         db.refresh(cliente)
         return cliente
@@ -90,6 +104,7 @@ def actualizar_cliente(
     cliente.tipo = data.tipo
     cliente.retencion_porcentaje = data.retencion_porcentaje
     cliente.grupo_id = data.grupo_id
+    _sincronizar_alias(db, cliente, data.alias)
 
     try:
         db.commit()

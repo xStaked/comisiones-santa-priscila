@@ -1,12 +1,13 @@
 from datetime import date
 from decimal import Decimal
 
-from app.models.cliente import Cliente, Finca
+from app.models.cliente import Cliente, ClienteAlias, Finca
 from app.models.comisionista import Comisionista, TipoTarifa
 from app.models.producto import Producto, ProductoAlias
 from app.models.tarifa_cliente_producto import TarifaClienteProducto
 from app.services.order_extraction_models import OrdenItemValidado, OrdenValidada
-from app.services.order_extraction_normalizer import normalizar_orden_extraida
+from app.services.order_extraction_normalizer import _buscar_cliente, normalizar_orden_extraida
+from app.services.pdf_extractor import _debe_usar_extraccion_ia
 
 
 def _crear_orden(cliente: str, finca: str, producto: str) -> OrdenValidada:
@@ -430,3 +431,56 @@ def test_no_duplica_comisionista_con_varias_tarifas_activas_aplicables(db_sessio
     assert normalizada.items[0].comisionistas == [
         {"comisionistaId": str(comisionista.id)}
     ]
+
+
+def test_busca_cliente_por_razon_social_de_factura(db_session):
+    """Los PDFs traen la razón social completa; el catálogo guarda alias cortos."""
+    for nombre in (
+        "AQUALITORAL",
+        "PLUMONT - EXPALSA",
+        "FAGUILL",
+        "CAMPONIO",
+        "INTEDECAM",
+        "INTEDECAM ISLA PALO SANTO",
+    ):
+        db_session.add(Cliente(nombre=nombre, tipo="externo", retencion_porcentaje=Decimal("1.75")))
+    db_session.commit()
+
+    casos = {
+        "AQUALITORAL S.A.S.": "AQUALITORAL",           # sufijo societario
+        "PLUMONT S.A.": "PLUMONT - EXPALSA",           # el catálogo agrega el grupo
+        "CAMARONERA FAGUILL S.A.": "FAGUILL",          # el alias va dentro de la razón social
+        "ASOCIACION INTEDECAM - CAMPONIO": "CAMPONIO", # ambiguo: gana el token final
+        "INTEDECAM S.A.": "INTEDECAM",                 # no debe ganar ISLA PALO SANTO
+        "INTEDECAM - ISLA PALO SANTO": "INTEDECAM ISLA PALO SANTO",
+    }
+    for razon_social, esperado in casos.items():
+        encontrado = _buscar_cliente(db_session, razon_social)
+        assert encontrado is not None, razon_social
+        assert encontrado.nombre == esperado, razon_social
+
+    assert _buscar_cliente(db_session, "CAMELMAR S.A.S.") is None
+
+
+def test_facturas_de_terceros_usan_extraccion_ia():
+    # OC de DINACUAMAR: parser posicional.
+    assert not _debe_usar_extraccion_ia("ORDEN DE COMPRA No. 2199 PROVEEDOR : SANTA PRISCILA")
+    # Factura emitida a un cliente: no hay tabla posicional que parsear.
+    assert _debe_usar_extraccion_ia("FACTURA No.001-002-000002209 Razón Social: AQUALITORAL S.A.S.")
+
+
+def test_alias_de_cliente_manda_sobre_la_heuristica(db_session):
+    """La heurística elegiría CAMPONIO; el alias configurado a mano gana."""
+    camponio = Cliente(nombre="CAMPONIO", tipo="externo", retencion_porcentaje=Decimal("1.75"))
+    asoc = Cliente(nombre="ASOC INT CAMPONIO", tipo="externo", retencion_porcentaje=Decimal("1.75"))
+    db_session.add_all([camponio, asoc])
+    db_session.commit()
+
+    assert _buscar_cliente(db_session, "ASOCIACION INTEDECAM - CAMPONIO").nombre == "CAMPONIO"
+
+    db_session.add(ClienteAlias(cliente_id=asoc.id, alias="ASOCIACION INTEDECAM - CAMPONIO"))
+    db_session.commit()
+
+    assert _buscar_cliente(db_session, "ASOCIACION INTEDECAM - CAMPONIO").nombre == "ASOC INT CAMPONIO"
+    # El alias también tolera variantes de sufijo societario y puntuación.
+    assert _buscar_cliente(db_session, "Asociacion Intedecam Camponio S.A.").nombre == "ASOC INT CAMPONIO"
