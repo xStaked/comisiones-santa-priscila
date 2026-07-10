@@ -1206,7 +1206,7 @@ export function OrdenesTab() {
                         <div className="flex items-center gap-3 mt-0.5 text-xs text-slate-500">
                           <span>{orden.cliente}</span>
                           {orden.fincas.length > 0 && (
-                            <span>{orden.fincas.length > 1 ? `${orden.fincas.length} fincas` : orden.fincas[0]}</span>
+                            <span>{orden.fincas.length > 1 ? `${orden.fincas.length} sectores` : orden.fincas[0]}</span>
                           )}
                           <span>{orden.items.length} producto{orden.items.length !== 1 ? 's' : ''}</span>
                           {orden.comisionistaIds.length === 0 && (

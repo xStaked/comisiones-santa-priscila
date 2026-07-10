@@ -448,7 +448,7 @@ export default function LiquidacionDetallePage() {
                     {resumenPorFinca.length === 0 ? (
                       <tr>
                         <td colSpan={5} className="px-4 py-6 text-center text-slate-500">
-                          No hay datos por finca
+                          No hay datos por sector
                         </td>
                       </tr>
                     ) : (

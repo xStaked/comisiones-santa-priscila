@@ -55,7 +55,7 @@ function FincaSelect({
           <span className="flex flex-1 truncate text-left">{etiqueta}</span>
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="">Todas las fincas del cliente</SelectItem>
+          <SelectItem value="">Todos los sectores del cliente</SelectItem>
           {fincas.map((f: Finca) => (
             <SelectItem key={f.id} value={f.id}>
               {f.nombre}
@@ -454,8 +454,8 @@ export function TarifasTab() {
                   <span className="flex flex-1 truncate text-left">{etiquetaFiltroFinca}</span>
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="todas">Todas las fincas</SelectItem>
-                  <SelectItem value="ninguna">Sin finca</SelectItem>
+                  <SelectItem value="todas">Todos los sectores</SelectItem>
+                  <SelectItem value="ninguna">Sin sector</SelectItem>
                   {fincasFiltro.map((f: Finca) => (
                     <SelectItem key={f.id} value={f.id}>
                       {f.nombre}

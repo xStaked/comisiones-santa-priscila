@@ -542,7 +542,7 @@ export function ClientesTab() {
                         </Badge>
                       ))}
                       {fincasPorCliente(c).length === 0 && (
-                        <span className="text-xs text-slate-400">Sin fincas registradas</span>
+                        <span className="text-xs text-slate-400">Sin sectores registrados</span>
                       )}
                     </div>
                   </div>
