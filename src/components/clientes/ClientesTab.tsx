@@ -102,7 +102,7 @@ export function ClientesTab() {
       queryClient.invalidateQueries({ queryKey: ['fincas'] });
       queryClient.invalidateQueries({ queryKey: ['clientes'] });
     },
-    onError: (err) => mostrarErrorFinca(err, 'Error al crear finca'),
+    onError: (err) => mostrarErrorFinca(err, 'Error al crear sector'),
   });
 
   const updateFincaMutation = useMutation({
@@ -112,7 +112,7 @@ export function ClientesTab() {
       queryClient.invalidateQueries({ queryKey: ['fincas'] });
       queryClient.invalidateQueries({ queryKey: ['clientes'] });
     },
-    onError: (err) => mostrarErrorFinca(err, 'Error al actualizar finca'),
+    onError: (err) => mostrarErrorFinca(err, 'Error al actualizar sector'),
   });
 
   const deleteFincaMutation = useMutation({
@@ -121,7 +121,7 @@ export function ClientesTab() {
       queryClient.invalidateQueries({ queryKey: ['fincas'] });
       queryClient.invalidateQueries({ queryKey: ['clientes'] });
     },
-    onError: (err) => mostrarErrorFinca(err, 'Error al eliminar finca'),
+    onError: (err) => mostrarErrorFinca(err, 'Error al eliminar sector'),
   });
 
   const filtered = clientes.filter((c) =>
@@ -193,7 +193,7 @@ export function ClientesTab() {
       // Para crear, no podemos crear fincas hasta tener el clienteId
       // Por simplicidad, solo creamos el cliente y las fincas se agregan después editando
       addCliente(payload);
-      toast.info('Cliente creado. Edítalo para agregar fincas.');
+      toast.info('Cliente creado. Edítalo para agregar sectores.');
     }
     resetForm();
     setOpen(false);
@@ -358,13 +358,13 @@ export function ClientesTab() {
 
               {form.tipo === 'grupo' && editing && (
                 <div className="space-y-3 border rounded-xl p-4 border-slate-200 bg-slate-50/50">
-                  <Label>Fincas del grupo</Label>
+                  <Label>Sectores del grupo</Label>
                   {form.fincas.map((f, idx) => (
                     <div key={idx} className="flex items-center gap-2">
                       <Input
                         value={f.nombre}
                         onChange={(e) => updateFincaForm(idx, e.target.value)}
-                        placeholder="Nombre de la finca"
+                        placeholder="Nombre del sector"
                         className="bg-white border-slate-200 rounded-xl flex-1"
                       />
                       <Button
@@ -382,7 +382,7 @@ export function ClientesTab() {
                     <Input
                       value={form.nuevaFinca}
                       onChange={(e) => setForm({ ...form, nuevaFinca: e.target.value })}
-                      placeholder="Nueva finca..."
+                      placeholder="Nuevo sector..."
                       className="bg-white border-slate-200 rounded-xl flex-1"
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') {
@@ -530,7 +530,7 @@ export function ClientesTab() {
                 </div>
                 {c.tipo === 'grupo' && (
                   <div className="pt-2 border-t border-slate-100">
-                    <p className="text-xs text-slate-500 mb-1.5 font-medium">Fincas</p>
+                    <p className="text-xs text-slate-500 mb-1.5 font-medium">Sectores</p>
                     <div className="flex flex-wrap gap-1.5">
                       {fincasPorCliente(c).map((f) => (
                         <Badge

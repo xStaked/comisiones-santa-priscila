@@ -227,8 +227,8 @@ function EditFincaSelect({ clienteId, value, onChange }: { clienteId: string; va
     enabled: !!clienteId,
   });
   const nombreFincaSeleccionada = value
-    ? (fincas || []).find((x: { id: string; nombre: string }) => x.id === value)?.nombre || 'Finca no encontrada'
-    : 'Seleccionar finca';
+    ? (fincas || []).find((x: { id: string; nombre: string }) => x.id === value)?.nombre || 'Sector no encontrado'
+    : 'Seleccionar sector';
 
   return (
     <Select value={value} onValueChange={(v) => {
@@ -237,7 +237,7 @@ function EditFincaSelect({ clienteId, value, onChange }: { clienteId: string; va
       onChange(id, f?.nombre || '');
     }}>
       <SelectTrigger className="w-full rounded-xl border-slate-200 bg-white h-10 text-sm text-slate-900">
-        <SelectValue placeholder="Seleccionar finca">
+        <SelectValue placeholder="Seleccionar sector">
           {nombreFincaSeleccionada}
         </SelectValue>
       </SelectTrigger>
@@ -675,15 +675,15 @@ export function OrdenesTab() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                   {manualSelectedCliente?.tipo === 'grupo' && (
                     <div className="space-y-1.5">
-                      <Label className="text-xs text-slate-500">Finca</Label>
+                      <Label className="text-xs text-slate-500">Sector</Label>
                       <Select value={currentLine.fincaId} onValueChange={(value) => {
                         const v = value ?? '';
                         const nombre = getNombreFinca(v);
                         setCurrentLine({ ...currentLine, fincaId: v, finca: nombre || currentLine.finca });
                       }}>
                         <SelectTrigger className="w-full rounded-xl border-slate-200 bg-white h-10 text-sm text-slate-900">
-                          <SelectValue placeholder="Seleccionar finca">
-                            {currentLine.fincaId ? ((fincasCliente || []).find((f: { id: string; nombre: string }) => f.id === currentLine.fincaId)?.nombre || 'Finca no encontrada') : 'Seleccionar finca'}
+                          <SelectValue placeholder="Seleccionar sector">
+                            {currentLine.fincaId ? ((fincasCliente || []).find((f: { id: string; nombre: string }) => f.id === currentLine.fincaId)?.nombre || 'Sector no encontrado') : 'Seleccionar sector'}
                           </SelectValue>
                         </SelectTrigger>
                         <SelectContent>
@@ -696,8 +696,8 @@ export function OrdenesTab() {
                   )}
                   {manualSelectedCliente?.tipo !== 'grupo' && (
                     <div className="space-y-1.5">
-                      <Label className="text-xs text-slate-500">Finca / Sector</Label>
-                      <Input placeholder="Finca A" value={currentLine.finca} onChange={e => setCurrentLine({...currentLine, finca: e.target.value})} className="bg-white border-slate-200 rounded-xl" />
+                      <Label className="text-xs text-slate-500">Sector</Label>
+                      <Input placeholder="Sector A" value={currentLine.finca} onChange={e => setCurrentLine({...currentLine, finca: e.target.value})} className="bg-white border-slate-200 rounded-xl" />
                     </div>
                   )}
                   <div className="space-y-1.5">
@@ -787,7 +787,7 @@ export function OrdenesTab() {
                     <table className="w-full text-sm">
                       <thead className="bg-slate-50 border-b border-slate-200">
                         <tr>
-                          <th className="text-left px-3 py-2 font-medium text-slate-600">Finca</th>
+                          <th className="text-left px-3 py-2 font-medium text-slate-600">Sector</th>
                           <th className="text-left px-3 py-2 font-medium text-slate-600">Producto</th>
                           <th className="text-right px-3 py-2 font-medium text-slate-600">Cantidad</th>
                           <th className="text-right px-3 py-2 font-medium text-slate-600">Precio Unit.</th>
@@ -836,7 +836,7 @@ export function OrdenesTab() {
                     <span className={`flex flex-1 truncate text-left ${pdfClienteId ? '' : 'text-slate-400'}`}>
                       {pdfClienteId
                         ? (pdfSelectedCliente?.nombre || 'Cliente no encontrado')
-                        : 'Seleccionar cliente para vincular fincas...'}
+                        : 'Seleccionar cliente para vincular sectores...'}
                     </span>
                   </SelectTrigger>
                   <SelectContent>
@@ -899,7 +899,7 @@ export function OrdenesTab() {
                         <table className="w-full text-sm">
                           <thead className="bg-slate-50 border-b border-slate-200">
                             <tr>
-                              <th className="text-left px-3 py-2 font-medium text-slate-600">Finca</th>
+                              <th className="text-left px-3 py-2 font-medium text-slate-600">Sector</th>
                               <th className="text-left px-3 py-2 font-medium text-slate-600">Producto</th>
                               <th className="text-right px-3 py-2 font-medium text-slate-600">Cantidad</th>
                               <th className="text-right px-3 py-2 font-medium text-slate-600">Precio Unit.</th>
@@ -1225,7 +1225,7 @@ export function OrdenesTab() {
                             <tr>
                               <th className="text-left px-4 py-2 font-medium text-slate-500 text-xs">Producto</th>
                               <th className="text-left px-4 py-2 font-medium text-slate-500 text-xs">Cliente</th>
-                              <th className="text-left px-4 py-2 font-medium text-slate-500 text-xs">Finca</th>
+                              <th className="text-left px-4 py-2 font-medium text-slate-500 text-xs">Sector</th>
                               <th className="text-right px-4 py-2 font-medium text-slate-500 text-xs">Cantidad</th>
                               <th className="text-right px-4 py-2 font-medium text-slate-500 text-xs">Total</th>
                               <th className="text-left px-4 py-2 font-medium text-slate-500 text-xs">Comisionistas</th>
@@ -1417,7 +1417,7 @@ export function OrdenesTab() {
               </div>
               {(clientes.find(c => c.id === editForm.clienteId)?.tipo === 'grupo') && (
                 <div className="space-y-1.5">
-                  <Label className="text-xs text-slate-500">Finca</Label>
+                  <Label className="text-xs text-slate-500">Sector</Label>
                   <EditFincaSelect
                     clienteId={editForm.clienteId || ''}
                     value={editForm.fincaId || ''}
@@ -1427,7 +1427,7 @@ export function OrdenesTab() {
               )}
               {!(clientes.find(c => c.id === editForm.clienteId)?.tipo === 'grupo') && (
                 <div className="space-y-1.5">
-                  <Label className="text-xs text-slate-500">Finca / Sector</Label>
+                  <Label className="text-xs text-slate-500">Sector</Label>
                   <Input value={editForm.finca || ''} onChange={e => setEditForm({...editForm, finca: e.target.value})} className="bg-white border-slate-200 rounded-xl" />
                 </div>
               )}

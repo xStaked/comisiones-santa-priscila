@@ -45,11 +45,11 @@ function FincaSelect({
   });
 
   const fincaSeleccionada = fincas.find((f: Finca) => f.id === value);
-  const etiqueta = value ? fincaSeleccionada?.nombre || 'Finca no encontrada' : 'Todas las fincas del cliente';
+  const etiqueta = value ? fincaSeleccionada?.nombre || 'Sector no encontrado' : 'Todos los sectores del cliente';
 
   return (
     <div className="space-y-2">
-      <Label htmlFor="finca">Finca (opcional)</Label>
+      <Label htmlFor="finca">Sector (opcional)</Label>
       <Select value={value} onValueChange={(v) => onChange(v ?? '')}>
         <SelectTrigger className="w-full rounded-xl border-slate-200 bg-white h-10 text-sm text-slate-900">
           <span className="flex flex-1 truncate text-left">{etiqueta}</span>
@@ -176,8 +176,8 @@ export function TarifasTab() {
   const nombreCliente = (id: string) => clientePorId.get(id)?.nombre || 'Cliente no encontrado';
   const nombreProducto = (id: string) => productoPorId.get(id)?.nombre || 'Producto no encontrado';
   const nombreFinca = (id?: string) => {
-    if (!id) return 'Todas las fincas';
-    return fincaPorId.get(id)?.nombre || 'Finca no encontrada';
+    if (!id) return 'Todos los sectores';
+    return fincaPorId.get(id)?.nombre || 'Sector no encontrado';
   };
 
   const getComisionistaTarifa = (t: TarifaClienteProducto) =>
@@ -349,7 +349,7 @@ export function TarifasTab() {
     const data = filtered.map((t) => ({
       Comisionista: getComisionistaTarifa(t),
       Cliente: getClienteTarifa(t),
-      Finca: getFincaTarifa(t),
+      Sector: getFincaTarifa(t),
       Producto: getProductoTarifa(t),
       Proveedor: getProveedorTarifa(t),
       'Proveedores excluidos': getExcluidosTarifa(t) || '-',
@@ -382,7 +382,7 @@ export function TarifasTab() {
   const etiquetaFiltroCliente = filtroCliente === 'todos' ? 'Todos los clientes' : nombreCliente(filtroCliente);
   const etiquetaFiltroProducto = filtroProducto === 'todos' ? 'Todos los productos' : nombreProducto(filtroProducto);
   const etiquetaFiltroFinca =
-    filtroFinca === 'todas' ? 'Todas las fincas' : filtroFinca === 'ninguna' ? 'Sin finca' : nombreFinca(filtroFinca);
+    filtroFinca === 'todas' ? 'Todos los sectores' : filtroFinca === 'ninguna' ? 'Sin sector' : nombreFinca(filtroFinca);
   const etiquetaFormComisionista = form.comisionistaId
     ? nombreComisionista(form.comisionistaId)
     : 'Selecciona un comisionista';
@@ -845,7 +845,7 @@ export function TarifasTab() {
                   </TableHead>
                   <TableHead className="text-slate-500 font-medium">Comisionista</TableHead>
                   <TableHead className="text-slate-500 font-medium">Cliente</TableHead>
-                  <TableHead className="text-slate-500 font-medium">Finca</TableHead>
+                  <TableHead className="text-slate-500 font-medium">Sector</TableHead>
                   <TableHead className="text-slate-500 font-medium">Producto</TableHead>
                   <TableHead className="text-slate-500 font-medium">Proveedor</TableHead>
                   <TableHead className="text-slate-500 font-medium">Excluidos</TableHead>

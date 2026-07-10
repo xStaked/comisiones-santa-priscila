@@ -323,7 +323,7 @@ export function DashboardTab() {
                   <tr>
                     <th className="text-left px-4 py-3 font-medium text-slate-600">Factura</th>
                     <th className="text-left px-4 py-3 font-medium text-slate-600">Cliente</th>
-                    <th className="text-left px-4 py-3 font-medium text-slate-600">Finca</th>
+                    <th className="text-left px-4 py-3 font-medium text-slate-600">Sector</th>
                     <th className="text-left px-4 py-3 font-medium text-slate-600">Producto</th>
                     <th className="text-right px-4 py-3 font-medium text-slate-600">Total</th>
                     <th className="text-left px-4 py-3 font-medium text-slate-600">Comisionistas</th>

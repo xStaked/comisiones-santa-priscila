@@ -774,7 +774,7 @@ export function agruparPorFinca(
 ): ResumenPorFinca[] {
   const map = new Map<string, ResumenPorFinca>();
   items.forEach(item => {
-    const finca = item.finca || 'Sin finca';
+    const finca = item.finca || 'Sin sector';
     const comision = calcularComisionTotalItem(item, comisionistas, tarifasEspecificas);
     const existente = map.get(finca);
     if (existente) {
@@ -930,7 +930,7 @@ export function exportarReportePDF(
   if (filtros.fechaDesde || filtros.fechaHasta) {
     filtroTextos.push(`Período: ${filtros.fechaDesde || '...'} al ${filtros.fechaHasta || '...'}`);
   }
-  if (filtros.fincas.length > 0) filtroTextos.push(`Fincas: ${filtros.fincas.join(', ')}`);
+  if (filtros.fincas.length > 0) filtroTextos.push(`Sectores: ${filtros.fincas.join(', ')}`);
   if (filtros.productos.length > 0) filtroTextos.push(`Productos: ${filtros.productos.join(', ')}`);
   if (filtros.comisionistas.length > 0) {
     const nombres = filtros.comisionistas.map(id => comisionistas.find(c => c.id === id)?.nombre || id);
@@ -953,12 +953,12 @@ export function exportarReportePDF(
   if (resumenFincas.length > 0) {
     doc.setFontSize(9);
     doc.setFont('helvetica', 'bold');
-    doc.text('Resumen por Finca', margin, yPos);
+    doc.text('Resumen por Sector', margin, yPos);
     yPos += 5;
 
     autoTable(doc, {
       startY: yPos,
-      head: [['Finca', 'Órdenes', 'Cantidad', 'Total', 'Comisión']],
+      head: [['Sector', 'Órdenes', 'Cantidad', 'Total', 'Comisión']],
       body: resumenFincas.map(f => [
         f.nombre,
         f.ordenes.toString(),
@@ -1037,15 +1037,15 @@ export function exportarReporteExcel(
 ) {
   const wb = XLSX.utils.book_new();
 
-  // Hoja 1: Resumen por Finca
+  // Hoja 1: Resumen por Sector
   const resumenFincas = agruparPorFinca(items, comisionistas, tarifasEspecificas);
   const wsFincas = XLSX.utils.aoa_to_sheet([
-    ['Reporte de Comisiones - Resumen por Finca'],
-    ['Finca', 'Órdenes', 'Cantidad', 'Total', 'Comisión'],
+    ['Reporte de Comisiones - Resumen por Sector'],
+    ['Sector', 'Órdenes', 'Cantidad', 'Total', 'Comisión'],
     ...resumenFincas.map(f => [f.nombre, f.ordenes, f.cantidad, f.total, f.comision]),
   ]);
   wsFincas['!cols'] = [{ wch: 25 }, { wch: 10 }, { wch: 12 }, { wch: 14 }, { wch: 14 }];
-  XLSX.utils.book_append_sheet(wb, wsFincas, 'Por Finca');
+  XLSX.utils.book_append_sheet(wb, wsFincas, 'Por Sector');
 
   // Hoja 2: Resumen por Producto
   const resumenProductos = agruparPorProducto(items, comisionistas, tarifasEspecificas);

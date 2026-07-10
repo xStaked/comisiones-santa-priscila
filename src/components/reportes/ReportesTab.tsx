@@ -275,7 +275,7 @@ export function ReportesTab() {
               onChange={setClientesSel}
             />
             <MultiSelectFilter
-              label="Fincas"
+              label="Sectores"
               icon={MapPin}
               options={fincasUnicas}
               selected={fincasSel}
@@ -358,7 +358,7 @@ export function ReportesTab() {
             <div className="flex items-center gap-2">
               <BarChart3 className="h-4 w-4 text-slate-500" />
               <CardTitle className="text-base text-slate-900">
-                Comisión por {resumenFincas.length > 0 ? 'Finca' : 'Producto'}
+                Comisión por {resumenFincas.length > 0 ? 'Sector' : 'Producto'}
               </CardTitle>
             </div>
           </CardHeader>
@@ -453,12 +453,12 @@ export function ReportesTab() {
           </CardContent>
         </Card>
 
-        {/* Por Finca */}
+        {/* Por Sector */}
         <Card className="rounded-2xl border-slate-200 shadow-sm overflow-hidden">
           <CardHeader className="pb-3">
             <div className="flex items-center gap-2">
               <MapPin className="h-4 w-4 text-slate-500" />
-              <CardTitle className="text-base text-slate-900">Por Finca</CardTitle>
+              <CardTitle className="text-base text-slate-900">Por Sector</CardTitle>
             </div>
           </CardHeader>
           <CardContent className="p-0">
@@ -466,7 +466,7 @@ export function ReportesTab() {
               <table className="w-full text-sm">
                 <thead className="bg-slate-50 border-b border-slate-200">
                   <tr>
-                    <th className="text-left px-4 py-2 font-medium text-slate-600">Finca</th>
+                    <th className="text-left px-4 py-2 font-medium text-slate-600">Sector</th>
                     <th className="text-right px-4 py-2 font-medium text-slate-600">Órdenes</th>
                     <th className="text-right px-4 py-2 font-medium text-slate-600">Cantidad</th>
                     <th className="text-right px-4 py-2 font-medium text-slate-600">Total</th>

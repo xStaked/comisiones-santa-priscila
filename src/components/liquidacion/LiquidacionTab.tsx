@@ -486,7 +486,7 @@ export function LiquidacionTab() {
                   <th className="text-left px-4 py-3 font-medium">Fecha</th>
                   <th className="text-left px-4 py-3 font-medium">Factura</th>
                   <th className="text-left px-4 py-3 font-medium">Cliente</th>
-                  <th className="text-left px-4 py-3 font-medium">Finca</th>
+                  <th className="text-left px-4 py-3 font-medium">Sector</th>
                   <th className="text-left px-4 py-3 font-medium">Producto</th>
                   <th className="text-right px-4 py-3 font-medium">Cantidad</th>
                   <th className="text-right px-4 py-3 font-medium">Total</th>

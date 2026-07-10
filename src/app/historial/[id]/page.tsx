@@ -116,7 +116,7 @@ export default function LiquidacionDetallePage() {
     liquidacion.items.forEach(item => {
       const rawItem = (rawLiquidacion.items || []).find((ri: any) => ri.id === item.id);
       const comision = (rawItem?.tarifas || []).reduce((s: number, t: any) => s + (Number(t.comisionCalculada) || 0), 0);
-      const finca = item.finca || 'Sin finca';
+      const finca = item.finca || 'Sin sector';
       const existente = map.get(finca);
       if (existente) {
         existente.ordenes += 1;
@@ -370,7 +370,7 @@ export default function LiquidacionDetallePage() {
           </Card>
         </div>
 
-        {/* Gráfico + Fincas */}
+        {/* Gráfico + Sectores */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <Card className="rounded-2xl border-slate-200 shadow-sm">
             <CardHeader className="pb-2">
@@ -429,7 +429,7 @@ export default function LiquidacionDetallePage() {
             <CardHeader className="pb-3">
               <div className="flex items-center gap-2">
                 <MapPin className="h-4 w-4 text-slate-500" />
-                <CardTitle className="text-base text-slate-900">Resumen por Finca</CardTitle>
+                <CardTitle className="text-base text-slate-900">Resumen por Sector</CardTitle>
               </div>
             </CardHeader>
             <CardContent className="p-0">
@@ -437,7 +437,7 @@ export default function LiquidacionDetallePage() {
                 <table className="w-full text-sm">
                   <thead className="bg-slate-50 border-b border-slate-200">
                     <tr>
-                      <th className="text-left px-4 py-2 font-medium text-slate-600">Finca</th>
+                      <th className="text-left px-4 py-2 font-medium text-slate-600">Sector</th>
                       <th className="text-right px-4 py-2 font-medium text-slate-600">Órdenes</th>
                       <th className="text-right px-4 py-2 font-medium text-slate-600">Cantidad</th>
                       <th className="text-right px-4 py-2 font-medium text-slate-600">Total</th>
@@ -595,7 +595,7 @@ export default function LiquidacionDetallePage() {
                       Factura
                     </th>
                     <th className="text-left px-4 py-3 font-medium text-slate-600">
-                      Finca
+                      Sector
                     </th>
                     <th className="text-left px-4 py-3 font-medium text-slate-600">
                       Producto
