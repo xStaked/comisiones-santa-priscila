@@ -73,6 +73,24 @@ Implementado tanto en frontend (`src/lib/export-utils.ts`) como backend (`backen
 
 Tipos de tarifa: `porcentaje` (sobre total menos retención del cliente, default 1.75%), `fijo_kg`, `fijo_unidad`.
 
+## Unidades: la cantidad no siempre significa lo mismo
+
+Órdenes de compra y facturas conviven en la tabla `ordenes`, pero expresan la cantidad distinto:
+
+- **OC:** `cantidad` = número de envases (63 tachos, 1700 sacos). El PDF nombra el envase en `unidad`.
+- **Factura:** no trae columna de unidad; `cantidad` viene en **kg** (o litros). El prompt de `openai_extractor.py` le prohíbe a la IA nombrar un envase acá — si pone "tachos", la comisión se multiplica por 10.
+
+De ahí que cada tipo de tarifa se cobre en su propia unidad:
+
+```
+fijo_kg     → cantidad_en_kg × valor
+fijo_unidad → cantidad_en_envases × valor    ($/saco, $/tacho, $/litro)
+```
+
+La conversión kg↔envases sale de `producto`: `tacho_kilos` (default 10), `saco_kilos` (default 25), caneca = 20. Si `unidad` nombra un envase, la cantidad está en envases; si no, ya está en kg.
+
+Según la matriz de tarifas del cliente, el valor en $ es **por kg**, salvo: CITRIUS y MORTAL CONTROL/SHELL (por litro, ≈ kg), CALCINIT/NITRATO DE CALCIO (por saco de 25 kg) y NATUXTRACT (por tacho de 15 kg). Estos dos últimos van como `fijo_unidad`; cargarlos como `fijo_kg` paga 25x y 15x de más.
+
 ## Autenticación
 
 Flujo JWT dual-token con refresh silencioso en el interceptor de axios (`src/lib/api.ts`):

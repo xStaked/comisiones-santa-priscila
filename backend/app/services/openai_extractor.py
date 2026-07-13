@@ -65,6 +65,13 @@ Devuelve solo datos visibles en el documento. No inventes campos ausentes.
 Usa formato de fecha YYYY-MM-DD cuando sea posible.
 Convierte separadores de miles y decimales a numeros JSON.
 Si una finca o cliente aparece en encabezado, aplicalo a los items salvo que el item indique otro valor.
+
+Campo "unidad": nombra un envase (tachos, sacos, canecas) SOLO si el documento
+dice explicitamente que la cantidad esta contada en esos envases. Las facturas no
+traen columna de unidad: su cantidad esta en kilos (o litros para los liquidos),
+asi que ahi devuelve "kg" (o "litros"), nunca el envase en que se presenta el
+producto. De esto depende el calculo de comisiones: un envase mal puesto la
+multiplica por 10 o por 25.
 """
 
 

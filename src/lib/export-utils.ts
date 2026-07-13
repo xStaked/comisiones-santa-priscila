@@ -9,112 +9,74 @@ import {
   normalizarRazonSocial,
 } from './normalization';
 
+// Paridad obligatoria con backend/app/services/liquidacion.py.
+// Kilos que contiene cada envase cuando el producto no lo define.
+// 1 litro ≈ 1 kg, así que kg, litros y unidades sueltas comparten factor 1.
+const KG_POR_TACHO = 10;
+const KG_POR_SACO = 25;
+const KG_POR_CANECA = 20;
+
+const ENVASES = ['tacho', 'saco', 'caneca'];
+
+function esEnvase(unidad: string): boolean {
+  return ENVASES.some((envase) => unidad.includes(envase));
+}
+
+/**
+ * Kilos que contiene un envase del ítem. La unidad del documento manda; las
+ * facturas vienen en kg (no nombran el envase), así que ahí lo define el producto.
+ */
+function getKgPorEnvase(item: OrdenItem): number {
+  const producto = item.productoRel;
+  let unidad = item.unidad?.toLowerCase() || '';
+
+  if (!esEnvase(unidad)) {
+    unidad = producto?.unidadComision?.toLowerCase() || '';
+  }
+
+  if (unidad.includes('tacho')) return producto?.tachoKilos || KG_POR_TACHO;
+  if (unidad.includes('saco')) return producto?.sacoKilos || KG_POR_SACO;
+  if (unidad.includes('caneca')) return KG_POR_CANECA;
+  return 1;
+}
+
+/**
+ * Cantidad del ítem en kilos: la unidad en la que se expresa una tarifa fijo_kg.
+ * Las órdenes de compra traen la cantidad en envases (63 tachos); las facturas
+ * la traen ya en kilos (630 kg).
+ */
+export function getCantidadParaTarifaKg(item: OrdenItem): number {
+  if (esEnvase(item.unidad?.toLowerCase() || '')) {
+    return item.cantidad * getKgPorEnvase(item);
+  }
+  return item.cantidad;
+}
+
+/**
+ * Cantidad del ítem en envases: la unidad en la que se expresa una tarifa
+ * fijo_unidad ($/saco de CALCINIT, $/tacho de NATUXTRACT, $/litro de MORTAL).
+ */
+export function getCantidadParaTarifaUnidad(item: OrdenItem): number {
+  if (esEnvase(item.unidad?.toLowerCase() || '')) {
+    return item.cantidad;
+  }
+  return item.cantidad / getKgPorEnvase(item);
+}
+
 export function calcularComisionPorTarifa(item: OrdenItem, tarifa: { tipo: 'porcentaje' | 'fijo_kg' | 'fijo_unidad'; valor: number }): number {
   if (tarifa.tipo === 'porcentaje') {
     return item.total * (tarifa.valor / 100);
   }
-
-  const unidadLower = item.unidad?.toLowerCase() || '';
 
   if (tarifa.tipo === 'fijo_kg') {
     return getCantidadParaTarifaKg(item) * tarifa.valor;
   }
 
   if (tarifa.tipo === 'fijo_unidad') {
-    let cantidad = item.cantidad;
-    if (
-      item.productoRel?.pesoPorUnidad &&
-      ['kg', 'litros'].includes(unidadLower)
-    ) {
-      cantidad = item.cantidad / item.productoRel.pesoPorUnidad;
-    } else if (
-      item.productoRel?.pesoPorUnidad &&
-      !['kg', 'libras', 'litros'].includes(unidadLower)
-    ) {
-      // Ya está en unidades, usar directamente
-    }
-    // Si no hay pesoPorUnidad, usar cantidad directa
-    return cantidad * tarifa.valor;
+    return getCantidadParaTarifaUnidad(item) * tarifa.valor;
   }
 
   return 0;
-}
-
-function getKgPorTachoDesdeUnidad(unidad?: string): number | undefined {
-  const unidadNormalizada = unidad?.toLowerCase().replace(',', '.') || '';
-  if (!unidadNormalizada.includes('tacho')) return undefined;
-
-  const match = unidadNormalizada.match(/(\d+(?:\.\d+)?)\s*k(?:g|ilo|ilos)?\b/);
-  if (!match) return undefined;
-
-  return Number(match[1]);
-}
-
-export function getCantidadParaTarifaKg(item: OrdenItem): number {
-  const unidadLower = item.unidad?.toLowerCase() || '';
-  const producto = item.productoRel;
-  const kgPorTacho = getKgPorTachoDesdeUnidad(item.unidad);
-
-  if (kgPorTacho !== undefined) {
-    return item.cantidad * kgPorTacho;
-  }
-
-  if (unidadLower.includes('tacho')) {
-    return item.cantidad * (producto?.tachoKilos || 15);
-  }
-
-  if (unidadLower === 'libras') {
-    return item.cantidad * 0.453592;
-  }
-
-  if (unidadLower.includes('caneca')) {
-    return item.cantidad * 20; // 1 caneca = 20 litros ≈ 20 kg
-  }
-
-  if (unidadLower.includes('galon') || unidadLower.includes('galón')) {
-    return item.cantidad * 3.78541; // 1 galón ≈ 3.785 litros ≈ 3.785 kg
-  }
-
-  // Caso especial: si la orden sube el ítem como saco, la tarifa fijo_kg se paga
-  // por saco (nº de sacos × valor), NO convertida a kilos.
-  if (unidadLower.includes('saco')) {
-    return item.cantidad;
-  }
-
-  // Las conversiones por unidadComision del producto solo aplican cuando la unidad
-  // de la orden no es una unidad base ya reconocida (kg, libras, litros, caneca, galón, tacho).
-  // Si la unidad ya fue procesada arriba, no se debe aplicar un segundo factor de conversión.
-  const unidadYaReconocida = unidadLower === 'kg' ||
-    unidadLower === 'libras' ||
-    unidadLower === 'litros' ||
-    unidadLower.includes('tacho') ||
-    unidadLower.includes('caneca') ||
-    unidadLower.includes('galon') ||
-    unidadLower.includes('galón');
-
-  if (!unidadYaReconocida) {
-    if (producto?.unidadComision === 'tacho') {
-      return item.cantidad * (producto.tachoKilos || 15);
-    }
-
-    if (producto?.unidadComision === 'saco') {
-      return item.cantidad * (producto.sacoKilos || 25);
-    }
-
-    if (producto?.unidadComision === 'caneca') {
-      return item.cantidad * 20; // 1 caneca = 20 litros ≈ 20 kg
-    }
-
-    if (producto?.unidadComision === 'galon') {
-      return item.cantidad * 3.78541; // 1 galón ≈ 3.785 litros ≈ 3.785 kg
-    }
-
-    if (producto?.pesoPorUnidad) {
-      return item.cantidad * producto.pesoPorUnidad;
-    }
-  }
-
-  return item.cantidad;
 }
 
 // Regla por volumen: paridad obligatoria con _comision_con_umbral() de
@@ -135,12 +97,12 @@ function comisionConUmbral(
   };
 }
 
+// Igual que la global salvo que el porcentaje se aplica sobre el total menos la
+// retención del cliente.
 export function calcularComisionPorTarifaEspecifica(
   item: OrdenItem,
   tarifa: TarifaClienteProducto
 ): number {
-  const unidadLower = item.unidad?.toLowerCase() || '';
-
   if (tarifa.tipo === 'porcentaje') {
     const retencion = item.cliente?.retencionPorcentaje ?? 1.75;
     const base = item.total * (1 - retencion / 100);
@@ -152,21 +114,7 @@ export function calcularComisionPorTarifaEspecifica(
   }
 
   if (tarifa.tipo === 'fijo_unidad') {
-    const producto = item.productoRel;
-    let cantidad = item.cantidad;
-    if (
-      producto?.pesoPorUnidad &&
-      ['kg', 'litros'].includes(unidadLower)
-    ) {
-      cantidad = item.cantidad / producto.pesoPorUnidad;
-    } else if (
-      producto?.pesoPorUnidad &&
-      !['kg', 'libras', 'litros'].includes(unidadLower)
-    ) {
-      // Ya está en unidades, usar directamente
-    }
-    // Si no hay pesoPorUnidad, usar cantidad directa
-    return cantidad * tarifa.valor;
+    return getCantidadParaTarifaUnidad(item) * tarifa.valor;
   }
 
   return 0;

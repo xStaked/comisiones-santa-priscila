@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import re
 from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
@@ -22,77 +21,62 @@ from app.services.catalog_normalization import (
 )
 from app.services.product_matching import obtener_productos_equivalentes
 
-LIBRA_A_KG = Decimal("0.453592")
+# Kilos que contiene cada envase cuando el producto no lo define.
+# 1 litro ≈ 1 kg, así que kg, litros y unidades sueltas comparten factor 1.
+KG_POR_TACHO = Decimal("10")
+KG_POR_SACO = Decimal("25")
+KG_POR_CANECA = Decimal("20")
+
+ENVASES = ("tacho", "saco", "caneca")
 
 
-def _extraer_kg_por_tacho(unidad: str | None) -> Decimal | None:
-    if not unidad:
-        return None
+def _es_envase(unidad: str) -> bool:
+    return any(envase in unidad for envase in ENVASES)
 
-    unidad_normalizada = unidad.lower().replace(",", ".")
-    if "tacho" not in unidad_normalizada:
-        return None
 
-    match = re.search(r"(\d+(?:\.\d+)?)\s*k(?:g|ilo|ilos)?\b", unidad_normalizada)
-    if not match:
-        return None
+def _kg_por_envase(orden_item: OrdenItem) -> Decimal:
+    """Kilos que contiene un envase del ítem.
 
-    return Decimal(match.group(1))
+    La unidad del documento manda. Las facturas vienen en kg (no nombran el
+    envase), así que ahí el envase lo define el producto.
+    """
+    producto = orden_item.producto_obj
+    unidad = orden_item.unidad.lower() if orden_item.unidad else ""
+
+    if not _es_envase(unidad):
+        unidad = (
+            producto.unidad_comision.lower()
+            if producto and producto.unidad_comision
+            else ""
+        )
+
+    if "tacho" in unidad:
+        return producto.tacho_kilos if producto and producto.tacho_kilos else KG_POR_TACHO
+    if "saco" in unidad:
+        return producto.saco_kilos if producto and producto.saco_kilos else KG_POR_SACO
+    if "caneca" in unidad:
+        return KG_POR_CANECA
+    return Decimal("1")
 
 
 def _cantidad_para_tarifa_kg(orden_item: OrdenItem) -> Decimal:
-    cantidad = orden_item.cantidad
-    unidad_lower = orden_item.unidad.lower() if orden_item.unidad else ""
-    producto = orden_item.producto_obj
-    kg_por_tacho = _extraer_kg_por_tacho(orden_item.unidad)
+    """Cantidad del ítem en kilos: la unidad en la que se expresa una tarifa fijo_kg.
 
-    if kg_por_tacho is not None:
-        return cantidad * kg_por_tacho
+    Las órdenes de compra traen la cantidad en envases (63 tachos); las facturas
+    la traen ya en kilos (630 kg).
+    """
+    if _es_envase(orden_item.unidad.lower() if orden_item.unidad else ""):
+        return orden_item.cantidad * _kg_por_envase(orden_item)
+    return orden_item.cantidad
 
-    if "tacho" in unidad_lower:
-        tacho_kilos = producto.tacho_kilos if producto and producto.tacho_kilos else Decimal("15")
-        return cantidad * tacho_kilos
 
-    if unidad_lower == "libras":
-        return cantidad * LIBRA_A_KG
-
-    if "caneca" in unidad_lower:
-        return cantidad * Decimal("20")  # 1 caneca = 20 litros ≈ 20 kg
-
-    if "galon" in unidad_lower or "galón" in unidad_lower:
-        return cantidad * Decimal("3.78541")  # 1 galón ≈ 3.785 litros ≈ 3.785 kg
-
-    # Caso especial: si la orden sube el ítem como saco, la tarifa fijo_kg se paga
-    # por saco (nº de sacos × valor), NO convertida a kilos.
-    if "saco" in unidad_lower:
-        return cantidad
-
-    # La unidad del ítem manda sobre la del producto. Las facturas vienen en kg
-    # aunque el producto se venda por tacho en las órdenes de compra: sin este
-    # corte se multiplicaría por tacho_kilos una cantidad que ya está en kilos.
-    if unidad_lower in ("kg", "litros"):
-        return cantidad
-
-    if producto and producto.unidad_comision == "tacho":
-        return cantidad * (producto.tacho_kilos or Decimal("15"))
-
-    if producto and producto.unidad_comision == "saco":
-        return cantidad * (producto.saco_kilos or Decimal("25"))
-
-    if producto and producto.unidad_comision == "caneca":
-        return cantidad * Decimal("20")  # 1 caneca = 20 litros ≈ 20 kg
-
-    if producto and producto.unidad_comision == "galon":
-        return cantidad * Decimal("3.78541")  # 1 galón ≈ 3.785 litros ≈ 3.785 kg
-
-    if (
-        producto
-        and producto.peso_por_unidad
-        and unidad_lower not in ("kg", "libras", "litros")
-    ):
-        return cantidad * producto.peso_por_unidad
-
-    return cantidad
+def _cantidad_para_tarifa_unidad(orden_item: OrdenItem) -> Decimal:
+    """Cantidad del ítem en envases: la unidad en la que se expresa una tarifa
+    fijo_unidad ($/saco de CALCINIT, $/tacho de NATUXTRACT, $/litro de MORTAL).
+    """
+    if _es_envase(orden_item.unidad.lower() if orden_item.unidad else ""):
+        return orden_item.cantidad
+    return orden_item.cantidad / _kg_por_envase(orden_item)
 
 
 def _buscar_tarifa_especifica(
@@ -294,24 +278,7 @@ def _calcular_comision_con_tarifa(
     elif tarifa.tipo == TipoTarifa.fijo_kg:
         return _cantidad_para_tarifa_kg(orden_item) * tarifa.valor
     elif tarifa.tipo == TipoTarifa.fijo_unidad:
-        cantidad = orden_item.cantidad
-        if (
-            orden_item.producto_obj
-            and orden_item.producto_obj.peso_por_unidad
-            and orden_item.unidad
-            and orden_item.unidad.lower() in ("kg", "litros")
-        ):
-            cantidad = orden_item.cantidad / orden_item.producto_obj.peso_por_unidad
-        elif (
-            orden_item.producto_obj
-            and orden_item.producto_obj.peso_por_unidad
-            and orden_item.unidad
-            and orden_item.unidad.lower() not in ("kg", "libras", "litros")
-        ):
-            # Ya está en unidades, usar directamente
-            pass
-        # Si no hay peso_por_unidad, usar cantidad directa
-        return cantidad * tarifa.valor
+        return _cantidad_para_tarifa_unidad(orden_item) * tarifa.valor
     return Decimal("0")
 
 
@@ -333,7 +300,8 @@ def _tiene_tarifas_especificas(
 def _calcular_comision_especifica(
     db: Session, orden_item: OrdenItem, tarifa: TarifaClienteProducto
 ) -> Decimal:
-    """Calcula comisión con tarifa específica considerando retención y unidad de producto."""
+    """Calcula comisión con tarifa específica. Igual que la global salvo que el
+    porcentaje se aplica sobre el total menos la retención del cliente."""
     if tarifa.tipo == TipoTarifa.porcentaje:
         retencion = (
             orden_item.cliente.retencion_porcentaje
@@ -345,25 +313,7 @@ def _calcular_comision_especifica(
     elif tarifa.tipo == TipoTarifa.fijo_kg:
         return _cantidad_para_tarifa_kg(orden_item) * tarifa.valor
     elif tarifa.tipo == TipoTarifa.fijo_unidad:
-        producto = orden_item.producto_obj
-        cantidad = orden_item.cantidad
-        if (
-            producto
-            and producto.peso_por_unidad
-            and orden_item.unidad
-            and orden_item.unidad.lower() in ("kg", "litros")
-        ):
-            cantidad = orden_item.cantidad / producto.peso_por_unidad
-        elif (
-            producto
-            and producto.peso_por_unidad
-            and orden_item.unidad
-            and orden_item.unidad.lower() not in ("kg", "libras", "litros")
-        ):
-            # Ya está en unidades, usar directamente
-            pass
-        # Si no hay peso_por_unidad, usar cantidad directa
-        return cantidad * tarifa.valor
+        return _cantidad_para_tarifa_unidad(orden_item) * tarifa.valor
     return Decimal("0")
 
 
