@@ -75,7 +75,24 @@ def _extraer_con_ia(
     )
     orden_validada = validar_orden_extraida(orden_ia)
     orden_normalizada = normalizar_orden_extraida(db, orden_validada, cliente_id=cliente_id)
-    return _orden_validada_a_respuesta(orden_normalizada)
+    respuesta = _orden_validada_a_respuesta(orden_normalizada)
+
+    # Las facturas de terceros no traen un número de orden legible en el texto;
+    # el nombre del archivo sí lo lleva (ej. "DIN 001-002-000002243 PLUMONT.pdf").
+    numero_archivo = _numero_desde_nombre_archivo(nombre_archivo)
+    if numero_archivo:
+        respuesta["numeroOrden"] = numero_archivo
+        for item in respuesta["items"]:
+            item["numeroOrden"] = numero_archivo
+
+    return respuesta
+
+
+def _numero_desde_nombre_archivo(nombre_archivo: str) -> str:
+    """Número de factura tipo 001-002-000002243; si no aparece, el nombre sin extensión."""
+    nombre = re.sub(r"\.[^.]+$", "", nombre_archivo).strip()
+    match = re.search(r"\d{3}-\d{3}-\d{6,}", nombre)
+    return match.group(0) if match else nombre
 
 
 def _extraer_texto_pdf(contenido: bytes) -> str:
