@@ -521,27 +521,32 @@ export function exportarExcel(
     (item.cliente?.nombre && grupoPorClienteNombre.get(normalizarTexto(item.cliente.nombre))) ||
     'N/A';
 
-  // Agrupar ítems por proveedor (una hoja por razón social). La clave es la
-  // razón social normalizada para que variantes tipográficas de la misma
-  // empresa (con/sin "CIA.LTDA.") caigan en la misma hoja; se muestra el
-  // nombre más largo visto (normalmente el nombre legal completo).
-  const itemsPorProveedor = new Map<string, { nombre: string; items: OrdenItem[] }>();
+  // Una hoja por (grupo empresarial del cliente × razón social del proveedor):
+  // "ACUARIOS DEL GOLFO - DINACUAMAR" y "ACUARIOS DEL GOLFO - ELIZABETH OCHOA"
+  // van en hojas distintas. La razón social se normaliza para que variantes
+  // tipográficas de la misma empresa (con/sin "CIA.LTDA.") caigan juntas; se
+  // muestra el nombre más largo visto (normalmente el nombre legal completo).
+  // Clientes sin grupo → "VARIOS".
+  const itemsPorHoja = new Map<string, { grupo: string; nombre: string; items: OrdenItem[] }>();
   items.forEach(item => {
     const prov = item.proveedor?.trim() || 'Sin proveedor';
-    const clave = normalizarRazonSocial(prov) || 'Sin proveedor';
-    const grupo = itemsPorProveedor.get(clave);
-    if (grupo) {
-      grupo.items.push(item);
-      if (prov.length > grupo.nombre.length) grupo.nombre = prov;
+    const grupoNombre = grupoDelItem(item) === 'N/A' ? 'VARIOS' : grupoDelItem(item);
+    const clave = `${normalizarTexto(grupoNombre)}|${normalizarRazonSocial(prov) || 'Sin proveedor'}`;
+    const hoja = itemsPorHoja.get(clave);
+    if (hoja) {
+      hoja.items.push(item);
+      if (prov.length > hoja.nombre.length) hoja.nombre = prov;
     } else {
-      itemsPorProveedor.set(clave, { nombre: prov, items: [item] });
+      itemsPorHoja.set(clave, { grupo: grupoNombre, nombre: prov, items: [item] });
     }
   });
 
-  const gruposProveedor = Array.from(itemsPorProveedor.values()).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
+  const gruposProveedor = Array.from(itemsPorHoja.values()).sort((a, b) =>
+    a.grupo.localeCompare(b.grupo, 'es') || a.nombre.localeCompare(b.nombre, 'es')
+  );
   const nombresHojaUsados = new Set<string>();
 
-  gruposProveedor.forEach(({ nombre: nombreProveedor, items: itemsProveedor }) => {
+  gruposProveedor.forEach(({ grupo: nombreGrupo, nombre: nombreProveedor, items: itemsProveedor }) => {
 
     // Agrupar items por comisionista, luego por mes (formato original por hoja)
     const itemsPorComisionista = new Map<string, Map<string, OrdenItem[]>>();
@@ -572,7 +577,7 @@ export function exportarExcel(
     const data: any[] = [];
     let totalProveedor = 0;
 
-    data.push([`Razón social: ${nombreProveedor}`]);
+    data.push([`Grupo: ${nombreGrupo}  —  Razón social: ${nombreProveedor}`]);
     data.push([]);
 
     comisionistaIds.forEach(comId => {
@@ -618,7 +623,7 @@ export function exportarExcel(
             tarifasLabel,
             `$ ${comision.toFixed(2).replace('.', ',')}`,
             item.estado || 'pagada',
-            item.sector || item.finca || '-',
+            item.sector || item.finca || 'N/A',
             grupoDelItem(item),
           ]);
         });
@@ -644,7 +649,7 @@ export function exportarExcel(
       { wch: 10 },
       { wch: 18 },
     ];
-    XLSX.utils.book_append_sheet(wb, ws, nombreHojaValido(nombreProveedor, nombresHojaUsados));
+    XLSX.utils.book_append_sheet(wb, ws, nombreHojaValido(`${nombreGrupo} ${nombreProveedor}`, nombresHojaUsados));
   });
 
   XLSX.writeFile(wb, `${titulo.replace(/\s+/g, '_')}.xlsx`);
