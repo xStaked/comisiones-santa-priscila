@@ -2,11 +2,11 @@
 
 import { useMemo, useState } from 'react';
 import { Plus, Pencil, Trash2, Percent, Weight, Search, FileSpreadsheet } from 'lucide-react';
-import { useQueries, useQuery } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import * as XLSX from 'xlsx';
 import { useApp } from '@/context/AppContext';
 import { TarifaClienteProducto, Finca, Proveedor } from '@/types';
-import { fetchFincas, fetchProveedores } from '@/lib/api';
+import { fetchProveedores } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -30,20 +30,14 @@ import {
 import { toast } from 'sonner';
 
 function FincaSelect({
-  clienteId,
+  fincas,
   value,
   onChange,
 }: {
-  clienteId: string;
+  fincas: Finca[];
   value: string;
   onChange: (value: string) => void;
 }) {
-  const { data: fincas = [] } = useQuery({
-    queryKey: ['fincas', clienteId],
-    queryFn: () => fetchFincas(clienteId),
-    enabled: !!clienteId,
-  });
-
   const fincaSeleccionada = fincas.find((f: Finca) => f.id === value);
   const etiqueta = value ? fincaSeleccionada?.nombre || 'Sector no encontrado' : 'Todos los sectores del cliente';
 
@@ -134,27 +128,17 @@ export function TarifasTab() {
     vigenteHasta: '',
   });
 
-  // Cargar fincas del cliente seleccionado en el filtro
-  const { data: fincasFiltro = [] } = useQuery({
-    queryKey: ['fincas', filtroCliente],
-    queryFn: () => fetchFincas(filtroCliente),
-    enabled: filtroCliente !== 'todos',
-  });
+  // Los clientes ya vienen con sus sectores (selectinload en el backend)
+  const fincasPorCliente = useMemo(
+    () => new Map(clientes.map((c) => [c.id, c.fincas ?? []])),
+    [clientes]
+  );
 
-  const fincasQueries = useQueries({
-    queries: clientes.map((cliente) => ({
-      queryKey: ['fincas', cliente.id],
-      queryFn: () => fetchFincas(cliente.id),
-      enabled: !!cliente.id,
-    })),
-  });
+  const fincasFiltro = fincasPorCliente.get(filtroCliente) ?? [];
 
   const fincas = useMemo(
-    () => [
-      ...clientes.flatMap((cliente) => cliente.fincas ?? []),
-      ...fincasQueries.flatMap((query) => (query.data ?? []) as Finca[]),
-    ],
-    [clientes, fincasQueries]
+    () => clientes.flatMap((cliente) => cliente.fincas ?? []),
+    [clientes]
   );
 
   const comisionistaPorId = useMemo(
@@ -578,7 +562,7 @@ export function TarifasTab() {
 
             {mostrarFincaEnForm && form.clienteId && (
               <FincaSelect
-                clienteId={form.clienteId}
+                fincas={fincasPorCliente.get(form.clienteId) ?? []}
                 value={form.fincaId}
                 onChange={(value) => setForm({ ...form, fincaId: value })}
               />
