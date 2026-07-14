@@ -164,9 +164,15 @@ export function encontrarTarifaEspecifica(
     return normalizarTexto(tarifa.proveedor) === proveedorOrden;
   };
 
+  // Ambas fechas son ISO YYYY-MM-DD, así que comparar como texto ordena bien.
+  const fechaItem = (item.fecha || '').slice(0, 10);
+  const estaVigente = (tarifa: TarifaClienteProducto) =>
+    !tarifa.vigenteHasta || !fechaItem || fechaItem <= tarifa.vigenteHasta.slice(0, 10);
+
   const candidatas = tarifas.filter(
     (tarifa) =>
       tarifa.comisionistaId === comisionistaId &&
+      estaVigente(tarifa) &&
       (coincideCliente(tarifa) || sinClienteIdentificado) &&
       coincideProducto(tarifa)
   );

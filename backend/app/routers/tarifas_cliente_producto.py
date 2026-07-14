@@ -39,6 +39,7 @@ def _enriquecer_respuesta(
         activo=tarifa.activo,
         umbralKg=tarifa.umbral_kg,
         valorSobreUmbral=tarifa.valor_sobre_umbral,
+        vigenteHasta=tarifa.vigente_hasta,
         comisionista=tarifa.comisionista.nombre if tarifa.comisionista else None,
         cliente=tarifa.cliente.nombre if tarifa.cliente else None,
         producto=tarifa.producto.nombre if tarifa.producto else None,
@@ -100,6 +101,7 @@ def crear_tarifa_cliente_producto(
         valor=data.valor,
         umbral_kg=data.umbral_kg,
         valor_sobre_umbral=data.valor_sobre_umbral,
+        vigente_hasta=data.vigente_hasta,
     )
     db.add(tarifa)
     try:
@@ -193,6 +195,7 @@ def actualizar_tarifa_cliente_producto(
     tarifa.valor = data.valor
     tarifa.umbral_kg = data.umbral_kg
     tarifa.valor_sobre_umbral = data.valor_sobre_umbral
+    tarifa.vigente_hasta = data.vigente_hasta
 
     try:
         db.commit()

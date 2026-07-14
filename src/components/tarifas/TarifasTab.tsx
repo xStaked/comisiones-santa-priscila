@@ -119,6 +119,7 @@ export function TarifasTab() {
     activo: boolean;
     umbralKg: string;
     valorSobreUmbral: string;
+    vigenteHasta: string;
   }>({
     comisionistaId: '',
     clienteId: '',
@@ -130,6 +131,7 @@ export function TarifasTab() {
     activo: true,
     umbralKg: '',
     valorSobreUmbral: '',
+    vigenteHasta: '',
   });
 
   // Cargar fincas del cliente seleccionado en el filtro
@@ -230,6 +232,7 @@ export function TarifasTab() {
       activo: true,
       umbralKg: '',
       valorSobreUmbral: '',
+      vigenteHasta: '',
     });
     setProveedoresSeleccionados([]);
     setEditing(null);
@@ -267,6 +270,7 @@ export function TarifasTab() {
       activo: form.activo,
       umbralKg: form.umbralKg ? parseFloat(form.umbralKg) : undefined,
       valorSobreUmbral: form.valorSobreUmbral ? parseFloat(form.valorSobreUmbral) : undefined,
+      vigenteHasta: form.vigenteHasta || undefined,
     };
 
     if (editing) {
@@ -291,6 +295,7 @@ export function TarifasTab() {
       activo: t.activo,
       umbralKg: t.umbralKg?.toString() || '',
       valorSobreUmbral: t.valorSobreUmbral?.toString() || '',
+      vigenteHasta: t.vigenteHasta?.slice(0, 10) || '',
     });
     setProveedoresSeleccionados(t.proveedoresExcluidos || []);
     setOpen(true);
@@ -684,6 +689,21 @@ export function TarifasTab() {
             <p className="text-xs text-slate-500">
               Si el comisionista acumula el umbral en kg dentro de una liquidación, toda su comisión se paga a $/kg con el valor sobre umbral.
             </p>
+
+            <div className="space-y-2">
+              <Label htmlFor="vigenteHasta">Vigente hasta (opcional)</Label>
+              <Input
+                id="vigenteHasta"
+                type="date"
+                value={form.vigenteHasta}
+                onChange={(e) => setForm({ ...form, vigenteHasta: e.target.value })}
+                className="bg-white border-slate-200 rounded-xl"
+              />
+              <p className="text-xs text-slate-500">
+                Déjalo vacío si la tarifa no caduca. Con fecha, solo se aplica a órdenes hasta ese día
+                inclusive; las posteriores no la usan (las ya liquidadas no cambian).
+              </p>
+            </div>
 
             <div className="flex items-center gap-2">
               <input

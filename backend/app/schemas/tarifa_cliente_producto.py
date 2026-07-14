@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import date
 from decimal import Decimal
 from typing import List, Optional
 from uuid import UUID
@@ -18,6 +19,7 @@ class TarifaClienteProductoBase(BaseModel):
     valor: Decimal
     umbral_kg: Optional[Decimal] = Field(default=None, alias="umbralKg")
     valor_sobre_umbral: Optional[Decimal] = Field(default=None, alias="valorSobreUmbral")
+    vigente_hasta: Optional[date] = Field(default=None, alias="vigenteHasta")
 
     model_config = ConfigDict(populate_by_name=True)
 
@@ -43,6 +45,7 @@ class TarifaClienteProductoResponse(BaseModel):
     activo: bool
     umbral_kg: Optional[Decimal] = Field(default=None, alias="umbralKg")
     valor_sobre_umbral: Optional[Decimal] = Field(default=None, alias="valorSobreUmbral")
+    vigente_hasta: Optional[date] = Field(default=None, alias="vigenteHasta")
     comisionista: Optional[str] = None
     cliente: Optional[str] = None
     producto: Optional[str] = None

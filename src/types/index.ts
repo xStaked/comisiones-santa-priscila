@@ -130,6 +130,8 @@ export interface TarifaClienteProducto {
   activo: boolean;
   umbralKg?: number;
   valorSobreUmbral?: number;
+  /** ISO YYYY-MM-DD. Vacío = sin caducidad. La tarifa solo aplica a órdenes hasta esta fecha. */
+  vigenteHasta?: string;
   createdAt: string;
   // Relaciones opcionales (populadas por el backend)
   comisionista?: string | { id: string; nombre: string };

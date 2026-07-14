@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from uuid import UUID
 
@@ -77,6 +77,18 @@ def _cantidad_para_tarifa_unidad(orden_item: OrdenItem) -> Decimal:
     if _es_envase(orden_item.unidad.lower() if orden_item.unidad else ""):
         return orden_item.cantidad
     return orden_item.cantidad / _kg_por_envase(orden_item)
+
+
+def _vigente_en(fecha: date):
+    """Predicado: la tarifa aplica a una orden de esa fecha.
+
+    `vigente_hasta` NULL significa sin caducidad. Si tiene fecha, la tarifa
+    solo se usa para órdenes hasta ese día inclusive.
+    """
+    return or_(
+        TarifaClienteProducto.vigente_hasta.is_(None),
+        TarifaClienteProducto.vigente_hasta >= fecha,
+    )
 
 
 def _buscar_tarifa_especifica(
@@ -159,6 +171,7 @@ def _buscar_tarifa_especifica(
                     func.upper(TarifaClienteProducto.proveedor) == "CUALQUIER PROVEEDOR",
                 ),
                 TarifaClienteProducto.activo.is_(True),
+                _vigente_en(orden_item.fecha),
             )
             .first()
         )
@@ -179,6 +192,7 @@ def _buscar_tarifa_especifica(
                     func.upper(TarifaClienteProducto.proveedor) == "CUALQUIER PROVEEDOR",
                 ),
                 TarifaClienteProducto.activo.is_(True),
+                _vigente_en(orden_item.fecha),
             )
             .first()
         )
@@ -200,6 +214,7 @@ def _buscar_tarifa_especifica(
                     func.upper(TarifaClienteProducto.proveedor) == "CUALQUIER PROVEEDOR",
                 ),
                 TarifaClienteProducto.activo.is_(True),
+                _vigente_en(orden_item.fecha),
             )
             .all()
         )
@@ -222,6 +237,7 @@ def _buscar_tarifa_especifica(
                     func.upper(TarifaClienteProducto.proveedor) == "CUALQUIER PROVEEDOR",
                 ),
                 TarifaClienteProducto.activo.is_(True),
+                _vigente_en(orden_item.fecha),
             )
             .all()
         )
@@ -242,6 +258,7 @@ def _buscar_tarifa_especifica(
                 func.upper(TarifaClienteProducto.proveedor) == "CUALQUIER PROVEEDOR",
             ),
             TarifaClienteProducto.activo.is_(True),
+            _vigente_en(orden_item.fecha),
         )
         .first()
     )
@@ -261,6 +278,7 @@ def _buscar_tarifa_especifica(
                 func.upper(TarifaClienteProducto.proveedor) == "CUALQUIER PROVEEDOR",
             ),
             TarifaClienteProducto.activo.is_(True),
+            _vigente_en(orden_item.fecha),
         )
         .first()
     )

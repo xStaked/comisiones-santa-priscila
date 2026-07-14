@@ -960,3 +960,75 @@ def test_factura_en_kg_no_se_multiplica_por_tacho_kilos(db_session):
     assert _calcular_comision_con_tarifa(factura, tarifa) == Decimal("80.00")
     # La orden en tachos sí convierte: 26 × 10 kg.
     assert _calcular_comision_con_tarifa(orden, tarifa) == Decimal("260.00")
+
+
+def test_tarifa_caducada_no_aplica_a_ordenes_posteriores(db_session):
+    """Una tarifa con vigente_hasta solo se usa hasta esa fecha inclusive."""
+    cliente = Cliente(nombre="Cliente Vigencia", tipo="grupo")
+    comisionista = Comisionista(nombre="Comisionista Vigencia")
+    producto = Producto(nombre="Producto Vigencia", unidad_comision="kg")
+    db_session.add_all([cliente, comisionista, producto])
+    db_session.flush()
+
+    tarifa = TarifaClienteProducto(
+        comisionista_id=comisionista.id,
+        cliente_id=cliente.id,
+        producto_id=producto.id,
+        tipo=TipoTarifa.fijo_kg,
+        valor=Decimal("0.05"),
+        vigente_hasta=date(2026, 6, 30),
+    )
+
+    def _item(fecha: date, numero: str) -> OrdenItem:
+        return OrdenItem(
+            fecha=fecha,
+            numero_orden=numero,
+            finca="-",
+            cliente_id=cliente.id,
+            producto_id=producto.id,
+            producto=producto.nombre,
+            cantidad=Decimal("100"),
+            unidad="kg",
+            precio_unitario=Decimal("2"),
+            total=Decimal("200"),
+        )
+
+    item_junio = _item(date(2026, 6, 30), "ORD-JUN")
+    item_julio = _item(date(2026, 7, 1), "ORD-JUL")
+    db_session.add_all([tarifa, item_junio, item_julio])
+    db_session.commit()
+
+    assert _buscar_tarifa_especifica(db_session, item_junio, comisionista.id) is not None
+    assert _buscar_tarifa_especifica(db_session, item_julio, comisionista.id) is None
+
+
+def test_tarifa_sin_vigente_hasta_aplica_siempre(db_session):
+    cliente = Cliente(nombre="Cliente Sin Caducidad", tipo="grupo")
+    comisionista = Comisionista(nombre="Comisionista Sin Caducidad")
+    producto = Producto(nombre="Producto Sin Caducidad", unidad_comision="kg")
+    db_session.add_all([cliente, comisionista, producto])
+    db_session.flush()
+
+    tarifa = TarifaClienteProducto(
+        comisionista_id=comisionista.id,
+        cliente_id=cliente.id,
+        producto_id=producto.id,
+        tipo=TipoTarifa.fijo_kg,
+        valor=Decimal("0.05"),
+    )
+    orden_item = OrdenItem(
+        fecha=date(2030, 1, 1),
+        numero_orden="ORD-FUTURA",
+        finca="-",
+        cliente_id=cliente.id,
+        producto_id=producto.id,
+        producto=producto.nombre,
+        cantidad=Decimal("100"),
+        unidad="kg",
+        precio_unitario=Decimal("2"),
+        total=Decimal("200"),
+    )
+    db_session.add_all([tarifa, orden_item])
+    db_session.commit()
+
+    assert _buscar_tarifa_especifica(db_session, orden_item, comisionista.id) is not None

@@ -1,5 +1,6 @@
 from sqlalchemy import (
     Column,
+    Date,
     ForeignKey,
     Boolean,
     Numeric,
@@ -47,6 +48,9 @@ class TarifaClienteProducto(BaseModel):
     activo = Column(Boolean, nullable=False, default=True)
     umbral_kg = Column(Numeric(12, 2), nullable=True)
     valor_sobre_umbral = Column(Numeric(10, 4), nullable=True)
+    # NULL = sin caducidad. Si tiene fecha, la tarifa solo aplica a órdenes
+    # con fecha menor o igual a ella.
+    vigente_hasta = Column(Date, nullable=True)
 
     comisionista = relationship("Comisionista")
     cliente = relationship("Cliente")

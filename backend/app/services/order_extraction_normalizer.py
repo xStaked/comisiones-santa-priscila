@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from sqlalchemy import func
+from datetime import date
+
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.models.cliente import Cliente, ClienteAlias, Finca
@@ -139,6 +141,7 @@ def _buscar_comisionistas_aplicables(
     producto: Producto | None,
     finca: Finca | None,
     proveedor: str = "",
+    fecha: date | None = None,
 ) -> list[dict[str, str]]:
     if not cliente or not producto:
         return []
@@ -151,6 +154,14 @@ def _buscar_comisionistas_aplicables(
         TarifaClienteProducto.producto_id.in_(producto_ids),
         TarifaClienteProducto.activo.is_(True),
     )
+    if fecha:
+        # Una tarifa caducada no asigna comisionistas a órdenes posteriores.
+        query = query.filter(
+            or_(
+                TarifaClienteProducto.vigente_hasta.is_(None),
+                TarifaClienteProducto.vigente_hasta >= fecha,
+            )
+        )
     if cliente.fincas:
         if not finca:
             return []
@@ -223,6 +234,7 @@ def normalizar_orden_extraida(db: Session | None, orden: OrdenValidada, cliente_
             producto,
             finca,
             orden.proveedor or "",
+            orden.fecha,
         )
 
     return orden
