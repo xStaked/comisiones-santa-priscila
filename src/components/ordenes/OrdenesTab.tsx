@@ -40,6 +40,7 @@ type OrdenAgrupada = {
   fincas: string[];
   total: number;
   estado: EstadoOrden;
+  fechaPago?: string | null;
   comisionistaIds: string[];
   items: OrdenItem[];
 };
@@ -85,6 +86,7 @@ function agruparOrdenes(
       fincas: finca ? [finca] : [],
       total: item.total,
       estado: item.estado || 'pendiente',
+      fechaPago: item.fechaPago || null,
       comisionistaIds,
       items: [item],
     });
@@ -1185,6 +1187,11 @@ export function OrdenesTab() {
                             {getEstadoOrdenMeta(orden.estado).label}
                           </Badge>
                           <span className="text-xs text-slate-500">{orden.fecha}</span>
+                          {orden.fechaPago && (
+                            <span className="text-xs text-emerald-600">
+                              Pagada el {new Date(`${orden.fechaPago}T00:00:00`).toLocaleDateString('es-ES')}
+                            </span>
+                          )}
                           {orden.comisionistaIds.length > 0 && (
                             <div className="flex items-center gap-1">
                               {orden.comisionistaIds.slice(0, 3).map(cid => {
@@ -1306,6 +1313,18 @@ export function OrdenesTab() {
                                 ))}
                               </SelectContent>
                             </Select>
+                            {orden.estado !== 'pendiente' && (
+                              <label className="flex items-center gap-1.5 text-xs text-slate-600">
+                                Pagada el
+                                <input
+                                  type="date"
+                                  value={orden.fechaPago || ''}
+                                  disabled={orden.estado === 'liquidada'}
+                                  onChange={(e) => updateEstadoOrden(orden.id, orden.estado, e.target.value || null)}
+                                  className="h-7 rounded-lg border border-slate-200 bg-white px-2 text-xs text-slate-700 disabled:opacity-50"
+                                />
+                              </label>
+                            )}
                           </div>
                           <Button variant="ghost" size="sm" disabled={orden.estado === 'liquidada' || orden.items.some(item => item.estado === 'liquidada')} className="text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-red-300" onClick={() => {
                             if (confirm('¿Eliminar toda la orden y sus productos?')) {

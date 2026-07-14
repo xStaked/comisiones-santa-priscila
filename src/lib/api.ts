@@ -159,13 +159,13 @@ export async function updateOrden(id: string, data: any) {
   return toCamelCase(res.data);
 }
 
-export async function updateEstadoOrdenGrupo(id: string, estado: EstadoOrden) {
-  const res = await api.put(`/api/v1/ordenes/grupos/${id}/estado`, toSnakeCase({ estado }));
+export async function updateEstadoOrdenGrupo(id: string, estado: EstadoOrden, fechaPago?: string | null) {
+  const res = await api.put(`/api/v1/ordenes/grupos/${id}/estado`, toSnakeCase({ estado, fechaPago: fechaPago || null }));
   return toCamelCase(res.data);
 }
 
-export async function updateEstadoOrdenesMasivo(ordenIds: string[], estado: EstadoOrden) {
-  const res = await api.put('/api/v1/ordenes/grupos/estado-masivo', toSnakeCase({ ordenIds, estado }));
+export async function updateEstadoOrdenesMasivo(ordenIds: string[], estado: EstadoOrden, fechaPago?: string | null) {
+  const res = await api.put('/api/v1/ordenes/grupos/estado-masivo', toSnakeCase({ ordenIds, estado, fechaPago: fechaPago || null }));
   return toCamelCase<{ actualizadas: number; omitidas: string[] }>(res.data);
 }
 

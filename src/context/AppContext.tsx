@@ -50,8 +50,8 @@ interface AppContextType {
   ordenItems: OrdenItem[];
   addOrdenItems: (items: OrdenItem[]) => void;
   updateOrdenItem: (id: string, item: Partial<OrdenItem>) => void;
-  updateEstadoOrden: (ordenId: string, estado: EstadoOrden) => void;
-  updateEstadoOrdenesMasivo: (ordenIds: string[], estado: EstadoOrden) => Promise<{ actualizadas: number; omitidas: string[] }>;
+  updateEstadoOrden: (ordenId: string, estado: EstadoOrden, fechaPago?: string | null) => void;
+  updateEstadoOrdenesMasivo: (ordenIds: string[], estado: EstadoOrden, fechaPago?: string | null) => Promise<{ actualizadas: number; omitidas: string[] }>;
   deleteOrdenItem: (id: string) => void;
   deleteOrdenItems: (ids: string[]) => Promise<void>;
   clearOrdenItems: () => void;
@@ -204,8 +204,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   });
 
   const updateEstadoOrdenMutation = useMutation({
-    mutationFn: ({ ordenId, estado }: { ordenId: string; estado: EstadoOrden }) =>
-      apiUpdateEstadoOrdenGrupo(ordenId, estado),
+    mutationFn: ({ ordenId, estado, fechaPago }: { ordenId: string; estado: EstadoOrden; fechaPago?: string | null }) =>
+      apiUpdateEstadoOrdenGrupo(ordenId, estado, fechaPago),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['ordenes'] });
       toast.success('Estado de orden actualizado');
@@ -216,8 +216,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   });
 
   const updateEstadoOrdenesMasivoMutation = useMutation({
-    mutationFn: ({ ordenIds, estado }: { ordenIds: string[]; estado: EstadoOrden }) =>
-      apiUpdateEstadoOrdenesMasivo(ordenIds, estado),
+    mutationFn: ({ ordenIds, estado, fechaPago }: { ordenIds: string[]; estado: EstadoOrden; fechaPago?: string | null }) =>
+      apiUpdateEstadoOrdenesMasivo(ordenIds, estado, fechaPago),
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['ordenes'] });
       if (data.omitidas.length > 0) {
@@ -521,15 +521,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   );
 
   const updateEstadoOrden = useCallback(
-    (ordenId: string, estado: EstadoOrden) => {
-      updateEstadoOrdenMutation.mutate({ ordenId, estado });
+    (ordenId: string, estado: EstadoOrden, fechaPago?: string | null) => {
+      updateEstadoOrdenMutation.mutate({ ordenId, estado, fechaPago });
     },
     [updateEstadoOrdenMutation]
   );
 
   const updateEstadoOrdenesMasivo = useCallback(
-    (ordenIds: string[], estado: EstadoOrden) =>
-      updateEstadoOrdenesMasivoMutation.mutateAsync({ ordenIds, estado }),
+    (ordenIds: string[], estado: EstadoOrden, fechaPago?: string | null) =>
+      updateEstadoOrdenesMasivoMutation.mutateAsync({ ordenIds, estado, fechaPago }),
     [updateEstadoOrdenesMasivoMutation]
   );
 

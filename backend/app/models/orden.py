@@ -39,6 +39,8 @@ class Orden(BaseModel):
         nullable=False,
         default=EstadoOrden.pendiente,
     )
+    # Fecha en que el cliente pagó la orden. NULL mientras esté pendiente.
+    fecha_pago = Column(Date, nullable=True)
 
     cliente = relationship("Cliente")
     items = relationship(

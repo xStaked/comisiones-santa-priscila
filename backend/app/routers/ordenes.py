@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date
 from decimal import Decimal
-from typing import Any, List
+from typing import Any, List, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Body, Depends, HTTPException, status
@@ -75,11 +75,20 @@ class ComisionistasOrdenBody(BaseModel):
 
 class EstadoOrdenBody(BaseModel):
     estado: str
+    fecha_pago: Optional[date] = None
 
 
 class EstadoMasivoBody(BaseModel):
     orden_ids: List[UUID]
     estado: str
+    fecha_pago: Optional[date] = None
+
+
+def _fecha_pago_para(estado: EstadoOrden, fecha_pago: date | None) -> date | None:
+    """Sin pago no hay fecha; si se paga y no la indican, se asume hoy."""
+    if estado == EstadoOrden.pendiente:
+        return None
+    return fecha_pago or date.today()
 
 
 def _parse_estado_orden(value: str) -> EstadoOrden:
@@ -260,6 +269,7 @@ def _crear_orden_item(db: Session, item: OrdenItemCreate, orden_id: UUID) -> Ord
 def _serializar_item(item: OrdenItem) -> dict[str, Any]:
     data = OrdenItemResponse.model_validate(item).model_dump(by_alias=True)
     data["proveedor"] = item.orden.proveedor if item.orden else None
+    data["fecha_pago"] = item.orden.fecha_pago if item.orden else None
     return data
 
 
@@ -275,6 +285,7 @@ def _serializar_orden(orden: Orden) -> dict[str, Any]:
         "archivo_nombre": orden.archivo_nombre,
         "origen": orden.origen,
         "estado": orden.estado.value,
+        "fecha_pago": orden.fecha_pago,
         "total": sum((item.total for item in items), Decimal("0")),
         "cantidad_productos": len(items),
         "items": [_serializar_item(item) for item in items],
@@ -306,6 +317,7 @@ def _serializar_ordenes_agrupadas(items: list[OrdenItem]) -> list[dict[str, Any]
                 "archivo_nombre": None,
                 "origen": "manual",
                 "estado": EstadoOrden.pendiente.value,
+                "fecha_pago": None,
                 "total": sum((item.total for item in grupo_items), Decimal("0")),
                 "cantidad_productos": len(grupo_items),
                 "items": [_serializar_item(item) for item in grupo_items],
@@ -464,6 +476,7 @@ def actualizar_estado_ordenes_masivo(
                 omitidas.append(str(orden.id))
                 continue
             orden.estado = nuevo_estado
+            orden.fecha_pago = _fecha_pago_para(nuevo_estado, body.fecha_pago)
             for item in orden.items:
                 item.estado = nuevo_estado
             actualizadas += 1
@@ -509,6 +522,7 @@ def actualizar_estado_orden_grupo(
 
     try:
         orden.estado = nuevo_estado
+        orden.fecha_pago = _fecha_pago_para(nuevo_estado, body.fecha_pago)
         for item in orden.items:
             item.estado = nuevo_estado
 

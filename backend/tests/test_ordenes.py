@@ -898,3 +898,47 @@ def test_proveedor_se_canonicaliza_contra_variantes(authenticated_client):
     }
     # Las tres variantes tipográficas quedan con la razón social registrada primero
     assert proveedores == {"ACME DEL MAR CIA.LTDA."}
+
+
+def test_fecha_pago_se_registra_y_se_limpia(authenticated_client):
+    payload = {
+        "fecha": str(date.today()),
+        "numero_orden": "ORD-PAGO-001",
+        "origen": "manual",
+        "items": [
+            {
+                "finca": "Finca A",
+                "producto": "Camarón",
+                "cantidad": "10.00",
+                "unidad": "kg",
+                "precio_unitario": "2.00",
+                "total": "20.00",
+                "comisionista_ids": [],
+            },
+        ],
+    }
+    orden = authenticated_client.post("/api/v1/ordenes/", json=payload).json()
+    assert orden["fecha_pago"] is None
+
+    # Fecha explícita
+    resp = authenticated_client.put(
+        f"/api/v1/ordenes/grupos/{orden['id']}/estado",
+        json={"estado": "pagada", "fecha_pago": "2026-07-09"},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["fecha_pago"] == "2026-07-09"
+    assert resp.json()["items"][0]["fecha_pago"] == "2026-07-09"
+
+    # Sin fecha al pagar → hoy
+    resp = authenticated_client.put(
+        f"/api/v1/ordenes/grupos/{orden['id']}/estado",
+        json={"estado": "parcialmente_pagada"},
+    )
+    assert resp.json()["fecha_pago"] == str(date.today())
+
+    # Volver a pendiente la borra
+    resp = authenticated_client.put(
+        f"/api/v1/ordenes/grupos/{orden['id']}/estado",
+        json={"estado": "pendiente"},
+    )
+    assert resp.json()["fecha_pago"] is None

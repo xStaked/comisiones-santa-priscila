@@ -45,6 +45,8 @@ export interface OrdenItem {
   comisionistas: AsignacionComisionista[];
   sector?: string;
   estado?: EstadoOrden;
+  // Fecha de pago de la orden cabecera (solo lectura en el ítem)
+  fechaPago?: string | null;
   // Nuevos campos (Fase 3)
   clienteId?: string;
   productoId?: string;
@@ -66,6 +68,7 @@ export interface Orden {
   archivoNombre?: string;
   origen: 'manual' | 'pdf' | 'imagen' | string;
   estado: EstadoOrden;
+  fechaPago?: string | null;
   total: number;
   cantidadProductos: number;
   items: OrdenItem[];

@@ -69,6 +69,7 @@ class OrdenItemResponse(OrdenItemBase):
     producto_id: Optional[UUID] = None
     finca_id: Optional[UUID] = None
     proveedor: Optional[str] = None
+    fecha_pago: Optional[date] = None
     cliente: Optional[ClienteResponse] = None
     producto_obj: Optional[ProductoResponse] = Field(default=None, alias="productoRel")
     finca_obj: Optional[FincaResponse] = Field(default=None, alias="fincaRel")
@@ -112,6 +113,7 @@ class OrdenResponse(BaseModel):
     archivo_nombre: Optional[str] = None
     origen: str
     estado: str
+    fecha_pago: Optional[date] = None
     total: Decimal
     cantidad_productos: int
     items: List[OrdenItemResponse]
