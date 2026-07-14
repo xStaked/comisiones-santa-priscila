@@ -7,6 +7,7 @@ import fitz
 
 from app.config import settings
 from app.services.ai_extractor import obtener_extractor_ia
+from app.services.info_adicional_fincas import asignar_fincas_desde_info_adicional
 from app.services.order_extraction_models import EntradaExtraccion, OrdenValidada
 from app.services.order_extraction_normalizer import normalizar_orden_extraida
 from app.services.order_extraction_validator import validar_orden_extraida
@@ -74,6 +75,7 @@ def _extraer_con_ia(
         )
     )
     orden_validada = validar_orden_extraida(orden_ia)
+    asignar_fincas_desde_info_adicional(texto, orden_validada)
     orden_normalizada = normalizar_orden_extraida(db, orden_validada, cliente_id=cliente_id)
     respuesta = _orden_validada_a_respuesta(orden_normalizada)
 
@@ -89,10 +91,13 @@ def _extraer_con_ia(
 
 
 def _numero_desde_nombre_archivo(nombre_archivo: str) -> str:
-    """Número de factura tipo 001-002-000002243; si no aparece, el nombre sin extensión."""
+    """Número de factura tipo 001-002-000002243. Si el nombre no lo trae, no hay
+    nada que aportar: el número que la IA leyó del texto es mejor que el nombre
+    del archivo entero ("FL OC2199 DINACUAMAR")."""
     nombre = re.sub(r"\.[^.]+$", "", nombre_archivo).strip()
-    match = re.search(r"\d{3}-\d{3}-\d{6,}", nombre)
-    return match.group(0) if match else nombre
+    # Algunos nombres omiten los guiones ("EO 001002000002043 INTEDECAM.pdf").
+    match = re.search(r"(\d{3})-?(\d{3})-?(\d{6,})", nombre)
+    return "-".join(match.groups()) if match else ""
 
 
 def _extraer_texto_pdf(contenido: bytes) -> str:
