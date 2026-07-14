@@ -164,10 +164,12 @@ export function encontrarTarifaEspecifica(
     return normalizarTexto(tarifa.proveedor) === proveedorOrden;
   };
 
-  // Ambas fechas son ISO YYYY-MM-DD, así que comparar como texto ordena bien.
-  const fechaItem = (item.fecha || '').slice(0, 10);
+  // La tarifa se decide por la fecha de pago (el cliente liquida cuando le
+  // pagan); si aún no está pagada, cae a la fecha de la factura. Ambas son ISO
+  // YYYY-MM-DD, así que comparar como texto ordena bien.
+  const fechaEfectiva = (item.fechaPago || item.fecha || '').slice(0, 10);
   const estaVigente = (tarifa: TarifaClienteProducto) =>
-    !tarifa.vigenteHasta || !fechaItem || fechaItem <= tarifa.vigenteHasta.slice(0, 10);
+    !tarifa.vigenteHasta || !fechaEfectiva || fechaEfectiva <= tarifa.vigenteHasta.slice(0, 10);
 
   const candidatas = tarifas.filter(
     (tarifa) =>

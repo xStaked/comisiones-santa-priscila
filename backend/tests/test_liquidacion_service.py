@@ -1032,3 +1032,66 @@ def test_tarifa_sin_vigente_hasta_aplica_siempre(db_session):
     db_session.commit()
 
     assert _buscar_tarifa_especifica(db_session, orden_item, comisionista.id) is not None
+
+
+def test_vigencia_se_mide_por_fecha_de_pago_no_de_factura(db_session):
+    """Factura antes del corte pero pagada después: la tarifa vencida no aplica.
+
+    El cliente liquida cuando le pagan, así que la fecha de pago manda sobre la
+    de la factura para decidir la tarifa vigente.
+    """
+    cliente = Cliente(nombre="Cliente Pago", tipo="grupo")
+    comisionista = Comisionista(nombre="Comisionista Pago")
+    producto = Producto(nombre="Producto Pago", unidad_comision="kg")
+    db_session.add_all([cliente, comisionista, producto])
+    db_session.flush()
+
+    tarifa = TarifaClienteProducto(
+        comisionista_id=comisionista.id,
+        cliente_id=cliente.id,
+        producto_id=producto.id,
+        tipo=TipoTarifa.fijo_kg,
+        valor=Decimal("0.05"),
+        vigente_hasta=date(2026, 6, 30),
+    )
+    db_session.add(tarifa)
+    db_session.flush()
+
+    def _orden_con_item(fecha_factura: date, fecha_pago, numero: str) -> OrdenItem:
+        orden = Orden(
+            fecha=fecha_factura,
+            numero_orden=numero,
+            cliente_id=cliente.id,
+            estado=EstadoOrden.pagada if fecha_pago else EstadoOrden.pendiente,
+            fecha_pago=fecha_pago,
+        )
+        db_session.add(orden)
+        db_session.flush()
+        item = OrdenItem(
+            orden_id=orden.id,
+            fecha=fecha_factura,
+            numero_orden=numero,
+            finca="-",
+            cliente_id=cliente.id,
+            producto_id=producto.id,
+            producto=producto.nombre,
+            cantidad=Decimal("100"),
+            unidad="kg",
+            precio_unitario=Decimal("2"),
+            total=Decimal("200"),
+        )
+        db_session.add(item)
+        db_session.flush()
+        return item
+
+    # Factura de mayo, pagada en julio (después del corte) -> NO aplica.
+    item_pagado_tarde = _orden_con_item(date(2026, 5, 15), date(2026, 7, 10), "ORD-TARDE")
+    # Factura de mayo, pagada en junio (dentro del corte) -> SÍ aplica.
+    item_pagado_a_tiempo = _orden_con_item(date(2026, 5, 15), date(2026, 6, 20), "ORD-TIEMPO")
+    # Factura de mayo, aún sin pagar -> cae a la fecha de factura (mayo) -> aplica.
+    item_sin_pagar = _orden_con_item(date(2026, 5, 15), None, "ORD-PENDIENTE")
+    db_session.commit()
+
+    assert _buscar_tarifa_especifica(db_session, item_pagado_tarde, comisionista.id) is None
+    assert _buscar_tarifa_especifica(db_session, item_pagado_a_tiempo, comisionista.id) is not None
+    assert _buscar_tarifa_especifica(db_session, item_sin_pagar, comisionista.id) is not None

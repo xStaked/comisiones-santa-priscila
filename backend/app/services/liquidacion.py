@@ -79,11 +79,23 @@ def _cantidad_para_tarifa_unidad(orden_item: OrdenItem) -> Decimal:
     return orden_item.cantidad / _kg_por_envase(orden_item)
 
 
+def _fecha_efectiva(orden_item: OrdenItem) -> date:
+    """Fecha que decide qué tarifa aplica.
+
+    El cliente liquida cuando le pagan, no cuando se emite la factura: la
+    comisión (y por tanto la tarifa vigente) se determina por la fecha de pago.
+    Si la orden aún no tiene fecha de pago, cae a la fecha de la factura.
+    """
+    if orden_item.orden and orden_item.orden.fecha_pago:
+        return orden_item.orden.fecha_pago
+    return orden_item.fecha
+
+
 def _vigente_en(fecha: date):
-    """Predicado: la tarifa aplica a una orden de esa fecha.
+    """Predicado: la tarifa aplica a una orden con esa fecha efectiva.
 
     `vigente_hasta` NULL significa sin caducidad. Si tiene fecha, la tarifa
-    solo se usa para órdenes hasta ese día inclusive.
+    solo se usa hasta ese día inclusive.
     """
     return or_(
         TarifaClienteProducto.vigente_hasta.is_(None),
@@ -171,7 +183,7 @@ def _buscar_tarifa_especifica(
                     func.upper(TarifaClienteProducto.proveedor) == "CUALQUIER PROVEEDOR",
                 ),
                 TarifaClienteProducto.activo.is_(True),
-                _vigente_en(orden_item.fecha),
+                _vigente_en(_fecha_efectiva(orden_item)),
             )
             .first()
         )
@@ -192,7 +204,7 @@ def _buscar_tarifa_especifica(
                     func.upper(TarifaClienteProducto.proveedor) == "CUALQUIER PROVEEDOR",
                 ),
                 TarifaClienteProducto.activo.is_(True),
-                _vigente_en(orden_item.fecha),
+                _vigente_en(_fecha_efectiva(orden_item)),
             )
             .first()
         )
@@ -214,7 +226,7 @@ def _buscar_tarifa_especifica(
                     func.upper(TarifaClienteProducto.proveedor) == "CUALQUIER PROVEEDOR",
                 ),
                 TarifaClienteProducto.activo.is_(True),
-                _vigente_en(orden_item.fecha),
+                _vigente_en(_fecha_efectiva(orden_item)),
             )
             .all()
         )
@@ -237,7 +249,7 @@ def _buscar_tarifa_especifica(
                     func.upper(TarifaClienteProducto.proveedor) == "CUALQUIER PROVEEDOR",
                 ),
                 TarifaClienteProducto.activo.is_(True),
-                _vigente_en(orden_item.fecha),
+                _vigente_en(_fecha_efectiva(orden_item)),
             )
             .all()
         )
@@ -258,7 +270,7 @@ def _buscar_tarifa_especifica(
                 func.upper(TarifaClienteProducto.proveedor) == "CUALQUIER PROVEEDOR",
             ),
             TarifaClienteProducto.activo.is_(True),
-            _vigente_en(orden_item.fecha),
+            _vigente_en(_fecha_efectiva(orden_item)),
         )
         .first()
     )
@@ -278,7 +290,7 @@ def _buscar_tarifa_especifica(
                 func.upper(TarifaClienteProducto.proveedor) == "CUALQUIER PROVEEDOR",
             ),
             TarifaClienteProducto.activo.is_(True),
-            _vigente_en(orden_item.fecha),
+            _vigente_en(_fecha_efectiva(orden_item)),
         )
         .first()
     )
