@@ -312,6 +312,9 @@ export function OrdenesTab() {
   const [filterFechaDesde, setFilterFechaDesde] = useState('');
   const [filterFechaHasta, setFilterFechaHasta] = useState('');
   const [filterComisionistaId, setFilterComisionistaId] = useState<string>('todos');
+  // Marcar como pagada exige elegir la fecha: se pide en este diálogo (una o varias órdenes)
+  const [pagoPendiente, setPagoPendiente] = useState<{ estado: EstadoOrden; ordenIds: string[]; masivo: boolean } | null>(null);
+  const [fechaPagoInput, setFechaPagoInput] = useState('');
   const [sortField, setSortField] = useState<'fecha' | 'total' | 'numeroOrden'>('numeroOrden');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [showFilters, setShowFilters] = useState(false);
@@ -389,11 +392,39 @@ export function OrdenesTab() {
   const toggleSeleccionarTodas = () => {
     setSelectedOrdenIds(todasSeleccionadas ? new Set() : new Set(ordenesSeleccionables.map(o => o.id)));
   };
-  const handleCambiarEstadoMasivo = (estado: EstadoOrden) => {
+  const aplicarEstadoMasivo = (estado: EstadoOrden, fechaPago?: string | null) => {
     // Limpiar la selección solo si la mutación tiene éxito; el toast de error ya lo maneja el contexto
-    updateEstadoOrdenesMasivo(Array.from(selectedOrdenIds), estado)
+    updateEstadoOrdenesMasivo(Array.from(selectedOrdenIds), estado, fechaPago)
       .then(() => setSelectedOrdenIds(new Set()))
       .catch(() => {});
+  };
+
+  const hoy = () => new Date().toISOString().slice(0, 10);
+
+  // Pendiente no lleva fecha; pagada y parcialmente pagada sí, y hay que elegirla.
+  const pedirFechaDePago = (
+    estado: EstadoOrden,
+    ordenIds: string[],
+    masivo: boolean,
+    fechaActual?: string | null
+  ) => {
+    if (estado === 'pendiente') {
+      if (masivo) aplicarEstadoMasivo(estado);
+      else updateEstadoOrden(ordenIds[0], estado, null);
+      return;
+    }
+    setFechaPagoInput(fechaActual || hoy());
+    setPagoPendiente({ estado, ordenIds, masivo });
+  };
+
+  const confirmarFechaDePago = () => {
+    if (!pagoPendiente || !fechaPagoInput) return;
+    if (pagoPendiente.masivo) {
+      aplicarEstadoMasivo(pagoPendiente.estado, fechaPagoInput);
+    } else {
+      updateEstadoOrden(pagoPendiente.ordenIds[0], pagoPendiente.estado, fechaPagoInput);
+    }
+    setPagoPendiente(null);
   };
   const handleEliminarMasivo = () => {
     const itemIds = ordenesAgrupadas
@@ -1121,9 +1152,9 @@ export function OrdenesTab() {
                 {selectedOrdenIds.size > 0 && (
                   <Select
                     value={null}
-                    onValueChange={(value) => value && handleCambiarEstadoMasivo(value as EstadoOrden)}
+                    onValueChange={(value) => value && pedirFechaDePago(value as EstadoOrden, Array.from(selectedOrdenIds), true)}
                   >
-                    <SelectTrigger className="btn-primary-dark rounded-lg h-7 text-xs border-0 gap-1">
+                    <SelectTrigger className="btn-primary-dark rounded-lg h-7 text-xs border-0 gap-1 text-white [&_svg]:text-white">
                       <SelectValue>
                         {`Marcar como... (${selectedOrdenIds.size})`}
                       </SelectValue>
@@ -1297,7 +1328,7 @@ export function OrdenesTab() {
                           <div className="flex items-center gap-2">
                             <Select
                               value={orden.estado}
-                              onValueChange={(value) => updateEstadoOrden(orden.id, value as EstadoOrden)}
+                              onValueChange={(value) => pedirFechaDePago(value as EstadoOrden, [orden.id], false, orden.fechaPago)}
                               disabled={orden.estado === 'liquidada' || orden.items.some(item => item.estado === 'liquidada')}
                             >
                               <SelectTrigger className="h-7 w-40 rounded-lg border-slate-200 bg-white text-xs">
@@ -1320,7 +1351,7 @@ export function OrdenesTab() {
                                   type="date"
                                   value={orden.fechaPago || ''}
                                   disabled={orden.estado === 'liquidada'}
-                                  onChange={(e) => updateEstadoOrden(orden.id, orden.estado, e.target.value || null)}
+                                  onChange={(e) => e.target.value && updateEstadoOrden(orden.id, orden.estado, e.target.value)}
                                   className="h-7 rounded-lg border border-slate-200 bg-white px-2 text-xs text-slate-700 disabled:opacity-50"
                                 />
                               </label>
@@ -1395,6 +1426,37 @@ export function OrdenesTab() {
           </div>
         </div>
       )}
+
+      <Dialog open={pagoPendiente !== null} onOpenChange={(abierto) => !abierto && setPagoPendiente(null)}>
+        <DialogContent className="sm:max-w-sm bg-white border-slate-200">
+          <DialogHeader>
+            <DialogTitle>¿Cuándo se pagó?</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-slate-600">
+              {pagoPendiente?.ordenIds.length === 1
+                ? `Marcar la orden como ${getEtiquetaEstado(pagoPendiente.estado).toLowerCase()}.`
+                : `Marcar ${pagoPendiente?.ordenIds.length} órdenes como ${pagoPendiente ? getEtiquetaEstado(pagoPendiente.estado).toLowerCase() : ''}.`}
+            </p>
+            <div className="space-y-1.5">
+              <Label htmlFor="fecha-pago">Fecha de pago</Label>
+              <Input
+                id="fecha-pago"
+                type="date"
+                required
+                value={fechaPagoInput}
+                onChange={(e) => setFechaPagoInput(e.target.value)}
+              />
+            </div>
+            <div className="flex justify-end gap-2 pt-1">
+              <Button variant="ghost" onClick={() => setPagoPendiente(null)}>Cancelar</Button>
+              <Button className="btn-primary-dark" disabled={!fechaPagoInput} onClick={confirmarFechaDePago}>
+                Guardar
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
         <DialogContent className="sm:max-w-lg bg-white border-slate-200">
