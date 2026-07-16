@@ -524,6 +524,9 @@ export function exportarExcel(
   // El grupo empresarial es del CLIENTE de cada fila (las hojas siguen siendo por razón social/proveedor).
   const grupoPorClienteId = new Map(clientes.map(c => [c.id, c.grupo?.nombre]));
   const grupoPorClienteNombre = new Map(clientes.map(c => [normalizarTexto(c.nombre), c.grupo?.nombre]));
+  const nombrePorClienteId = new Map(clientes.map(c => [c.id, c.nombre]));
+  const razonSocialDelItem = (item: OrdenItem) =>
+    item.cliente?.nombre || (item.clienteId && nombrePorClienteId.get(item.clienteId)) || 'N/A';
   const grupoDelItem = (item: OrdenItem) =>
     (item.clienteId && grupoPorClienteId.get(item.clienteId)) ||
     (item.cliente?.nombre && grupoPorClienteNombre.get(normalizarTexto(item.cliente.nombre))) ||
@@ -633,7 +636,7 @@ export function exportarExcel(
             item.estado || 'pagada',
             item.sector || item.finca || 'N/A',
             grupoDelItem(item),
-            item.proveedor?.trim() || nombreProveedor,
+            razonSocialDelItem(item),
           ]);
         });
 
