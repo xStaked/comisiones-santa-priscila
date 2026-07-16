@@ -604,7 +604,7 @@ export function exportarExcel(
         data.push(['Sistema de Liquidación de Comisiones']);
         data.push([`Comisionista: ${comNombre} del 1 al ${ultimoDia} de ${nombreMes} ${anio}`]);
         data.push([]);
-        data.push(['Fecha', 'Factura', 'Nombre', 'Cantidad', 'Tipo Comisión', 'Valor de Comisión', 'Estado', 'Sector', 'Grupo']);
+        data.push(['Fecha', 'Factura', 'Nombre', 'Cantidad', 'Tipo Comisión', 'Valor de Comisión', 'Estado', 'Sector', 'Grupo', 'Razón social']);
 
         let totalGrupo = 0;
         itemsDelGrupo.forEach(item => {
@@ -633,17 +633,18 @@ export function exportarExcel(
             item.estado || 'pagada',
             item.sector || item.finca || 'N/A',
             grupoDelItem(item),
+            item.proveedor?.trim() || nombreProveedor,
           ]);
         });
 
-        data.push(['', '', '', '', '', `$ ${totalGrupo.toFixed(2).replace('.', ',')}`, '', '', '']);
+        data.push(['', '', '', '', '', `$ ${totalGrupo.toFixed(2).replace('.', ',')}`, '', '', '', '']);
         data.push([]);
 
         totalProveedor += totalGrupo;
       });
     });
 
-    data.push(['', '', '', '', '', 'TOTAL', `$ ${totalProveedor.toFixed(2).replace('.', ',')}`, '', '']);
+    data.push(['', '', '', '', '', 'TOTAL', `$ ${totalProveedor.toFixed(2).replace('.', ',')}`, '', '', '']);
 
     const ws = XLSX.utils.aoa_to_sheet(data);
     ws['!cols'] = [
@@ -656,6 +657,7 @@ export function exportarExcel(
       { wch: 10 },
       { wch: 10 },
       { wch: 18 },
+      { wch: 30 },
     ];
     XLSX.utils.book_append_sheet(wb, ws, nombreHojaValido(`${nombreGrupo} ${nombreProveedor}`, nombresHojaUsados));
   });
