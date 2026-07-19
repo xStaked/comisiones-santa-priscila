@@ -797,11 +797,15 @@ export interface ResumenPorComisionista {
 export function agruparPorComisionista(
   items: OrdenItem[],
   comisionistas: Comisionista[],
-  tarifasEspecificas: TarifaClienteProducto[] = []
+  tarifasEspecificas: TarifaClienteProducto[] = [],
+  // Cuando se filtra por comisionista, solo desglosar a los seleccionados: una
+  // orden puede tener varios asignados y no queremos mostrar los que no se filtraron.
+  comisionistasFiltro: string[] = []
 ): ResumenPorComisionista[] {
   const map = new Map<string, ResumenPorComisionista>();
   items.forEach(item => {
     item.comisionistas.forEach(asig => {
+      if (comisionistasFiltro.length > 0 && !comisionistasFiltro.includes(asig.comisionistaId)) return;
       const com = comisionistas.find(c => c.id === asig.comisionistaId);
       if (!com) return;
       const existente = map.get(com.id);
@@ -885,6 +889,58 @@ export function getTrimestreActual(): { inicio: string; fin: string } {
   return trimestreRango(now.getFullYear(), Math.floor(now.getMonth() / 3) + 1);
 }
 
+/**
+ * Dibuja un gráfico de barras horizontales en el PDF (sin dependencias externas).
+ * Muestra hasta `maxBarras` categorías ordenadas por valor. Devuelve el nuevo yPos.
+ */
+function dibujarBarrasPDF(
+  doc: jsPDF,
+  titulo: string,
+  datos: { nombre: string; valor: number }[],
+  x: number,
+  y: number,
+  ancho: number,
+  maxBarras = 10
+): number {
+  const ordenados = [...datos].sort((a, b) => b.valor - a.valor);
+  const mostrar = ordenados.slice(0, maxBarras);
+  const ocultos = ordenados.length - mostrar.length;
+  if (mostrar.length === 0) return y;
+
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(15, 23, 42);
+  doc.text(titulo, x, y);
+  y += 5;
+
+  const maxVal = Math.max(...mostrar.map(d => d.valor), 1);
+  const labelW = 42;
+  const valorW = 24;
+  const barMaxW = ancho - labelW - valorW;
+  const rowH = 6;
+
+  doc.setFontSize(7);
+  doc.setFont('helvetica', 'normal');
+  mostrar.forEach(d => {
+    const barW = Math.max((d.valor / maxVal) * barMaxW, 0.5);
+    doc.setTextColor(51, 65, 85);
+    const nombre = d.nombre.length > 24 ? d.nombre.slice(0, 23) + '…' : d.nombre;
+    doc.text(nombre, x, y + rowH - 2);
+    doc.setFillColor(15, 23, 42);
+    doc.rect(x + labelW, y + 1, barW, rowH - 2.5, 'F');
+    doc.setTextColor(30, 41, 59);
+    doc.text(`$ ${d.valor.toFixed(2).replace('.', ',')}`, x + labelW + barW + 2, y + rowH - 2);
+    y += rowH;
+  });
+  if (ocultos > 0) {
+    doc.setTextColor(148, 163, 184);
+    doc.text(`(+${ocultos} más en la tabla)`, x, y + 3);
+    y += 5;
+  }
+  doc.setTextColor(0, 0, 0);
+  return y + 6;
+}
+
 export function exportarReportePDF(
   items: OrdenItem[],
   comisionistas: Comisionista[],
@@ -929,7 +985,22 @@ export function exportarReportePDF(
 
   const resumenFincas = agruparPorFinca(items, comisionistas, tarifasEspecificas);
   const resumenProductos = agruparPorProducto(items, comisionistas, tarifasEspecificas);
-  const resumenComisionistas = agruparPorComisionista(items, comisionistas, tarifasEspecificas);
+  const resumenComisionistas = agruparPorComisionista(items, comisionistas, tarifasEspecificas, filtros.comisionistas);
+
+  // Gráficos (barras horizontales de comisión)
+  const anchoUtil = pageWidth - margin * 2;
+  if (resumenComisionistas.length > 0) {
+    yPos = dibujarBarrasPDF(doc, 'Comisión por Comisionista', resumenComisionistas.map(c => ({ nombre: c.nombre, valor: c.totalComision })), margin, yPos, anchoUtil);
+  }
+  if (resumenFincas.length > 0) {
+    if (yPos > 210) { doc.addPage(); yPos = 15; }
+    yPos = dibujarBarrasPDF(doc, 'Comisión por Sector', resumenFincas.map(f => ({ nombre: f.nombre, valor: f.comision })), margin, yPos, anchoUtil);
+  }
+  if (resumenProductos.length > 0) {
+    if (yPos > 210) { doc.addPage(); yPos = 15; }
+    yPos = dibujarBarrasPDF(doc, 'Comisión por Producto', resumenProductos.map(p => ({ nombre: p.nombre, valor: p.comision })), margin, yPos, anchoUtil);
+  }
+  if (yPos > 220) { doc.addPage(); yPos = 15; }
 
   // Tabla por finca
   if (resumenFincas.length > 0) {
@@ -1040,7 +1111,7 @@ export function exportarReporteExcel(
   XLSX.utils.book_append_sheet(wb, wsProductos, 'Por Producto');
 
   // Hoja 3: Resumen por Comisionista
-  const resumenComisionistas = agruparPorComisionista(items, comisionistas, tarifasEspecificas);
+  const resumenComisionistas = agruparPorComisionista(items, comisionistas, tarifasEspecificas, filtros.comisionistas);
   const wsComisionistas = XLSX.utils.aoa_to_sheet([
     ['Reporte de Comisiones - Resumen por Comisionista'],
     ['Comisionista', 'Tarifas', 'Órdenes', 'Total Orden', 'Comisión'],

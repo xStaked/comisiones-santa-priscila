@@ -197,11 +197,14 @@ export function ReportesTab() {
 
   const resumenFincas = useMemo(() => agruparPorFinca(itemsFiltrados, comisionistas, tarifasEspecificas), [itemsFiltrados, comisionistas, tarifasEspecificas]);
   const resumenProductos = useMemo(() => agruparPorProducto(itemsFiltrados, comisionistas, tarifasEspecificas), [itemsFiltrados, comisionistas, tarifasEspecificas]);
-  const resumenComisionistas = useMemo(() => agruparPorComisionista(itemsFiltrados, comisionistas, tarifasEspecificas), [itemsFiltrados, comisionistas, tarifasEspecificas]);
+  const resumenComisionistas = useMemo(() => agruparPorComisionista(itemsFiltrados, comisionistas, tarifasEspecificas, filtros.comisionistas), [itemsFiltrados, comisionistas, tarifasEspecificas, filtros.comisionistas]);
   const resumenClientes = useMemo(() => agruparPorCliente(itemsFiltrados, comisionistas, tarifasEspecificas), [itemsFiltrados, comisionistas, tarifasEspecificas]);
 
   const totalOrden = itemsFiltrados.reduce((s, i) => s + i.total, 0);
   const totalComision = itemsFiltrados.reduce((s, i) => s + calcularComisionTotalItem(i, comisionistas, tarifasEspecificas), 0);
+  // Total de la tabla "Por Comisionista": suma solo las filas mostradas (importa al
+  // filtrar por comisionista). Sin filtro coincide con totalComision.
+  const totalComisionComisionistas = resumenComisionistas.reduce((s, c) => s + c.totalComision, 0);
   const totalCantidad = itemsFiltrados.reduce((s, i) => s + i.cantidad, 0);
   const comisionistasInvolucrados = new Set(
     itemsFiltrados.flatMap(i => i.comisionistas.map(a => a.comisionistaId))
@@ -220,7 +223,7 @@ export function ReportesTab() {
   // B usa los mismos filtros no-temporales que A, con su propio rango.
   const filtrosB = useMemo(() => ({ ...filtros, fechaDesde: rangoB.inicio, fechaHasta: rangoB.fin }), [filtros, rangoB]);
   const itemsFiltradosB = useMemo(() => filtrarItems(ordenItemsB, filtrosB), [ordenItemsB, filtrosB]);
-  const resumenComisionistasB = useMemo(() => agruparPorComisionista(itemsFiltradosB, comisionistas, tarifasEspecificas), [itemsFiltradosB, comisionistas, tarifasEspecificas]);
+  const resumenComisionistasB = useMemo(() => agruparPorComisionista(itemsFiltradosB, comisionistas, tarifasEspecificas, filtrosB.comisionistas), [itemsFiltradosB, comisionistas, tarifasEspecificas, filtrosB.comisionistas]);
   const totalComisionB = itemsFiltradosB.reduce((s, i) => s + calcularComisionTotalItem(i, comisionistas, tarifasEspecificas), 0);
   const totalOrdenB = itemsFiltradosB.reduce((s, i) => s + i.total, 0);
 
@@ -799,7 +802,7 @@ export function ReportesTab() {
                       <td className="px-4 py-3 text-right text-slate-700">${c.totalOrden.toFixed(2)}</td>
                       <td className="px-4 py-3 text-right font-semibold text-emerald-700">${c.totalComision.toFixed(2)}</td>
                       <td className="px-4 py-3 text-right text-slate-500">
-                        {totalComision > 0 ? ((c.totalComision / totalComision) * 100).toFixed(1) : 0}%
+                        {totalComisionComisionistas > 0 ? ((c.totalComision / totalComisionComisionistas) * 100).toFixed(1) : 0}%
                       </td>
                     </tr>
                   ))
@@ -811,7 +814,7 @@ export function ReportesTab() {
                     <td colSpan={2} className="px-4 py-3 font-medium text-slate-700">Totales</td>
                     <td className="px-4 py-3 text-right font-bold text-slate-900">{resumenComisionistas.reduce((s, c) => s + c.ordenes, 0)}</td>
                     <td className="px-4 py-3 text-right font-bold text-slate-900">${resumenComisionistas.reduce((s, c) => s + c.totalOrden, 0).toFixed(2)}</td>
-                    <td className="px-4 py-3 text-right font-bold text-slate-900">${totalComision.toFixed(2)}</td>
+                    <td className="px-4 py-3 text-right font-bold text-slate-900">${totalComisionComisionistas.toFixed(2)}</td>
                     <td className="px-4 py-3 text-right font-bold text-slate-900">100%</td>
                   </tr>
                 </tfoot>
