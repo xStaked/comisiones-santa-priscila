@@ -18,6 +18,7 @@
     "@base-ui/react": "^1.4.1",
     "@tanstack/react-query": "^5.100.13",
     "axios": "^1.16.1",
+    "chart.js": "^4.5.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",

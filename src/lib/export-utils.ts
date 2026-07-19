@@ -890,58 +890,79 @@ export function getTrimestreActual(): { inicio: string; fin: string } {
 }
 
 /**
- * Dibuja un gráfico de barras horizontales en el PDF (sin dependencias externas).
- * Muestra hasta `maxBarras` categorías ordenadas por valor. Devuelve el nuevo yPos.
+ * Renderiza un gráfico de barras horizontales con Chart.js en un canvas fuera de
+ * pantalla y devuelve el PNG (dataURL) para incrustar en el PDF. Solo cliente.
+ * Muestra hasta `maxBarras` categorías ordenadas por valor.
  */
-function dibujarBarrasPDF(
-  doc: jsPDF,
+async function graficoBarrasPNG(
   titulo: string,
   datos: { nombre: string; valor: number }[],
-  x: number,
-  y: number,
-  ancho: number,
-  maxBarras = 10
-): number {
-  const ordenados = [...datos].sort((a, b) => b.valor - a.valor);
-  const mostrar = ordenados.slice(0, maxBarras);
-  const ocultos = ordenados.length - mostrar.length;
-  if (mostrar.length === 0) return y;
+  maxBarras = 12
+): Promise<{ png: string; width: number; height: number } | null> {
+  const top = [...datos].sort((a, b) => b.valor - a.valor).slice(0, maxBarras);
+  if (top.length === 0) return null;
 
-  doc.setFontSize(9);
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(15, 23, 42);
-  doc.text(titulo, x, y);
-  y += 5;
+  const { default: Chart } = await import('chart.js/auto');
 
-  const maxVal = Math.max(...mostrar.map(d => d.valor), 1);
-  const labelW = 42;
-  const valorW = 24;
-  const barMaxW = ancho - labelW - valorW;
-  const rowH = 6;
+  const width = 1200;
+  const height = 90 + top.length * 42;
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
 
-  doc.setFontSize(7);
-  doc.setFont('helvetica', 'normal');
-  mostrar.forEach(d => {
-    const barW = Math.max((d.valor / maxVal) * barMaxW, 0.5);
-    doc.setTextColor(51, 65, 85);
-    const nombre = d.nombre.length > 24 ? d.nombre.slice(0, 23) + '…' : d.nombre;
-    doc.text(nombre, x, y + rowH - 2);
-    doc.setFillColor(15, 23, 42);
-    doc.rect(x + labelW, y + 1, barW, rowH - 2.5, 'F');
-    doc.setTextColor(30, 41, 59);
-    doc.text(`$ ${d.valor.toFixed(2).replace('.', ',')}`, x + labelW + barW + 2, y + rowH - 2);
-    y += rowH;
+  const chart = new Chart(canvas, {
+    type: 'bar',
+    data: {
+      labels: top.map(d => d.nombre),
+      datasets: [{
+        label: 'Comisión',
+        data: top.map(d => d.valor),
+        backgroundColor: '#2563eb',
+        borderRadius: 4,
+        maxBarThickness: 26,
+      }],
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: false,
+      animation: false,
+      devicePixelRatio: 1,
+      layout: { padding: 12 },
+      plugins: {
+        legend: { display: false },
+        title: {
+          display: true,
+          text: titulo,
+          align: 'start',
+          font: { size: 18, weight: 'bold' },
+          color: '#0f172a',
+          padding: { bottom: 12 },
+        },
+        tooltip: { enabled: false },
+      },
+      scales: {
+        x: {
+          grid: { color: '#e2e8f0' },
+          ticks: {
+            color: '#64748b',
+            font: { size: 12 },
+            callback: (v) => '$' + Number(v).toLocaleString('es-ES'),
+          },
+        },
+        y: {
+          grid: { display: false },
+          ticks: { color: '#334155', font: { size: 13 } },
+        },
+      },
+    },
   });
-  if (ocultos > 0) {
-    doc.setTextColor(148, 163, 184);
-    doc.text(`(+${ocultos} más en la tabla)`, x, y + 3);
-    y += 5;
-  }
-  doc.setTextColor(0, 0, 0);
-  return y + 6;
+
+  const png = canvas.toDataURL('image/png');
+  chart.destroy();
+  return { png, width, height };
 }
 
-export function exportarReportePDF(
+export async function exportarReportePDF(
   items: OrdenItem[],
   comisionistas: Comisionista[],
   titulo: string,
@@ -987,20 +1008,23 @@ export function exportarReportePDF(
   const resumenProductos = agruparPorProducto(items, comisionistas, tarifasEspecificas);
   const resumenComisionistas = agruparPorComisionista(items, comisionistas, tarifasEspecificas, filtros.comisionistas);
 
-  // Gráficos (barras horizontales de comisión)
+  // Gráficos (Chart.js → imagen). Cada uno se incrusta manteniendo su proporción.
   const anchoUtil = pageWidth - margin * 2;
-  if (resumenComisionistas.length > 0) {
-    yPos = dibujarBarrasPDF(doc, 'Comisión por Comisionista', resumenComisionistas.map(c => ({ nombre: c.nombre, valor: c.totalComision })), margin, yPos, anchoUtil);
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const graficos = [
+    { titulo: 'Comisión por Comisionista', datos: resumenComisionistas.map(c => ({ nombre: c.nombre, valor: c.totalComision })) },
+    { titulo: 'Comisión por Sector', datos: resumenFincas.map(f => ({ nombre: f.nombre, valor: f.comision })) },
+    { titulo: 'Comisión por Producto', datos: resumenProductos.map(p => ({ nombre: p.nombre, valor: p.comision })) },
+  ];
+  for (const g of graficos) {
+    const img = await graficoBarrasPNG(g.titulo, g.datos);
+    if (!img) continue;
+    const imgH = (anchoUtil * img.height) / img.width;
+    if (yPos + imgH > pageHeight - margin) { doc.addPage(); yPos = 15; }
+    doc.addImage(img.png, 'PNG', margin, yPos, anchoUtil, imgH);
+    yPos += imgH + 6;
   }
-  if (resumenFincas.length > 0) {
-    if (yPos > 210) { doc.addPage(); yPos = 15; }
-    yPos = dibujarBarrasPDF(doc, 'Comisión por Sector', resumenFincas.map(f => ({ nombre: f.nombre, valor: f.comision })), margin, yPos, anchoUtil);
-  }
-  if (resumenProductos.length > 0) {
-    if (yPos > 210) { doc.addPage(); yPos = 15; }
-    yPos = dibujarBarrasPDF(doc, 'Comisión por Producto', resumenProductos.map(p => ({ nombre: p.nombre, valor: p.comision })), margin, yPos, anchoUtil);
-  }
-  if (yPos > 220) { doc.addPage(); yPos = 15; }
+  if (yPos > pageHeight - 60) { doc.addPage(); yPos = 15; }
 
   // Tabla por finca
   if (resumenFincas.length > 0) {

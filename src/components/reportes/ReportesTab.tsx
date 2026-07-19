@@ -351,13 +351,18 @@ export function ReportesTab() {
       .map(([mes, comision]) => ({ mes, comision: Math.round(comision * 100) / 100 }));
   }, [itemsFiltrados, comisionistas, tarifasEspecificas]);
 
-  const handleExportPDF = () => {
+  const handleExportPDF = async () => {
     if (itemsFiltrados.length === 0) {
       toast.error('No hay datos para exportar');
       return;
     }
-    exportarReportePDF(itemsFiltrados, comisionistas, 'Reporte_Comisiones', filtros, tarifasEspecificas);
-    toast.success('PDF generado');
+    try {
+      await exportarReportePDF(itemsFiltrados, comisionistas, 'Reporte_Comisiones', filtros, tarifasEspecificas);
+      toast.success('PDF generado');
+    } catch (e) {
+      console.error(e);
+      toast.error('No se pudo generar el PDF');
+    }
   };
 
   const handleExportExcel = () => {
