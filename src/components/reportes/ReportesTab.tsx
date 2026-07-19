@@ -353,8 +353,8 @@ export function ReportesTab() {
 
   return (
     <div className="space-y-6">
-      {/* Filtros */}
-      <Card className="card-elevated rounded-2xl">
+      {/* Filtros (relative z-30: el panel de los selectores debe pintar sobre las tarjetas siguientes) */}
+      <Card className="card-elevated rounded-2xl relative z-30">
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2 text-slate-900">
             <Filter className="h-4 w-4 text-slate-700" />
