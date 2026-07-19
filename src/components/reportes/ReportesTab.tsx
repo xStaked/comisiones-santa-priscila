@@ -99,10 +99,11 @@ function MultiSelectFilter({
 export function ReportesTab() {
   const { comisionistas, clientes } = useApp();
 
-  const trimestre = useMemo(() => getTrimestreActual(), []);
-
-  const [fechaDesde, setFechaDesde] = useState(trimestre.inicio);
-  const [fechaHasta, setFechaHasta] = useState(trimestre.fin);
+  // ponytail: sin rango por defecto para no ocultar liquidaciones fuera del trimestre
+  // actual; el usuario acota con los presets. Si el histórico crece mucho, poner un
+  // default tipo "año actual" en vez de traer todo.
+  const [fechaDesde, setFechaDesde] = useState('');
+  const [fechaHasta, setFechaHasta] = useState('');
   const [fincasSel, setFincasSel] = useState<string[]>([]);
   const [productosSel, setProductosSel] = useState<string[]>([]);
   const [comisionistasSel, setComisionistasSel] = useState<string[]>([]);
