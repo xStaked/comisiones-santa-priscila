@@ -856,17 +856,33 @@ export function agruparPorCliente(
   return Array.from(map.values()).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
 }
 
-export function getTrimestreActual(): { inicio: string; fin: string } {
-  const now = new Date();
-  const mes = now.getMonth();
-  const anio = now.getFullYear();
-  const trimestre = Math.floor(mes / 3);
-  const mesInicio = trimestre * 3;
+function ultimoDiaMes(anio: number, mes0: number): number {
+  return new Date(anio, mes0 + 1, 0).getDate();
+}
+
+/** Rango [inicio, fin] de un trimestre (1-4) de un año, en ISO YYYY-MM-DD. */
+export function trimestreRango(anio: number, trimestre: number): { inicio: string; fin: string } {
+  const mesInicio = (trimestre - 1) * 3;
   const mesFin = mesInicio + 2;
   const inicio = `${anio}-${String(mesInicio + 1).padStart(2, '0')}-01`;
-  const ultimoDia = new Date(anio, mesFin + 1, 0).getDate();
-  const fin = `${anio}-${String(mesFin + 1).padStart(2, '0')}-${ultimoDia}`;
+  const fin = `${anio}-${String(mesFin + 1).padStart(2, '0')}-${ultimoDiaMes(anio, mesFin)}`;
   return { inicio, fin };
+}
+
+/** Rango de un semestre (1 = ene-jun, 2 = jul-dic). */
+export function semestreRango(anio: number, semestre: number): { inicio: string; fin: string } {
+  const tInicio = semestre === 1 ? 1 : 3;
+  return { inicio: trimestreRango(anio, tInicio).inicio, fin: trimestreRango(anio, tInicio + 1).fin };
+}
+
+/** Rango de un año completo. */
+export function anioRango(anio: number): { inicio: string; fin: string } {
+  return { inicio: `${anio}-01-01`, fin: `${anio}-12-31` };
+}
+
+export function getTrimestreActual(): { inicio: string; fin: string } {
+  const now = new Date();
+  return trimestreRango(now.getFullYear(), Math.floor(now.getMonth() / 3) + 1);
 }
 
 export function exportarReportePDF(

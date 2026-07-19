@@ -24,6 +24,8 @@ import {
   MapPin,
   Fish,
   UserCheck,
+  GitCompare,
+  LineChart,
 } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { OrdenItem, Cliente, TarifaClienteProducto } from '@/types';
@@ -34,7 +36,9 @@ import {
   agruparPorProducto,
   agruparPorComisionista,
   agruparPorCliente,
-  getTrimestreActual,
+  trimestreRango,
+  semestreRango,
+  anioRango,
   exportarReportePDF,
   exportarReporteExcel,
   calcularComisionTotalItem,
@@ -99,15 +103,46 @@ function MultiSelectFilter({
 export function ReportesTab() {
   const { comisionistas, clientes } = useApp();
 
+  const now = useMemo(() => new Date(), []);
+  const anioActual = now.getFullYear();
+  const trimActual = Math.floor(now.getMonth() / 3) + 1;
+  // Años seleccionables: los últimos 4 hasta el actual (cubre todo el histórico real).
+  const aniosDisponibles = useMemo(
+    () => Array.from({ length: 5 }, (_, i) => anioActual - i),
+    [anioActual]
+  );
+
   // ponytail: sin rango por defecto para no ocultar liquidaciones fuera del trimestre
-  // actual; el usuario acota con los presets. Si el histórico crece mucho, poner un
-  // default tipo "año actual" en vez de traer todo.
+  // actual; el usuario acota con el selector de periodo. Si el histórico crece mucho,
+  // poner un default tipo "año actual" en vez de traer todo.
   const [fechaDesde, setFechaDesde] = useState('');
   const [fechaHasta, setFechaHasta] = useState('');
+  const [anioSel, setAnioSel] = useState(anioActual);
   const [fincasSel, setFincasSel] = useState<string[]>([]);
   const [productosSel, setProductosSel] = useState<string[]>([]);
   const [comisionistasSel, setComisionistasSel] = useState<string[]>([]);
   const [clientesSel, setClientesSel] = useState<string[]>([]);
+
+  // Comparación de periodos (feature "comparar trimestres"). B siempre es un trimestre.
+  const [comparar, setComparar] = useState(false);
+  const [anioB, setAnioB] = useState(anioActual);
+  const [trimB, setTrimB] = useState(trimActual);
+
+  // Trimestre actualmente aplicado en A (para reflejarlo en el selector), o '' si es
+  // un rango custom / sin filtro.
+  const trimAplicado = useMemo(() => {
+    for (let t = 1; t <= 4; t++) {
+      const r = trimestreRango(anioSel, t);
+      if (r.inicio === fechaDesde && r.fin === fechaHasta) return String(t);
+    }
+    return '';
+  }, [anioSel, fechaDesde, fechaHasta]);
+
+  const aplicarTrimestre = (t: number) => {
+    const r = trimestreRango(anioSel, t);
+    setFechaDesde(r.inicio);
+    setFechaHasta(r.fin);
+  };
 
   const { data: ordenesData } = useQuery({
     queryKey: ['ordenes', 'reportes', fechaDesde, fechaHasta, fincasSel[0], productosSel[0], clientesSel[0]],
@@ -172,6 +207,49 @@ export function ReportesTab() {
     itemsFiltrados.flatMap(i => i.comisionistas.map(a => a.comisionistaId))
   ).size;
 
+  // ----- Periodo B (comparación) -----
+  const rangoB = useMemo(() => trimestreRango(anioB, trimB), [anioB, trimB]);
+
+  const { data: ordenesDataB } = useQuery({
+    queryKey: ['ordenes', 'reportes-b', rangoB.inicio, rangoB.fin],
+    queryFn: () => fetchOrdenes({ fechaDesde: rangoB.inicio, fechaHasta: rangoB.fin }),
+    enabled: comparar,
+  });
+
+  const ordenItemsB: OrdenItem[] = (ordenesDataB ?? []).filter((item: OrdenItem) => item.estado === 'liquidada');
+  // B usa los mismos filtros no-temporales que A, con su propio rango.
+  const filtrosB = useMemo(() => ({ ...filtros, fechaDesde: rangoB.inicio, fechaHasta: rangoB.fin }), [filtros, rangoB]);
+  const itemsFiltradosB = useMemo(() => filtrarItems(ordenItemsB, filtrosB), [ordenItemsB, filtrosB]);
+  const resumenComisionistasB = useMemo(() => agruparPorComisionista(itemsFiltradosB, comisionistas, tarifasEspecificas), [itemsFiltradosB, comisionistas, tarifasEspecificas]);
+  const totalComisionB = itemsFiltradosB.reduce((s, i) => s + calcularComisionTotalItem(i, comisionistas, tarifasEspecificas), 0);
+  const totalOrdenB = itemsFiltradosB.reduce((s, i) => s + i.total, 0);
+
+  const variacion = (a: number, b: number) => (b === 0 ? (a > 0 ? 100 : 0) : ((a - b) / b) * 100);
+
+  // Comisión A vs B por comisionista (unión de ambos periodos).
+  const comparativaComisionistas = useMemo(() => {
+    const mapB = new Map(resumenComisionistasB.map(c => [c.nombre, c.totalComision]));
+    const nombres = new Set<string>([...resumenComisionistas.map(c => c.nombre), ...resumenComisionistasB.map(c => c.nombre)]);
+    return Array.from(nombres).map(nombre => {
+      const a = resumenComisionistas.find(c => c.nombre === nombre)?.totalComision ?? 0;
+      const b = mapB.get(nombre) ?? 0;
+      return { nombre, a, b, delta: variacion(a, b) };
+    }).sort((x, y) => y.a - x.a);
+  }, [resumenComisionistas, resumenComisionistasB]);
+
+  // ----- Tendencia mensual (feature "más desglose") -----
+  const tendenciaMensual = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const i of itemsFiltrados) {
+      const mes = (i.fecha || '').slice(0, 7); // YYYY-MM
+      if (!mes) continue;
+      map.set(mes, (map.get(mes) || 0) + calcularComisionTotalItem(i, comisionistas, tarifasEspecificas));
+    }
+    return Array.from(map.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([mes, comision]) => ({ mes, comision: Math.round(comision * 100) / 100 }));
+  }, [itemsFiltrados, comisionistas, tarifasEspecificas]);
+
   const handleExportPDF = () => {
     if (itemsFiltrados.length === 0) {
       toast.error('No hay datos para exportar');
@@ -222,33 +300,34 @@ export function ReportesTab() {
               </Label>
               <Input type="date" value={fechaHasta} onChange={e => setFechaHasta(e.target.value)} className="bg-white border-slate-200 rounded-xl" />
             </div>
-            <div className="sm:col-span-2 flex items-end gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  const t = getTrimestreActual();
-                  setFechaDesde(t.inicio);
-                  setFechaHasta(t.fin);
-                }}
-                className="rounded-lg border-slate-200 text-slate-600"
-              >
-                Último trimestre
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  const now = new Date();
-                  const inicio = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
-                  const fin = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()}`;
-                  setFechaDesde(inicio);
-                  setFechaHasta(fin);
-                }}
-                className="rounded-lg border-slate-200 text-slate-600"
-              >
-                Mes actual
-              </Button>
+            <div className="sm:col-span-2 flex flex-wrap items-end gap-2">
+              <div className="space-y-1.5">
+                <Label className="text-xs text-slate-500">Año</Label>
+                <select
+                  value={anioSel}
+                  onChange={e => setAnioSel(Number(e.target.value))}
+                  className="h-9 rounded-xl border border-slate-200 bg-white px-2 text-sm text-slate-700"
+                >
+                  {aniosDisponibles.map(a => <option key={a} value={a}>{a}</option>)}
+                </select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs text-slate-500">Trimestre</Label>
+                <select
+                  value={trimAplicado}
+                  onChange={e => { if (e.target.value) aplicarTrimestre(Number(e.target.value)); }}
+                  className="h-9 rounded-xl border border-slate-200 bg-white px-2 text-sm text-slate-700"
+                >
+                  <option value="">—</option>
+                  <option value="1">T1 · Ene–Mar</option>
+                  <option value="2">T2 · Abr–Jun</option>
+                  <option value="3">T3 · Jul–Sep</option>
+                  <option value="4">T4 · Oct–Dic</option>
+                </select>
+              </div>
+              <Button variant="outline" size="sm" onClick={() => { const r = anioRango(anioSel); setFechaDesde(r.inicio); setFechaHasta(r.fin); }} className="rounded-lg border-slate-200 text-slate-600">Año {anioSel}</Button>
+              <Button variant="outline" size="sm" onClick={() => { const r = semestreRango(anioSel, 1); setFechaDesde(r.inicio); setFechaHasta(r.fin); }} className="rounded-lg border-slate-200 text-slate-600">S1</Button>
+              <Button variant="outline" size="sm" onClick={() => { const r = semestreRango(anioSel, 2); setFechaDesde(r.inicio); setFechaHasta(r.fin); }} className="rounded-lg border-slate-200 text-slate-600">S2</Button>
               <Button
                 variant="outline"
                 size="sm"
@@ -265,6 +344,35 @@ export function ReportesTab() {
                 Limpiar
               </Button>
             </div>
+          </div>
+
+          {/* Comparar periodos */}
+          <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50/50 p-3">
+            <label className="flex items-center gap-2 text-sm font-medium text-slate-700 cursor-pointer w-fit">
+              <input type="checkbox" checked={comparar} onChange={e => setComparar(e.target.checked)} className="h-4 w-4 rounded border-slate-300" />
+              <GitCompare className="h-4 w-4 text-slate-500" />
+              Comparar con otro trimestre
+            </label>
+            {comparar && (
+              <div className="mt-3 flex flex-wrap items-end gap-2">
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-slate-500">Año (B)</Label>
+                  <select value={anioB} onChange={e => setAnioB(Number(e.target.value))} className="h-9 rounded-xl border border-slate-200 bg-white px-2 text-sm text-slate-700">
+                    {aniosDisponibles.map(a => <option key={a} value={a}>{a}</option>)}
+                  </select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-slate-500">Trimestre (B)</Label>
+                  <select value={trimB} onChange={e => setTrimB(Number(e.target.value))} className="h-9 rounded-xl border border-slate-200 bg-white px-2 text-sm text-slate-700">
+                    <option value={1}>T1 · Ene–Mar</option>
+                    <option value={2}>T2 · Abr–Jun</option>
+                    <option value={3}>T3 · Jul–Sep</option>
+                    <option value={4}>T4 · Oct–Dic</option>
+                  </select>
+                </div>
+                <span className="text-xs text-slate-400 pb-2">Compara el periodo A (arriba) contra B.</span>
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 mt-4">
@@ -340,6 +448,70 @@ export function ReportesTab() {
         </Card>
       </div>
 
+      {/* Comparación de periodos */}
+      {comparar && (
+        <Card className="rounded-2xl border-slate-200 shadow-sm">
+          <CardHeader className="pb-3">
+            <div className="flex items-center gap-2">
+              <GitCompare className="h-4 w-4 text-slate-500" />
+              <CardTitle className="text-base text-slate-900">
+                Comparación — A ({fechaDesde || 'todo'} → {fechaHasta || 'todo'}) vs B (T{trimB} {anioB})
+              </CardTitle>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {[
+                { label: 'Registros', a: itemsFiltrados.length, b: itemsFiltradosB.length, money: false },
+                { label: 'Total Orden', a: totalOrden, b: totalOrdenB, money: true },
+                { label: 'Comisión Total', a: totalComision, b: totalComisionB, money: true },
+              ].map(m => {
+                const d = variacion(m.a, m.b);
+                const fmt = (v: number) => (m.money ? `$${v.toFixed(2)}` : String(v));
+                return (
+                  <div key={m.label} className="rounded-xl border border-slate-200 p-3">
+                    <div className="text-xs text-slate-500 mb-1">{m.label}</div>
+                    <div className="flex items-baseline gap-2 flex-wrap">
+                      <span className="text-lg font-bold text-slate-900 tabular-nums">{fmt(m.a)}</span>
+                      <span className="text-xs text-slate-400">vs {fmt(m.b)}</span>
+                    </div>
+                    <div className={`text-xs font-medium ${d >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                      {d >= 0 ? '▲' : '▼'} {Math.abs(d).toFixed(1)}%
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50 border-b border-slate-200">
+                  <tr>
+                    <th className="text-left px-4 py-2 font-medium text-slate-600">Comisionista</th>
+                    <th className="text-right px-4 py-2 font-medium text-slate-600">A</th>
+                    <th className="text-right px-4 py-2 font-medium text-slate-600">B</th>
+                    <th className="text-right px-4 py-2 font-medium text-slate-600">Variación</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {comparativaComisionistas.length === 0 ? (
+                    <tr><td colSpan={4} className="px-4 py-6 text-center text-slate-500">No hay datos</td></tr>
+                  ) : comparativaComisionistas.map((c, i) => (
+                    <tr key={i} className="hover:bg-slate-50/50 transition-colors">
+                      <td className="px-4 py-2 text-slate-900 font-medium">{c.nombre}</td>
+                      <td className="px-4 py-2 text-right text-slate-700">${c.a.toFixed(2)}</td>
+                      <td className="px-4 py-2 text-right text-slate-700">${c.b.toFixed(2)}</td>
+                      <td className={`px-4 py-2 text-right font-medium ${c.delta >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                        {c.delta >= 0 ? '▲' : '▼'} {Math.abs(c.delta).toFixed(1)}%
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Acciones */}
       <div className="flex justify-end gap-2">
         <Button variant="outline" onClick={handleExportPDF} className="rounded-xl border-slate-200">
@@ -390,6 +562,37 @@ export function ReportesTab() {
                       border: '1px solid #e2e8f0',
                       boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
                     }}
+                  />
+                  <Bar dataKey="comision" fill="#0f172a" radius={[6, 6, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Tendencia mensual */}
+      {tendenciaMensual.length > 0 && (
+        <Card className="rounded-2xl border-slate-200 shadow-sm">
+          <CardHeader className="pb-2">
+            <div className="flex items-center gap-2">
+              <LineChart className="h-4 w-4 text-slate-500" />
+              <CardTitle className="text-base text-slate-900">Tendencia mensual de comisión</CardTitle>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={tendenciaMensual} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                  <XAxis dataKey="mes" tick={{ fill: '#64748b', fontSize: 11 }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fill: '#64748b', fontSize: 12 }} axisLine={false} tickLine={false} tickFormatter={(v: number) => `$${v.toLocaleString('es-ES')}`} />
+                  <Tooltip
+                    formatter={(value: any) => {
+                      const num = typeof value === 'number' ? value : Number(value);
+                      return [`$${num.toFixed(2)}`, 'Comisión'];
+                    }}
+                    contentStyle={{ borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
                   />
                   <Bar dataKey="comision" fill="#0f172a" radius={[6, 6, 0, 0]} />
                 </BarChart>
