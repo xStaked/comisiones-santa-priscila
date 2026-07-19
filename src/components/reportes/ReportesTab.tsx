@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   BarChart,
@@ -26,9 +26,11 @@ import {
   UserCheck,
   GitCompare,
   LineChart,
+  ChevronDown,
+  Play,
 } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
-import { OrdenItem, Cliente, TarifaClienteProducto } from '@/types';
+import { OrdenItem, TarifaClienteProducto } from '@/types';
 import { fetchOrdenes, fetchTarifasClienteProducto } from '@/lib/api';
 import {
   filtrarItems,
@@ -47,10 +49,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 
-function MultiSelectFilter({
+// Selector multi con buscador para listas grandes (productos, comisionistas).
+function MultiSelect({
   label,
   icon: Icon,
   options,
@@ -58,42 +60,89 @@ function MultiSelectFilter({
   onChange,
 }: {
   label: string;
-  icon: any;
+  icon: React.ComponentType<{ className?: string }>;
   options: string[];
   selected: string[];
   onChange: (vals: string[]) => void;
 }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  const filtradas = query
+    ? options.filter(o => o.toLowerCase().includes(query.toLowerCase()))
+    : options;
+
   const toggle = (val: string) => {
-    if (selected.includes(val)) {
-      onChange(selected.filter(v => v !== val));
-    } else {
-      onChange([...selected, val]);
-    }
+    if (selected.includes(val)) onChange(selected.filter(v => v !== val));
+    else onChange([...selected, val]);
   };
 
+  const resumen = selected.length === 0
+    ? 'Todos'
+    : selected.length === 1
+    ? selected[0]
+    : `${selected.length} seleccionados`;
+
   return (
-    <div className="space-y-1.5">
+    <div className="space-y-1.5" ref={ref}>
       <Label className="text-xs text-slate-500 flex items-center gap-1">
         <Icon className="h-3 w-3" />
         {label}
       </Label>
-      <div className="flex flex-wrap gap-1.5">
-        {options.map(opt => (
-          <button
-            key={opt}
-            type="button"
-            onClick={() => toggle(opt)}
-            className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${
-              selected.includes(opt)
-                ? 'bg-slate-900 text-white'
-                : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
-            }`}
-          >
-            {opt}
-          </button>
-        ))}
-        {options.length === 0 && (
-          <span className="text-xs text-slate-400">No hay opciones</span>
+      <div className="relative">
+        <button
+          type="button"
+          onClick={() => setOpen(o => !o)}
+          className="w-full flex items-center justify-between gap-2 h-9 rounded-xl border border-slate-200 bg-white px-2.5 text-sm text-left"
+        >
+          <span className={`truncate ${selected.length ? 'text-slate-800' : 'text-slate-400'}`}>{resumen}</span>
+          <ChevronDown className="h-4 w-4 text-slate-400 shrink-0" />
+        </button>
+        {open && (
+          <div className="absolute z-30 mt-1 w-full min-w-[220px] rounded-xl border border-slate-200 bg-white shadow-lg">
+            <div className="p-2 border-b border-slate-100">
+              <input
+                autoFocus
+                value={query}
+                onChange={e => setQuery(e.target.value)}
+                placeholder="Buscar…"
+                className="w-full h-8 rounded-lg border border-slate-200 px-2 text-sm outline-none focus:border-slate-400"
+              />
+            </div>
+            <div className="max-h-60 overflow-y-auto p-1">
+              {filtradas.length === 0 ? (
+                <div className="px-2 py-3 text-center text-xs text-slate-400">Sin resultados</div>
+              ) : (
+                filtradas.map(opt => (
+                  <label key={opt} className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-slate-50 cursor-pointer text-sm">
+                    <input
+                      type="checkbox"
+                      checked={selected.includes(opt)}
+                      onChange={() => toggle(opt)}
+                      className="h-4 w-4 rounded border-slate-300"
+                    />
+                    <span className="truncate">{opt}</span>
+                  </label>
+                ))
+              )}
+            </div>
+            {selected.length > 0 && (
+              <div className="p-2 border-t border-slate-100 flex justify-between">
+                <button type="button" onClick={() => onChange([])} className="text-xs text-slate-500 hover:text-slate-700">Limpiar selección</button>
+                <span className="text-xs text-slate-400">{selected.length} de {options.length}</span>
+              </div>
+            )}
+          </div>
         )}
       </div>
     </div>
@@ -101,7 +150,7 @@ function MultiSelectFilter({
 }
 
 export function ReportesTab() {
-  const { comisionistas, clientes } = useApp();
+  const { comisionistas } = useApp();
 
   const now = useMemo(() => new Date(), []);
   const anioActual = now.getFullYear();
@@ -128,6 +177,36 @@ export function ReportesTab() {
   const [anioB, setAnioB] = useState(anioActual);
   const [trimB, setTrimB] = useState(trimActual);
 
+  // Filtros APLICADOS: solo cambian al pulsar "Generar reporte" (el usuario no confía
+  // en el filtrado automático). Todo el reporte se deriva de aquí, no del borrador.
+  const [aplicado, setAplicado] = useState({
+    fechaDesde: '',
+    fechaHasta: '',
+    clientes: [] as string[],
+    fincas: [] as string[],
+    productos: [] as string[],
+    comisionistas: [] as string[],
+    comparar: false,
+    anioB: anioActual,
+    trimB: trimActual,
+  });
+
+  const generar = () => setAplicado({
+    fechaDesde, fechaHasta,
+    clientes: clientesSel, fincas: fincasSel, productos: productosSel, comisionistas: comisionistasSel,
+    comparar, anioB, trimB,
+  });
+
+  const limpiar = () => {
+    setFechaDesde(''); setFechaHasta('');
+    setFincasSel([]); setProductosSel([]); setComisionistasSel([]); setClientesSel([]);
+    setComparar(false);
+    setAplicado({ fechaDesde: '', fechaHasta: '', clientes: [], fincas: [], productos: [], comisionistas: [], comparar: false, anioB: anioActual, trimB: trimActual });
+  };
+
+  const draftActual = { fechaDesde, fechaHasta, clientes: clientesSel, fincas: fincasSel, productos: productosSel, comisionistas: comisionistasSel, comparar, anioB, trimB };
+  const hayCambios = JSON.stringify(draftActual) !== JSON.stringify(aplicado);
+
   // Trimestre actualmente aplicado en A (para reflejarlo en el selector), o '' si es
   // un rango custom / sin filtro.
   const trimAplicado = useMemo(() => {
@@ -145,13 +224,10 @@ export function ReportesTab() {
   };
 
   const { data: ordenesData } = useQuery({
-    queryKey: ['ordenes', 'reportes', fechaDesde, fechaHasta, fincasSel[0], productosSel[0], clientesSel[0]],
+    queryKey: ['ordenes', 'reportes', aplicado.fechaDesde, aplicado.fechaHasta],
     queryFn: () => fetchOrdenes({
-      fechaDesde: fechaDesde || undefined,
-      fechaHasta: fechaHasta || undefined,
-      finca: fincasSel[0] || undefined,
-      producto: productosSel[0] || undefined,
-      clienteId: clientes.find((c: Cliente) => c.nombre === clientesSel[0])?.id || undefined,
+      fechaDesde: aplicado.fechaDesde || undefined,
+      fechaHasta: aplicado.fechaHasta || undefined,
     }),
   });
 
@@ -179,16 +255,15 @@ export function ReportesTab() {
   );
 
   const comisionistaNombreAId = (nombre: string) => comisionistas.find(c => c.nombre === nombre)?.id || '';
-  const comisionistaIdANombre = (id: string) => comisionistas.find(c => c.id === id)?.nombre || id;
 
   const filtros = useMemo(() => ({
-    fechaDesde,
-    fechaHasta,
-    fincas: fincasSel,
-    productos: productosSel,
-    comisionistas: comisionistasSel.map(comisionistaNombreAId).filter(Boolean),
-    clientes: clientesSel,
-  }), [fechaDesde, fechaHasta, fincasSel, productosSel, comisionistasSel, clientesSel, comisionistas]);
+    fechaDesde: aplicado.fechaDesde,
+    fechaHasta: aplicado.fechaHasta,
+    fincas: aplicado.fincas,
+    productos: aplicado.productos,
+    comisionistas: aplicado.comisionistas.map(comisionistaNombreAId).filter(Boolean),
+    clientes: aplicado.clientes,
+  }), [aplicado, comisionistas]);
 
   const itemsFiltrados = useMemo(() =>
     filtrarItems(ordenItems, filtros),
@@ -205,18 +280,17 @@ export function ReportesTab() {
   // Total de la tabla "Por Comisionista": suma solo las filas mostradas (importa al
   // filtrar por comisionista). Sin filtro coincide con totalComision.
   const totalComisionComisionistas = resumenComisionistas.reduce((s, c) => s + c.totalComision, 0);
-  const totalCantidad = itemsFiltrados.reduce((s, i) => s + i.cantidad, 0);
   const comisionistasInvolucrados = new Set(
     itemsFiltrados.flatMap(i => i.comisionistas.map(a => a.comisionistaId))
   ).size;
 
   // ----- Periodo B (comparación) -----
-  const rangoB = useMemo(() => trimestreRango(anioB, trimB), [anioB, trimB]);
+  const rangoB = useMemo(() => trimestreRango(aplicado.anioB, aplicado.trimB), [aplicado.anioB, aplicado.trimB]);
 
   const { data: ordenesDataB } = useQuery({
     queryKey: ['ordenes', 'reportes-b', rangoB.inicio, rangoB.fin],
     queryFn: () => fetchOrdenes({ fechaDesde: rangoB.inicio, fechaHasta: rangoB.fin }),
-    enabled: comparar,
+    enabled: aplicado.comparar,
   });
 
   const ordenItemsB: OrdenItem[] = (ordenesDataB ?? []).filter((item: OrdenItem) => item.estado === 'liquidada');
@@ -331,21 +405,7 @@ export function ReportesTab() {
               <Button variant="outline" size="sm" onClick={() => { const r = anioRango(anioSel); setFechaDesde(r.inicio); setFechaHasta(r.fin); }} className="rounded-lg border-slate-200 text-slate-600">Año {anioSel}</Button>
               <Button variant="outline" size="sm" onClick={() => { const r = semestreRango(anioSel, 1); setFechaDesde(r.inicio); setFechaHasta(r.fin); }} className="rounded-lg border-slate-200 text-slate-600">S1</Button>
               <Button variant="outline" size="sm" onClick={() => { const r = semestreRango(anioSel, 2); setFechaDesde(r.inicio); setFechaHasta(r.fin); }} className="rounded-lg border-slate-200 text-slate-600">S2</Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  setFechaDesde('');
-                  setFechaHasta('');
-                  setFincasSel([]);
-                  setProductosSel([]);
-                  setComisionistasSel([]);
-                  setClientesSel([]);
-                }}
-                className="rounded-lg border-slate-200 text-slate-600"
-              >
-                Limpiar
-              </Button>
+              <Button variant="outline" size="sm" onClick={limpiar} className="rounded-lg border-slate-200 text-slate-600">Limpiar</Button>
             </div>
           </div>
 
@@ -379,34 +439,19 @@ export function ReportesTab() {
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 mt-4">
-            <MultiSelectFilter
-              label="Clientes"
-              icon={Users}
-              options={clientesUnicos}
-              selected={clientesSel}
-              onChange={setClientesSel}
-            />
-            <MultiSelectFilter
-              label="Sectores"
-              icon={MapPin}
-              options={fincasUnicas}
-              selected={fincasSel}
-              onChange={setFincasSel}
-            />
-            <MultiSelectFilter
-              label="Productos"
-              icon={Fish}
-              options={productosUnicos}
-              selected={productosSel}
-              onChange={setProductosSel}
-            />
-            <MultiSelectFilter
-              label="Comisionistas"
-              icon={UserCheck}
-              options={comisionistas.map(c => c.nombre)}
-              selected={comisionistasSel}
-              onChange={setComisionistasSel}
-            />
+            <MultiSelect label="Clientes" icon={Users} options={clientesUnicos} selected={clientesSel} onChange={setClientesSel} />
+            <MultiSelect label="Sectores" icon={MapPin} options={fincasUnicas} selected={fincasSel} onChange={setFincasSel} />
+            <MultiSelect label="Productos" icon={Fish} options={productosUnicos} selected={productosSel} onChange={setProductosSel} />
+            <MultiSelect label="Comisionistas" icon={UserCheck} options={comisionistas.map(c => c.nombre)} selected={comisionistasSel} onChange={setComisionistasSel} />
+          </div>
+
+          {/* Generar: el reporte no se actualiza hasta pulsar este botón */}
+          <div className="mt-4 flex items-center justify-end gap-3">
+            {hayCambios && <span className="text-xs text-amber-600">Hay cambios sin aplicar</span>}
+            <Button onClick={generar} className="rounded-xl bg-slate-900 text-white hover:bg-slate-800">
+              <Play className="h-4 w-4 mr-2" />
+              Generar reporte
+            </Button>
           </div>
         </CardContent>
       </Card>
@@ -452,13 +497,13 @@ export function ReportesTab() {
       </div>
 
       {/* Comparación de periodos */}
-      {comparar && (
+      {aplicado.comparar && (
         <Card className="rounded-2xl border-slate-200 shadow-sm">
           <CardHeader className="pb-3">
             <div className="flex items-center gap-2">
               <GitCompare className="h-4 w-4 text-slate-500" />
               <CardTitle className="text-base text-slate-900">
-                Comparación — A ({fechaDesde || 'todo'} → {fechaHasta || 'todo'}) vs B (T{trimB} {anioB})
+                Comparación — A ({aplicado.fechaDesde || 'todo'} → {aplicado.fechaHasta || 'todo'}) vs B (T{aplicado.trimB} {aplicado.anioB})
               </CardTitle>
             </div>
           </CardHeader>
