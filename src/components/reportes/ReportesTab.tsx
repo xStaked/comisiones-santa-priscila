@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
   BarChart,
@@ -67,15 +68,34 @@ function MultiSelect({
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
-  const ref = useRef<HTMLDivElement>(null);
+  // Posición del panel: se renderiza en un portal a document.body con position:fixed
+  // para escapar de cualquier overflow/stacking de las tarjetas (bug de z-index).
+  const [coords, setCoords] = useState<{ top: number; left: number; width: number } | null>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!open) return;
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    const actualizar = () => {
+      const el = triggerRef.current;
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      setCoords({ top: r.bottom + 4, left: r.left, width: r.width });
     };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
+    actualizar();
+    const onDown = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (triggerRef.current?.contains(t) || panelRef.current?.contains(t)) return;
+      setOpen(false);
+    };
+    window.addEventListener('scroll', actualizar, true);
+    window.addEventListener('resize', actualizar);
+    document.addEventListener('mousedown', onDown);
+    return () => {
+      window.removeEventListener('scroll', actualizar, true);
+      window.removeEventListener('resize', actualizar);
+      document.removeEventListener('mousedown', onDown);
+    };
   }, [open]);
 
   const filtradas = query
@@ -94,57 +114,61 @@ function MultiSelect({
     : `${selected.length} seleccionados`;
 
   return (
-    <div className="space-y-1.5" ref={ref}>
+    <div className="space-y-1.5">
       <Label className="text-xs text-slate-500 flex items-center gap-1">
         <Icon className="h-3 w-3" />
         {label}
       </Label>
-      <div className="relative">
-        <button
-          type="button"
-          onClick={() => setOpen(o => !o)}
-          className="w-full flex items-center justify-between gap-2 h-9 rounded-xl border border-slate-200 bg-white px-2.5 text-sm text-left"
+      <button
+        ref={triggerRef}
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center justify-between gap-2 h-9 rounded-xl border border-slate-200 bg-white px-2.5 text-sm text-left"
+      >
+        <span className={`truncate ${selected.length ? 'text-slate-800' : 'text-slate-400'}`}>{resumen}</span>
+        <ChevronDown className="h-4 w-4 text-slate-400 shrink-0" />
+      </button>
+      {open && coords && createPortal(
+        <div
+          ref={panelRef}
+          style={{ position: 'fixed', top: coords.top, left: coords.left, width: coords.width, zIndex: 1000 }}
+          className="min-w-[220px] rounded-xl border border-slate-200 bg-white shadow-lg"
         >
-          <span className={`truncate ${selected.length ? 'text-slate-800' : 'text-slate-400'}`}>{resumen}</span>
-          <ChevronDown className="h-4 w-4 text-slate-400 shrink-0" />
-        </button>
-        {open && (
-          <div className="absolute z-30 mt-1 w-full min-w-[220px] rounded-xl border border-slate-200 bg-white shadow-lg">
-            <div className="p-2 border-b border-slate-100">
-              <input
-                autoFocus
-                value={query}
-                onChange={e => setQuery(e.target.value)}
-                placeholder="Buscar…"
-                className="w-full h-8 rounded-lg border border-slate-200 px-2 text-sm outline-none focus:border-slate-400"
-              />
-            </div>
-            <div className="max-h-60 overflow-y-auto p-1">
-              {filtradas.length === 0 ? (
-                <div className="px-2 py-3 text-center text-xs text-slate-400">Sin resultados</div>
-              ) : (
-                filtradas.map(opt => (
-                  <label key={opt} className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-slate-50 cursor-pointer text-sm">
-                    <input
-                      type="checkbox"
-                      checked={selected.includes(opt)}
-                      onChange={() => toggle(opt)}
-                      className="h-4 w-4 rounded border-slate-300"
-                    />
-                    <span className="truncate">{opt}</span>
-                  </label>
-                ))
-              )}
-            </div>
-            {selected.length > 0 && (
-              <div className="p-2 border-t border-slate-100 flex justify-between">
-                <button type="button" onClick={() => onChange([])} className="text-xs text-slate-500 hover:text-slate-700">Limpiar selección</button>
-                <span className="text-xs text-slate-400">{selected.length} de {options.length}</span>
-              </div>
+          <div className="p-2 border-b border-slate-100">
+            <input
+              autoFocus
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              placeholder="Buscar…"
+              className="w-full h-8 rounded-lg border border-slate-200 px-2 text-sm outline-none focus:border-slate-400"
+            />
+          </div>
+          <div className="max-h-60 overflow-y-auto p-1">
+            {filtradas.length === 0 ? (
+              <div className="px-2 py-3 text-center text-xs text-slate-400">Sin resultados</div>
+            ) : (
+              filtradas.map(opt => (
+                <label key={opt} className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-slate-50 cursor-pointer text-sm">
+                  <input
+                    type="checkbox"
+                    checked={selected.includes(opt)}
+                    onChange={() => toggle(opt)}
+                    className="h-4 w-4 rounded border-slate-300"
+                  />
+                  <span className="truncate">{opt}</span>
+                </label>
+              ))
             )}
           </div>
-        )}
-      </div>
+          {selected.length > 0 && (
+            <div className="p-2 border-t border-slate-100 flex justify-between">
+              <button type="button" onClick={() => onChange([])} className="text-xs text-slate-500 hover:text-slate-700">Limpiar selección</button>
+              <span className="text-xs text-slate-400">{selected.length} de {options.length}</span>
+            </div>
+          )}
+        </div>,
+        document.body
+      )}
     </div>
   );
 }
@@ -353,8 +377,8 @@ export function ReportesTab() {
 
   return (
     <div className="space-y-6">
-      {/* Filtros (relative z-30: el panel de los selectores debe pintar sobre las tarjetas siguientes) */}
-      <Card className="card-elevated rounded-2xl relative z-30">
+      {/* Filtros */}
+      <Card className="card-elevated rounded-2xl">
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2 text-slate-900">
             <Filter className="h-4 w-4 text-slate-700" />
