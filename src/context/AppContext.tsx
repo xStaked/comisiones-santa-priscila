@@ -1,8 +1,8 @@
 'use client';
 
-import React, { createContext, useContext, useCallback, useEffect } from 'react';
+import React, { createContext, useContext, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Comisionista, OrdenItem, Liquidacion, Cliente, Producto, Finca, TarifaClienteProducto, EstadoOrden } from '@/types';
+import { Comisionista, OrdenItem, Liquidacion, Cliente, Producto, Finca, TarifaClienteProducto, EstadoOrden, Retencion } from '@/types';
 import { toast } from 'sonner';
 import {
   fetchComisionistas,
@@ -82,6 +82,8 @@ interface AppContextType {
   updateTarifa: (id: string, data: Partial<TarifaClienteProducto>) => void;
   updateTarifasMasivo: (ids: string[], cambios: { tipo?: 'porcentaje' | 'fijo_kg' | 'fijo_unidad'; valor?: number; activo?: boolean }) => Promise<{ actualizadas: number }>;
   deleteTarifa: (id: string) => void;
+
+  retenciones: Retencion[];
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -151,12 +153,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const clientes: Cliente[] = clientesQuery.data ?? [];
   const productos: Producto[] = productosQuery.data ?? [];
   const tarifasClienteProducto: TarifaClienteProducto[] = tarifasClienteProductoQuery.data ?? [];
+  const retenciones: Retencion[] = retencionesQuery.data ?? [];
 
   // Los periodos de retención se inyectan en export-utils, que los usa desde
-  // funciones puras sin acceso al contexto de React.
-  useEffect(() => {
-    if (retencionesQuery.data) setPeriodosRetencion(retencionesQuery.data);
-  }, [retencionesQuery.data]);
+  // funciones puras sin acceso al contexto de React. Se llama de forma síncrona
+  // durante el render (no en un useEffect) para que ya estén disponibles cuando
+  // los hijos rendericen en este mismo commit; es solo una asignación de variable
+  // de módulo, así que es idempotente y no dispara ningún setState.
+  if (retencionesQuery.data) setPeriodosRetencion(retencionesQuery.data);
 
   // Mutations: Comisionistas
   const createComisionistaMutation = useMutation({
@@ -707,6 +711,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         updateTarifa,
         updateTarifasMasivo,
         deleteTarifa,
+        retenciones,
       }}
     >
       {children}

@@ -174,7 +174,7 @@ function MultiSelect({
 }
 
 export function ReportesTab() {
-  const { comisionistas } = useApp();
+  const { comisionistas, retenciones } = useApp();
 
   const now = useMemo(() => new Date(), []);
   const anioActual = now.getFullYear();
@@ -294,10 +294,17 @@ export function ReportesTab() {
     [ordenItems, filtros]
   );
 
-  const resumenFincas = useMemo(() => agruparPorFinca(itemsFiltrados, comisionistas, tarifasEspecificas), [itemsFiltrados, comisionistas, tarifasEspecificas]);
-  const resumenProductos = useMemo(() => agruparPorProducto(itemsFiltrados, comisionistas, tarifasEspecificas), [itemsFiltrados, comisionistas, tarifasEspecificas]);
-  const resumenComisionistas = useMemo(() => agruparPorComisionista(itemsFiltrados, comisionistas, tarifasEspecificas, filtros.comisionistas), [itemsFiltrados, comisionistas, tarifasEspecificas, filtros.comisionistas]);
-  const resumenClientes = useMemo(() => agruparPorCliente(itemsFiltrados, comisionistas, tarifasEspecificas), [itemsFiltrados, comisionistas, tarifasEspecificas]);
+  // retenciones se agrega a las dependencias porque agruparPor* calcula comisiones vía
+  // calcularComisionTotalItem, que lee el estado de módulo de export-utils que
+  // retenciones puebla; sin esto el memo no se recalcula cuando llegan los periodos.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const resumenFincas = useMemo(() => agruparPorFinca(itemsFiltrados, comisionistas, tarifasEspecificas), [itemsFiltrados, comisionistas, tarifasEspecificas, retenciones]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const resumenProductos = useMemo(() => agruparPorProducto(itemsFiltrados, comisionistas, tarifasEspecificas), [itemsFiltrados, comisionistas, tarifasEspecificas, retenciones]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const resumenComisionistas = useMemo(() => agruparPorComisionista(itemsFiltrados, comisionistas, tarifasEspecificas, filtros.comisionistas), [itemsFiltrados, comisionistas, tarifasEspecificas, filtros.comisionistas, retenciones]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const resumenClientes = useMemo(() => agruparPorCliente(itemsFiltrados, comisionistas, tarifasEspecificas), [itemsFiltrados, comisionistas, tarifasEspecificas, retenciones]);
 
   const totalOrden = itemsFiltrados.reduce((s, i) => s + i.total, 0);
   const totalComision = itemsFiltrados.reduce((s, i) => s + calcularComisionTotalItem(i, comisionistas, tarifasEspecificas), 0);
@@ -321,7 +328,8 @@ export function ReportesTab() {
   // B usa los mismos filtros no-temporales que A, con su propio rango.
   const filtrosB = useMemo(() => ({ ...filtros, fechaDesde: rangoB.inicio, fechaHasta: rangoB.fin }), [filtros, rangoB]);
   const itemsFiltradosB = useMemo(() => filtrarItems(ordenItemsB, filtrosB), [ordenItemsB, filtrosB]);
-  const resumenComisionistasB = useMemo(() => agruparPorComisionista(itemsFiltradosB, comisionistas, tarifasEspecificas, filtrosB.comisionistas), [itemsFiltradosB, comisionistas, tarifasEspecificas, filtrosB.comisionistas]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const resumenComisionistasB = useMemo(() => agruparPorComisionista(itemsFiltradosB, comisionistas, tarifasEspecificas, filtrosB.comisionistas), [itemsFiltradosB, comisionistas, tarifasEspecificas, filtrosB.comisionistas, retenciones]);
   const totalComisionB = itemsFiltradosB.reduce((s, i) => s + calcularComisionTotalItem(i, comisionistas, tarifasEspecificas), 0);
   const totalOrdenB = itemsFiltradosB.reduce((s, i) => s + i.total, 0);
 

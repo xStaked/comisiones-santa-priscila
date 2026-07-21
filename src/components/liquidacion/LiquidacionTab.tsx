@@ -22,7 +22,7 @@ import {
 import { toast } from 'sonner';
 
 export function LiquidacionTab() {
-  const { comisionistas, ordenItems, saveLiquidacion, tarifasClienteProducto, clientes } = useApp();
+  const { comisionistas, ordenItems, saveLiquidacion, tarifasClienteProducto, clientes, retenciones } = useApp();
   const [filterComisionista, setFilterComisionista] = useState('');
   const [filterFactura, setFilterFactura] = useState('');
   const [nombreLiquidacion, setNombreLiquidacion] = useState('');
@@ -133,7 +133,11 @@ export function LiquidacionTab() {
       const comisionTotal = comisionesAsignadas.reduce((total, asignacion) => total + asignacion.comision, 0);
       return { ...item, comisionTotal, comisionesAsignadas };
     });
-  }, [filteredItems, comisionistaMap, tarifasClienteProducto, kgPorComisionista]);
+    // retenciones: no se lee directamente, pero calcularDetalleComision consulta el
+    // estado de módulo de export-utils que retenciones puebla; sin esta dependencia
+    // el memo no se recalcula cuando llegan los periodos de retención.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filteredItems, comisionistaMap, tarifasClienteProducto, kgPorComisionista, retenciones]);
 
   // Ítems marcados por el usuario (base para totales, resumen, exportación y guardado).
   const selectedItemsConComision = useMemo(
