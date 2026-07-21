@@ -53,7 +53,7 @@ export interface OrdenItem {
   fincaId?: string;
   proveedor?: string;
   // Relaciones populadas por backend
-  cliente?: { id: string; nombre: string; retencionPorcentaje: number };
+  cliente?: { id: string; nombre: string };
   productoRel?: { id: string; nombre: string; unidadComision: string; tachoKilos?: number; sacoKilos?: number; pesoPorUnidad?: number };
   fincaRel?: { id: string; nombre: string };
 }
@@ -94,7 +94,6 @@ export interface Cliente {
   id: string;
   nombre: string;
   tipo: 'grupo' | 'individual';
-  retencionPorcentaje: number;
   activo: boolean;
   grupoId?: string;
   grupo?: Grupo;

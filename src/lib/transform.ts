@@ -45,7 +45,6 @@ const NUMERIC_RESPONSE_KEYS = new Set([
   'totalVendidoPagadas',
   'totalVendidoActivas',
   'ventas',
-  'retencionPorcentaje',
   'retencionPorcentajeSnapshot',
   'tachoKilos',
   'sacoKilos',

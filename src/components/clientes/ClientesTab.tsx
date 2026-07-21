@@ -37,7 +37,6 @@ export function ClientesTab() {
   const [form, setForm] = useState<{
     nombre: string;
     tipo: 'grupo' | 'individual';
-    retencionPorcentaje: string;
     activo: boolean;
     grupoId: string;
     fincas: { id?: string; nombre: string }[];
@@ -46,7 +45,6 @@ export function ClientesTab() {
   }>({
     nombre: '',
     tipo: 'individual',
-    retencionPorcentaje: '0',
     activo: true,
     grupoId: '',
     fincas: [],
@@ -135,7 +133,6 @@ export function ClientesTab() {
     setForm({
       nombre: '',
       tipo: 'individual',
-      retencionPorcentaje: '0',
       activo: true,
       grupoId: '',
       fincas: [],
@@ -161,16 +158,10 @@ export function ClientesTab() {
       toast.error('Ingresa el nombre del cliente');
       return;
     }
-    const retencion = parseFloat(form.retencionPorcentaje);
-    if (isNaN(retencion) || retencion < 0 || retencion > 100) {
-      toast.error('La retención debe estar entre 0 y 100');
-      return;
-    }
 
     const payload = {
       nombre: form.nombre.trim(),
       tipo: form.tipo,
-      retencionPorcentaje: retencion,
       activo: form.activo,
       grupoId: form.grupoId || undefined,
       alias: form.alias.filter((a) => a.trim() !== ''),
@@ -221,7 +212,6 @@ export function ClientesTab() {
     setForm({
       nombre: c.nombre,
       tipo: c.tipo,
-      retencionPorcentaje: c.retencionPorcentaje.toString(),
       activo: c.activo,
       grupoId: c.grupoId || '',
       fincas: fincasCliente.map((f) => ({ id: f.id, nombre: f.nombre })),
@@ -302,38 +292,22 @@ export function ClientesTab() {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="tipo">Tipo</Label>
-                  <Select
-                    value={form.tipo}
-                    onValueChange={(value) => setForm({ ...form, tipo: value as 'grupo' | 'individual' })}
-                  >
-                    <SelectTrigger className="w-full rounded-xl border-slate-200 bg-white h-10 text-sm text-slate-900">
-                      <SelectValue placeholder="Tipo">
-                        {form.tipo === 'individual' ? 'Individual' : 'Grupo'}
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="individual">Individual</SelectItem>
-                      <SelectItem value="grupo">Grupo</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="retencion">Retención (%)</Label>
-                  <Input
-                    id="retencion"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    max="100"
-                    value={form.retencionPorcentaje}
-                    onChange={(e) => setForm({ ...form, retencionPorcentaje: e.target.value })}
-                    placeholder="Ej: 2.00"
-                    className="bg-white border-slate-200 rounded-xl focus:border-slate-900 focus:ring-slate-900/10"
-                  />
-                </div>
+              <div className="space-y-2">
+                <Label htmlFor="tipo">Tipo</Label>
+                <Select
+                  value={form.tipo}
+                  onValueChange={(value) => setForm({ ...form, tipo: value as 'grupo' | 'individual' })}
+                >
+                  <SelectTrigger className="w-full rounded-xl border-slate-200 bg-white h-10 text-sm text-slate-900">
+                    <SelectValue placeholder="Tipo">
+                      {form.tipo === 'individual' ? 'Individual' : 'Grupo'}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="individual">Individual</SelectItem>
+                    <SelectItem value="grupo">Grupo</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
 
               <div className="space-y-2">
@@ -583,9 +557,6 @@ export function ClientesTab() {
                   <Badge variant="secondary" className="flex items-center gap-1 bg-slate-100 text-slate-700 border-0">
                     <Tag className="h-3 w-3" />
                     {c.tipo === 'grupo' ? 'Grupo' : 'Individual'}
-                  </Badge>
-                  <Badge variant="secondary" className="flex items-center gap-1 bg-slate-100 text-slate-700 border-0">
-                    Retención: {c.retencionPorcentaje}%
                   </Badge>
                   {c.grupo && (
                     <Badge variant="secondary" className="flex items-center gap-1 bg-indigo-50 text-indigo-700 border-0">
