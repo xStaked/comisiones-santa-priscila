@@ -154,3 +154,20 @@ def test_snapshot_congela_la_retencion_de_la_fecha_de_la_factura(db_session):
 
     item = liquidacion.items[0]
     assert item.retencion_porcentaje_snapshot == Decimal("1.75")
+
+
+def test_endpoint_lista_los_periodos_mas_reciente_primero(
+    authenticated_client, db_session
+):
+    _sembrar_periodos(db_session)
+
+    res = authenticated_client.get("/api/v1/retenciones/")
+
+    assert res.status_code == 200
+    datos = res.json()
+    assert [d["vigente_desde"] for d in datos] == ["2026-03-01", "1900-01-01"]
+    assert Decimal(datos[0]["porcentaje"]) == Decimal("2.00")
+
+
+def test_endpoint_requiere_autenticacion(client):
+    assert client.get("/api/v1/retenciones/").status_code in (401, 403)

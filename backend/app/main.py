@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 # Import models so routers know about them
 from app.models import user, refresh_token, comisionista, orden, liquidacion, cliente, producto, tarifa_cliente_producto  # noqa: F401
 
-from app.routers import admin, auth, comisionistas, liquidaciones, ordenes, reportes, upload, clientes, productos, tarifas_cliente_producto, proveedores, diagnostico, grupos
+from app.routers import admin, auth, comisionistas, liquidaciones, ordenes, reportes, upload, clientes, productos, tarifas_cliente_producto, proveedores, diagnostico, grupos, retenciones
 
 app = FastAPI(
     title="Dinacuamar — Sistema de Liquidación de Comisiones",
@@ -126,6 +126,11 @@ app.include_router(
     proveedores.router,
     prefix="/api/v1/proveedores",
     tags=["proveedores"],
+)
+app.include_router(
+    retenciones.router,
+    prefix="/api/v1/retenciones",
+    tags=["retenciones"],
 )
 app.include_router(
     grupos.router,
