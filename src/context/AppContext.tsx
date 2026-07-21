@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useCallback } from 'react';
+import React, { createContext, useContext, useCallback, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Comisionista, OrdenItem, Liquidacion, Cliente, Producto, Finca, TarifaClienteProducto, EstadoOrden } from '@/types';
 import { toast } from 'sonner';
@@ -39,7 +39,9 @@ import {
   updateTarifaClienteProducto as apiUpdateTarifaClienteProducto,
   deleteTarifaClienteProducto as apiDeleteTarifaClienteProducto,
   updateTarifasClienteProductoMasivo as apiUpdateTarifasMasivo,
+  fetchRetenciones,
 } from '@/lib/api';
+import { setPeriodosRetencion } from '@/lib/export-utils';
 
 interface AppContextType {
   comisionistas: Comisionista[];
@@ -138,12 +140,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     queryFn: () => fetchTarifasClienteProducto(),
   });
 
+  const retencionesQuery = useQuery({
+    queryKey: ['retenciones'],
+    queryFn: fetchRetenciones,
+  });
+
   const comisionistas: Comisionista[] = comisionistasQuery.data ?? [];
   const ordenItems: OrdenItem[] = ordenesQuery.data ?? [];
   const liquidaciones: Liquidacion[] = liquidacionesQuery.data ?? [];
   const clientes: Cliente[] = clientesQuery.data ?? [];
   const productos: Producto[] = productosQuery.data ?? [];
   const tarifasClienteProducto: TarifaClienteProducto[] = tarifasClienteProductoQuery.data ?? [];
+
+  // Los periodos de retención se inyectan en export-utils, que los usa desde
+  // funciones puras sin acceso al contexto de React.
+  useEffect(() => {
+    if (retencionesQuery.data) setPeriodosRetencion(retencionesQuery.data);
+  }, [retencionesQuery.data]);
 
   // Mutations: Comisionistas
   const createComisionistaMutation = useMutation({

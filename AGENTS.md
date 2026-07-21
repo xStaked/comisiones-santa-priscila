@@ -62,6 +62,26 @@ El matching de entidades (cliente, producto, finca) usa normalización de texto 
 
 Si modificas uno, replica el cambio en el otro. Funciones clave: `normalizarTexto()`, `normalizarNombreFinca()`, `normalizarNombreProducto()`.
 
+## Retención — por periodo de vigencia
+
+La retención NO se guarda por cliente: vive en la tabla `retenciones`, con una
+sola columna `vigente_desde` por periodo (cada periodo termina donde empieza el
+siguiente). La retención de una factura es la del periodo con el mayor
+`vigente_desde <= orden_item.fecha`.
+
+**Se ancla a la fecha de EMISIÓN de la factura, no a `_fecha_efectiva()`**, que
+resuelve la vigencia de las *tarifas* por fecha de pago. Son dos anclas
+temporales distintas a propósito: el cliente pidió explícitamente que la
+retención aplique "por fecha de factura, no por fecha de liquidación". No
+unificarlas "por consistencia".
+
+La resolución vive en dos archivos que deben mantenerse en paridad:
+- `backend/app/services/retencion.py` → `retencion_para()`
+- `src/lib/export-utils.ts` → `retencionPara()`
+
+Los tramos se cargan por migración, no desde la UI. Agregar un tramo nuevo es
+una migración con un `op.bulk_insert` de una fila.
+
 ## Cálculo de comisiones — jerarquía no obvia
 
 1. Tarifa específica exacta (comisionista + cliente + producto + finca)

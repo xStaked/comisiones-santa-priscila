@@ -97,14 +97,42 @@ function comisionConUmbral(
   };
 }
 
+// Periodos de retención, ordenados del más reciente al más antiguo. Los inyecta
+// AppContext una vez al cargar la app.
+// ponytail: estado de módulo en vez de pasar los periodos por parámetro.
+// Hacerlo por parámetro exigiría un noveno argumento posicional en
+// exportarPDF/exportarExcel y tocar 8 llamadores. El valor es una tasa legal
+// idéntica para todos los usuarios, así que compartirlo no tiene riesgo. Si
+// algún día la retención vuelve a variar por cliente, hay que pasarla por
+// parámetro.
+let periodosRetencion: { vigenteDesde: string; porcentaje: number }[] = [];
+
+export function setPeriodosRetencion(
+  periodos: { vigenteDesde: string; porcentaje: number }[]
+): void {
+  periodosRetencion = [...periodos].sort((a, b) =>
+    b.vigenteDesde.localeCompare(a.vigenteDesde)
+  );
+}
+
+// Retención vigente en la fecha de EMISIÓN de la factura. Las fechas son ISO
+// (YYYY-MM-DD), así que comparar como texto equivale a comparar cronológicamente.
+// Debe mantenerse en paridad con retencion_para() de
+// backend/app/services/retencion.py.
+export function retencionPara(fecha: string): number {
+  const f = fecha.slice(0, 10);
+  const periodo = periodosRetencion.find((p) => p.vigenteDesde.slice(0, 10) <= f);
+  return periodo ? Number(periodo.porcentaje) : 1.75;
+}
+
 // Igual que la global salvo que el porcentaje se aplica sobre el total menos la
-// retención del cliente.
+// retención vigente en la fecha de la factura.
 export function calcularComisionPorTarifaEspecifica(
   item: OrdenItem,
   tarifa: TarifaClienteProducto
 ): number {
   if (tarifa.tipo === 'porcentaje') {
-    const retencion = item.cliente?.retencionPorcentaje ?? 1.75;
+    const retencion = retencionPara(item.fecha);
     const base = item.total * (1 - retencion / 100);
     return base * (tarifa.valor / 100);
   }

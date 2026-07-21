@@ -1,6 +1,6 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 import { toCamelCase, toSnakeCase } from './transform';
-import type { EstadoOrden, Grupo, Liquidacion, OrdenItem } from '@/types';
+import type { EstadoOrden, Grupo, Liquidacion, OrdenItem, Retencion } from '@/types';
 
 const API_BASE_URL = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000').replace(/\/+$/, '');
 
@@ -396,6 +396,12 @@ export async function updateTarifasClienteProductoMasivo(
 export async function fetchProveedores() {
   const res = await api.get('/api/v1/proveedores/');
   return toCamelCase(res.data);
+}
+
+// Retenciones
+export async function fetchRetenciones() {
+  const res = await api.get('/api/v1/retenciones/');
+  return toCamelCase<Retencion[]>(res.data);
 }
 
 export async function fetchGrupos() {

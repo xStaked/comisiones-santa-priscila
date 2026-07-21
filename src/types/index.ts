@@ -84,6 +84,12 @@ export interface Liquidacion {
 
 export type Unidad = 'kg' | 'unidades' | 'libras' | 'cajas' | 'litros' | 'tachos' | 'sacos' | 'canecas' | 'galones';
 
+export interface Retencion {
+  id: string;
+  vigenteDesde: string;
+  porcentaje: number;
+}
+
 export interface Cliente {
   id: string;
   nombre: string;
