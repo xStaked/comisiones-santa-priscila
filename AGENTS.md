@@ -91,7 +91,7 @@ una migración con un `op.bulk_insert` de una fila.
 
 Implementado tanto en frontend (`src/lib/export-utils.ts`) como backend (`backend/app/services/liquidacion.py`).
 
-Tipos de tarifa: `porcentaje` (sobre total menos retención del cliente, default 1.75%), `fijo_kg`, `fijo_unidad`.
+Tipos de tarifa: `porcentaje` (sobre total menos la retención vigente por periodo — ver sección Retención), `fijo_kg`, `fijo_unidad`.
 
 ## Unidades: la cantidad no siempre significa lo mismo
 

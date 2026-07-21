@@ -18,6 +18,8 @@ from app.services.liquidacion import (
     _calcular_comision_con_tarifa,
     _calcular_comision_especifica,
 )
+from app.services.retencion import cargar_periodos
+from app.models.retencion import Retencion
 
 router = APIRouter()
 
@@ -25,13 +27,16 @@ LIBRA_A_KG = Decimal("0.453592")
 
 
 def _calcular_comision_orden(
-    db: Session, oi: OrdenItem, comisionista: Comisionista
+    db: Session,
+    oi: OrdenItem,
+    comisionista: Comisionista,
+    periodos: list[Retencion],
 ) -> Decimal:
     """Calcula comisión total para un comisionista en una orden (específica → global)."""
     total = Decimal("0")
     tarifa_esp = _buscar_tarifa_especifica(db, oi, comisionista.id)
     if tarifa_esp:
-        total += _calcular_comision_especifica(db, oi, tarifa_esp)
+        total += _calcular_comision_especifica(db, oi, tarifa_esp, periodos)
     else:
         for tarifa in comisionista.tarifas:
             total += _calcular_comision_con_tarifa(oi, tarifa)
@@ -89,6 +94,7 @@ def por_finca(db: Session = Depends(get_db), current_user: User = Depends(get_cu
             "comision": Decimal("0"),
         }
     )
+    periodos = cargar_periodos(db)
 
     for oi in ordenes:
         clave = oi.finca_obj.nombre if oi.finca_obj else oi.finca
@@ -97,7 +103,7 @@ def por_finca(db: Session = Depends(get_db), current_user: User = Depends(get_cu
         grupos[clave]["total"] += oi.total
         for asignacion in oi.asignaciones:
             grupos[clave]["comision"] += _calcular_comision_orden(
-                db, oi, asignacion.comisionista
+                db, oi, asignacion.comisionista, periodos
             )
 
     return [
@@ -133,6 +139,7 @@ def por_producto(db: Session = Depends(get_db), current_user: User = Depends(get
             "comision": Decimal("0"),
         }
     )
+    periodos = cargar_periodos(db)
 
     for oi in ordenes:
         clave = oi.producto_obj.nombre if oi.producto_obj else oi.producto
@@ -141,7 +148,7 @@ def por_producto(db: Session = Depends(get_db), current_user: User = Depends(get
         grupos[clave]["total"] += oi.total
         for asignacion in oi.asignaciones:
             grupos[clave]["comision"] += _calcular_comision_orden(
-                db, oi, asignacion.comisionista
+                db, oi, asignacion.comisionista, periodos
             )
 
     return [
@@ -160,6 +167,7 @@ def por_producto(db: Session = Depends(get_db), current_user: User = Depends(get
 def por_comisionista(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     comisionistas = db.query(Comisionista).all()
     resultados = []
+    periodos = cargar_periodos(db)
 
     for c in comisionistas:
         ordenes = (
@@ -181,7 +189,7 @@ def por_comisionista(db: Session = Depends(get_db), current_user: User = Depends
         total_orden = Decimal("0")
         for oi in ordenes:
             total_orden += oi.total
-            total_comision += _calcular_comision_orden(db, oi, c)
+            total_comision += _calcular_comision_orden(db, oi, c, periodos)
 
         resultados.append(
             {
@@ -221,6 +229,7 @@ def por_cliente(db: Session = Depends(get_db), current_user: User = Depends(get_
             "comision": Decimal("0"),
         }
     )
+    periodos = cargar_periodos(db)
 
     for oi in ordenes:
         clave = oi.cliente.nombre if oi.cliente else "Sin cliente"
@@ -229,7 +238,7 @@ def por_cliente(db: Session = Depends(get_db), current_user: User = Depends(get_
         grupos[clave]["total"] += oi.total
         for asignacion in oi.asignaciones:
             grupos[clave]["comision"] += _calcular_comision_orden(
-                db, oi, asignacion.comisionista
+                db, oi, asignacion.comisionista, periodos
             )
 
     return [
@@ -286,10 +295,11 @@ def global_stats(db: Session = Depends(get_db), current_user: User = Depends(get
     )
     total_comision_pagadas = Decimal("0")
     total_vendido_pagadas = Decimal("0")
+    periodos = cargar_periodos(db)
     for oi in ordenes_pagadas:
         total_vendido_pagadas += oi.total
         for asig in oi.asignaciones:
-            total_comision_pagadas += _calcular_comision_orden(db, oi, asig.comisionista)
+            total_comision_pagadas += _calcular_comision_orden(db, oi, asig.comisionista, periodos)
 
     return {
         "total_ordenes_pagadas": total_ordenes_pagadas,
@@ -341,11 +351,12 @@ def tendencias(db: Session = Depends(get_db), current_user: User = Depends(get_c
     if ordenes_pagadas:
         if mes_actual not in meses:
             meses[mes_actual] = {"comision": Decimal("0"), "ventas": Decimal("0"), "ordenes": 0}
+        periodos = cargar_periodos(db)
         for oi in ordenes_pagadas:
             meses[mes_actual]["ventas"] += oi.total
             meses[mes_actual]["ordenes"] += 1
             for asig in oi.asignaciones:
-                meses[mes_actual]["comision"] += _calcular_comision_orden(db, oi, asig.comisionista)
+                meses[mes_actual]["comision"] += _calcular_comision_orden(db, oi, asig.comisionista, periodos)
 
     return [
         {"mes": mes, "comision": float(v["comision"]), "ventas": float(v["ventas"]), "ordenes": v["ordenes"]}

@@ -16,6 +16,7 @@ from app.services.liquidacion import (
     _buscar_tarifa_especifica, _tiene_tarifas_especificas,
     _calcular_comision_especifica, _cantidad_para_tarifa_kg,
 )
+from app.services.retencion import cargar_periodos, retencion_para
 
 NOMBRES = ["ARROYO", "MALAVE", "CORDOVA JUAN CARLOS", "ZARATE TEOBALDO"]
 OUT_DIR = os.environ.get("OUT_DIR", ".")
@@ -25,6 +26,7 @@ def main():
     db = SessionLocal()
     try:
         coms = {c.nombre.upper(): c for c in db.query(Comisionista).all()}
+        periodos = cargar_periodos(db)
         for nombre in NOMBRES:
             c = coms.get(nombre)
             if not c:
@@ -46,7 +48,7 @@ def main():
                 for oi in sorted(items, key=lambda x: (str(x.fecha), x.numero_orden or "")):
                     te = _buscar_tarifa_especifica(db, oi, c.id)
                     if te is not None:
-                        com = _calcular_comision_especifica(db, oi, te)
+                        com = _calcular_comision_especifica(db, oi, te, periodos)
                         tipo, valor = te.tipo.value, te.valor
                     elif not _tiene_tarifas_especificas(db, c.id):
                         com = sum((Decimal(str(0)) for _ in [0]), Decimal("0"))
@@ -54,7 +56,7 @@ def main():
                     else:
                         com, tipo, valor = Decimal("0"), "sin_tarifa", Decimal("0")
                     kg = _cantidad_para_tarifa_kg(oi)
-                    ret = (oi.cliente.retencion_porcentaje if oi.cliente else Decimal("1.75"))
+                    ret = retencion_para(periodos, oi.fecha)
                     total += com
                     w.writerow([
                         oi.fecha, oi.numero_orden,

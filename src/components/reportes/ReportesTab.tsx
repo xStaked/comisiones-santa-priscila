@@ -357,7 +357,8 @@ export function ReportesTab() {
     return Array.from(map.entries())
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([mes, comision]) => ({ mes, comision: Math.round(comision * 100) / 100 }));
-  }, [itemsFiltrados, comisionistas, tarifasEspecificas]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [itemsFiltrados, comisionistas, tarifasEspecificas, retenciones]);
 
   const handleExportPDF = async () => {
     if (itemsFiltrados.length === 0) {

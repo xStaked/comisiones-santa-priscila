@@ -17,6 +17,7 @@ from app.models.orden import Asignacion, EstadoOrden, OrdenItem
 from app.services.liquidacion import (
     _buscar_tarifa_especifica, _cantidad_para_tarifa_kg,
 )
+from app.services.retencion import cargar_periodos, retencion_para
 
 NOMBRE = sys.argv[1].upper() if len(sys.argv) > 1 else "ARROYO"
 
@@ -35,6 +36,7 @@ def main():
                     OrdenItem.estado == EstadoOrden.pagada)
             .all()
         )
+        periodos = cargar_periodos(db)
         tot_actual = Decimal("0")
         tot_corr = Decimal("0")
         print(f"{NOMBRE}: {len(items)} items pagados\n")
@@ -46,7 +48,7 @@ def main():
             if te is None:
                 continue
             kg = _cantidad_para_tarifa_kg(oi)
-            ret = (oi.cliente.retencion_porcentaje if oi.cliente else Decimal("1.75"))
+            ret = retencion_para(periodos, oi.fecha)
             if te.tipo == TipoTarifa.fijo_kg:
                 actual = kg * te.valor
             else:
