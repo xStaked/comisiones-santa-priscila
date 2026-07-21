@@ -12,6 +12,7 @@ from app.models.comisionista import Tarifa, TipoTarifa
 from app.models.liquidacion import Liquidacion, LiquidacionItem, LiquidacionItemTarifa
 from app.models.orden import Asignacion, EstadoOrden, Orden, OrdenItem
 from app.models.producto import Producto
+from app.models.retencion import Retencion
 from app.models.tarifa_cliente_producto import TarifaClienteProducto
 from app.services.catalog_normalization import (
     _normalizar_texto,
@@ -20,6 +21,7 @@ from app.services.catalog_normalization import (
     normalizar_nombre_producto,
 )
 from app.services.product_matching import obtener_productos_equivalentes
+from app.services.retencion import cargar_periodos, retencion_para
 
 # Kilos que contiene cada envase cuando el producto no lo define.
 # 1 litro ≈ 1 kg, así que kg, litros y unidades sueltas comparten factor 1.
@@ -328,16 +330,23 @@ def _tiene_tarifas_especificas(
 
 
 def _calcular_comision_especifica(
-    db: Session, orden_item: OrdenItem, tarifa: TarifaClienteProducto
+    db: Session,
+    orden_item: OrdenItem,
+    tarifa: TarifaClienteProducto,
+    periodos: list[Retencion] | None = None,
 ) -> Decimal:
     """Calcula comisión con tarifa específica. Igual que la global salvo que el
-    porcentaje se aplica sobre el total menos la retención del cliente."""
+    porcentaje se aplica sobre el total menos la retención vigente.
+
+    La retención se resuelve por la fecha de EMISIÓN de la factura
+    (`orden_item.fecha`), no por `_fecha_efectiva()`. Ver `services/retencion.py`.
+
+    `periodos` se pasa desde `crear_liquidacion` para no consultarlos por ítem.
+    """
     if tarifa.tipo == TipoTarifa.porcentaje:
-        retencion = (
-            orden_item.cliente.retencion_porcentaje
-            if orden_item.cliente
-            else Decimal("1.75")
-        )
+        if periodos is None:
+            periodos = cargar_periodos(db)
+        retencion = retencion_para(periodos, orden_item.fecha)
         base = orden_item.total * (Decimal("1") - retencion / Decimal("100"))
         return base * (tarifa.valor / Decimal("100"))
     elif tarifa.tipo == TipoTarifa.fijo_kg:
@@ -442,6 +451,9 @@ def crear_liquidacion(
     now = datetime.now()
     mes = now.strftime("%Y-%m")
 
+    # Una sola consulta para toda la liquidación, no una por ítem.
+    periodos_retencion = cargar_periodos(db)
+
     liquidacion = Liquidacion(
         nombre=nombre,
         mes=mes,
@@ -475,9 +487,7 @@ def crear_liquidacion(
             sector_snapshot=oi.sector,
             estado_snapshot=oi.estado.value,
             cliente_snapshot=oi.cliente.nombre if oi.cliente else None,
-            retencion_porcentaje_snapshot=(
-                oi.cliente.retencion_porcentaje if oi.cliente else Decimal("1.75")
-            ),
+            retencion_porcentaje_snapshot=retencion_para(periodos_retencion, oi.fecha),
         )
         db.add(li)
         db.flush()
@@ -494,7 +504,9 @@ def crear_liquidacion(
                 if umbral:
                     tipo_snapshot, valor_snapshot, comision = umbral
                 else:
-                    comision = _calcular_comision_especifica(db, oi, tarifa_esp)
+                    comision = _calcular_comision_especifica(
+                        db, oi, tarifa_esp, periodos_retencion
+                    )
                     tipo_snapshot = tarifa_esp.tipo.value
                     valor_snapshot = tarifa_esp.valor
                 lit = LiquidacionItemTarifa(
