@@ -8,7 +8,7 @@ from app.models.tarifa_cliente_producto import TarifaClienteProducto, TipoTarifa
 
 
 def test_crear_tarifa_normaliza_cualquier_proveedor_a_vacio(authenticated_client, db_session):
-    cliente = Cliente(nombre="Santa Priscila", tipo="grupo", retencion_porcentaje=Decimal("1.75"))
+    cliente = Cliente(nombre="Santa Priscila", tipo="grupo")
     finca = Finca(nombre="TAURA D", cliente=cliente)
     comisionista = Comisionista(nombre="AUGURTO MANUEL")
     producto = Producto(nombre="NATUXTRACT", unidad_comision="tacho", tacho_kilos=Decimal("15"))

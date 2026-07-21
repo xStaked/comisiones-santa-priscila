@@ -113,7 +113,6 @@ def seed_clientes(db):
     sp = Cliente(
         nombre="Santa Priscila",
         tipo="grupo",
-        retencion_porcentaje=Decimal("1.75"),
     )
     db.add(sp)
     db.flush()
@@ -127,7 +126,6 @@ def seed_clientes(db):
             Cliente(
                 nombre=nombre,
                 tipo="individual",
-                retencion_porcentaje=Decimal("1.75"),
             )
         )
 

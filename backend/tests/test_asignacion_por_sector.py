@@ -11,7 +11,7 @@ from app.models.tarifa_cliente_producto import TarifaClienteProducto
 def test_solo_asigna_comisionista_en_su_sector(authenticated_client, db_session):
     """Un comisionista con tarifa solo en AFRICA no debe quedar asignado a un
     ítem de TAURA A, aunque se le pase en comisionista_ids (bug del cartesiano)."""
-    cliente = Cliente(nombre="Santa Priscila", tipo="grupo", retencion_porcentaje=Decimal("1.75"))
+    cliente = Cliente(nombre="Santa Priscila", tipo="grupo")
     africa = Finca(nombre="AFRICA", cliente=cliente)
     taura = Finca(nombre="TAURA A", cliente=cliente)
     com = Comisionista(nombre="ALBURQUERQUE EDGAR")

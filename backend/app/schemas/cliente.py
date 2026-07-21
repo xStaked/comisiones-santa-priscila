@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from decimal import Decimal
 from typing import Any, List, Optional
 from uuid import UUID
 
@@ -36,9 +35,6 @@ class FincaResponse(BaseModel):
 class ClienteBase(BaseModel):
     nombre: str
     tipo: str = "individual"
-    retencion_porcentaje: Decimal = Field(
-        default=Decimal("1.75"), alias="retencionPorcentaje"
-    )
     grupo_id: Optional[UUID] = Field(default=None, alias="grupoId")
     alias: list[str] = Field(default_factory=list)
 
@@ -57,7 +53,6 @@ class ClienteResponse(BaseModel):
     id: UUID
     nombre: str
     tipo: str
-    retencion_porcentaje: Decimal = Field(alias="retencionPorcentaje")
     activo: bool
     grupo_id: Optional[UUID] = Field(default=None, alias="grupoId")
     grupo: Optional[GrupoResponse] = None

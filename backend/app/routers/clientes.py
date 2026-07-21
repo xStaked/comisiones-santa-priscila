@@ -68,7 +68,6 @@ def crear_cliente(
     cliente = Cliente(
         nombre=data.nombre,
         tipo=data.tipo,
-        retencion_porcentaje=data.retencion_porcentaje,
         grupo_id=data.grupo_id,
     )
     db.add(cliente)
@@ -102,7 +101,6 @@ def actualizar_cliente(
     _validar_grupo(db, data.grupo_id)
     cliente.nombre = data.nombre
     cliente.tipo = data.tipo
-    cliente.retencion_porcentaje = data.retencion_porcentaje
     cliente.grupo_id = data.grupo_id
     _sincronizar_alias(db, cliente, data.alias)
 

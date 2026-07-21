@@ -56,7 +56,6 @@ def test_normaliza_cliente_finca_producto_por_match_exacto(db_session):
     cliente = Cliente(
         nombre="FILACAS SA",
         tipo="grupo",
-        retencion_porcentaje=Decimal("1.75"),
     )
     db_session.add(cliente)
     db_session.commit()
@@ -136,7 +135,7 @@ def test_no_inventa_ids_si_no_hay_match(db_session):
 def test_descarta_sector_extraido_sin_match(db_session):
     """La factura trae la dirección como 'finca'; si el cliente no tiene ese sector
     registrado no debe quedar como sector del ítem."""
-    cliente = Cliente(nombre="INTEDECAM", tipo="externo", retencion_porcentaje=Decimal("1.75"))
+    cliente = Cliente(nombre="INTEDECAM", tipo="externo")
     db_session.add(cliente)
     db_session.commit()
 
@@ -157,7 +156,6 @@ def test_asigna_finca_global_unica_sin_cliente(db_session):
     cliente = Cliente(
         nombre="CLIENTE UNO",
         tipo="grupo",
-        retencion_porcentaje=Decimal("1.75"),
     )
     db_session.add(cliente)
     db_session.commit()
@@ -200,12 +198,10 @@ def test_no_asigna_finca_global_ambigua_sin_cliente(db_session):
     cliente_uno = Cliente(
         nombre="CLIENTE UNO",
         tipo="grupo",
-        retencion_porcentaje=Decimal("1.75"),
     )
     cliente_dos = Cliente(
         nombre="CLIENTE DOS",
         tipo="grupo",
-        retencion_porcentaje=Decimal("1.75"),
     )
     db_session.add_all([cliente_uno, cliente_dos])
     db_session.commit()
@@ -465,7 +461,7 @@ def test_busca_cliente_por_razon_social_de_factura(db_session):
         "INTEDECAM",
         "INTEDECAM ISLA PALO SANTO",
     ):
-        db_session.add(Cliente(nombre=nombre, tipo="externo", retencion_porcentaje=Decimal("1.75")))
+        db_session.add(Cliente(nombre=nombre, tipo="externo"))
     db_session.commit()
 
     casos = {
@@ -493,8 +489,8 @@ def test_facturas_de_terceros_usan_extraccion_ia():
 
 def test_alias_de_cliente_manda_sobre_la_heuristica(db_session):
     """La heurística elegiría CAMPONIO; el alias configurado a mano gana."""
-    camponio = Cliente(nombre="CAMPONIO", tipo="externo", retencion_porcentaje=Decimal("1.75"))
-    asoc = Cliente(nombre="ASOC INT CAMPONIO", tipo="externo", retencion_porcentaje=Decimal("1.75"))
+    camponio = Cliente(nombre="CAMPONIO", tipo="externo")
+    asoc = Cliente(nombre="ASOC INT CAMPONIO", tipo="externo")
     db_session.add_all([camponio, asoc])
     db_session.commit()
 

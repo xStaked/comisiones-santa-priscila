@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Numeric, ForeignKey, Boolean, UniqueConstraint, Uuid
+from sqlalchemy import Column, String, ForeignKey, Boolean, UniqueConstraint, Uuid
 from sqlalchemy.orm import relationship
 from app.models.base import BaseModel
 
@@ -8,7 +8,6 @@ class Cliente(BaseModel):
 
     nombre = Column(String, nullable=False, unique=True)
     tipo = Column(String(20), nullable=False, default="individual")
-    retencion_porcentaje = Column(Numeric(5, 2), nullable=False, default=1.75)
     activo = Column(Boolean, nullable=False, default=True)
     grupo_id = Column(
         Uuid, ForeignKey("grupos.id", ondelete="SET NULL"), nullable=True

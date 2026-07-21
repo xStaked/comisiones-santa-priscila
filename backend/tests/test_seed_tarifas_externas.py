@@ -13,16 +13,15 @@ def _seed_catalogo_base(db_session):
     santa = Cliente(
         nombre="Santa Priscila",
         tipo="grupo",
-        retencion_porcentaje=Decimal("1.75"),
     )
     clientes = [
         santa,
-        Cliente(nombre="FRIGOLANDIA", tipo="individual", retencion_porcentaje=Decimal("1.75")),
-        Cliente(nombre="CAMPONIO", tipo="individual", retencion_porcentaje=Decimal("1.75")),
-        Cliente(nombre="INTEDECAM", tipo="individual", retencion_porcentaje=Decimal("1.75")),
-        Cliente(nombre="INTEDECAM ISLA PALO SANTO", tipo="individual", retencion_porcentaje=Decimal("1.75")),
-        Cliente(nombre="GOLDENSHRIMP", tipo="individual", retencion_porcentaje=Decimal("1.75")),
-        Cliente(nombre="AQUALITORAL", tipo="individual", retencion_porcentaje=Decimal("1.75")),
+        Cliente(nombre="FRIGOLANDIA", tipo="individual"),
+        Cliente(nombre="CAMPONIO", tipo="individual"),
+        Cliente(nombre="INTEDECAM", tipo="individual"),
+        Cliente(nombre="INTEDECAM ISLA PALO SANTO", tipo="individual"),
+        Cliente(nombre="GOLDENSHRIMP", tipo="individual"),
+        Cliente(nombre="AQUALITORAL", tipo="individual"),
     ]
     db_session.add_all(clientes)
     db_session.flush()

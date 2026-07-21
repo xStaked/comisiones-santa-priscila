@@ -441,7 +441,6 @@ def _obtener_o_crear_cliente(db: Session, nombre: str, resumen: dict[str, int]) 
     cliente = Cliente(
         nombre=nombre,
         tipo="individual",
-        retencion_porcentaje=Decimal("1.75"),
         activo=True,
     )
     db.add(cliente)

@@ -778,7 +778,7 @@ def test_restaurar_liquidacion_recrea_orden_y_items_en_pagada(db_session):
 
 
 def _setup_umbral(db_session, umbral, valor_sobre_umbral):
-    cliente = Cliente(nombre="Cliente Umbral", tipo="individual", retencion_porcentaje=Decimal("1.75"))
+    cliente = Cliente(nombre="Cliente Umbral", tipo="individual")
     comisionista = Comisionista(nombre="NARANJO")
     producto = Producto(nombre="Producto Umbral", unidad_comision="kg")
     db_session.add_all([cliente, comisionista, producto])
