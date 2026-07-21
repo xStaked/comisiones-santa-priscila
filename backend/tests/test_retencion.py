@@ -171,3 +171,73 @@ def test_endpoint_lista_los_periodos_mas_reciente_primero(
 
 def test_endpoint_requiere_autenticacion(client):
     assert client.get("/api/v1/retenciones/").status_code in (401, 403)
+
+
+def test_endpoint_crea_un_tramo_nuevo(authenticated_client, db_session):
+    _sembrar_periodos(db_session)
+
+    res = authenticated_client.post(
+        "/api/v1/retenciones/",
+        json={"vigente_desde": "2027-01-01", "porcentaje": "2.50"},
+    )
+
+    assert res.status_code == 201
+    assert res.json()["vigente_desde"] == "2027-01-01"
+    fechas = [d["vigente_desde"] for d in authenticated_client.get("/api/v1/retenciones/").json()]
+    assert fechas == ["2027-01-01", "2026-03-01", "1900-01-01"]
+
+
+def test_endpoint_rechaza_fecha_duplicada(authenticated_client, db_session):
+    _sembrar_periodos(db_session)
+
+    res = authenticated_client.post(
+        "/api/v1/retenciones/",
+        json={"vigente_desde": "2026-03-01", "porcentaje": "3.00"},
+    )
+
+    assert res.status_code == 409
+
+
+def test_endpoint_rechaza_porcentaje_fuera_de_rango(authenticated_client, db_session):
+    res = authenticated_client.post(
+        "/api/v1/retenciones/",
+        json={"vigente_desde": "2027-01-01", "porcentaje": "150"},
+    )
+
+    assert res.status_code == 422
+
+
+def test_endpoint_elimina_un_tramo(authenticated_client, db_session):
+    _sembrar_periodos(db_session)
+    tramo = (
+        db_session.query(Retencion)
+        .filter(Retencion.vigente_desde == date(2026, 3, 1))
+        .one()
+    )
+
+    res = authenticated_client.delete(f"/api/v1/retenciones/{tramo.id}")
+
+    assert res.status_code == 204
+    fechas = [d["vigente_desde"] for d in authenticated_client.get("/api/v1/retenciones/").json()]
+    assert fechas == ["1900-01-01"]
+
+
+def test_endpoint_no_permite_borrar_el_ultimo_tramo(authenticated_client, db_session):
+    unico = Retencion(vigente_desde=date(1900, 1, 1), porcentaje=Decimal("1.75"))
+    db_session.add(unico)
+    db_session.commit()
+
+    res = authenticated_client.delete(f"/api/v1/retenciones/{unico.id}")
+
+    assert res.status_code == 400
+    assert db_session.query(Retencion).count() == 1
+
+
+def test_endpoint_borrar_tramo_inexistente_devuelve_404(authenticated_client, db_session):
+    _sembrar_periodos(db_session)
+
+    res = authenticated_client.delete(
+        "/api/v1/retenciones/00000000-0000-0000-0000-000000000000"
+    )
+
+    assert res.status_code == 404

@@ -404,6 +404,15 @@ export async function fetchRetenciones() {
   return toCamelCase<Retencion[]>(res.data);
 }
 
+export async function createRetencion(datos: { vigenteDesde: string; porcentaje: number }) {
+  const res = await api.post('/api/v1/retenciones/', toSnakeCase(datos));
+  return toCamelCase<Retencion>(res.data);
+}
+
+export async function deleteRetencion(id: string) {
+  await api.delete(`/api/v1/retenciones/${id}`);
+}
+
 export async function fetchGrupos() {
   const res = await api.get('/api/v1/grupos/');
   return toCamelCase<Grupo[]>(res.data);

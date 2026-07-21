@@ -36,6 +36,12 @@ def db_session():
 
 @pytest.fixture(scope="function")
 def client(db_session):
+    # El rate limiter en memoria persiste entre tests (misma IP del TestClient):
+    # con suficientes logins en menos de 60s la suite empieza a recibir 429.
+    from app.rate_limit import limiter
+
+    limiter.requests.clear()
+
     def override_get_db():
         try:
             yield db_session

@@ -145,8 +145,22 @@ resolución de retención en un lado, hay que replicarla en el otro.
 
 ## Fuera de alcance (decidido explícitamente)
 
-- **CRUD de periodos desde la UI.** Un tramo nuevo es una migración de una línea y ocurre
-  cada varios años (es un cambio legal, no operativo). Se puede agregar encima sin rehacer
-  nada si más adelante se necesita autonomía sin deploy.
 - **Recálculo de liquidaciones existentes.** Las facturas emitidas desde el 2026-03-01 que
   ya se liquidaron con snapshot 1,75% quedan congeladas tal cual.
+
+## Gestión de tramos desde la UI (agregado el mismo día)
+
+Originalmente los tramos se cargaban solo por migración ("CRUD por UI" estaba fuera de
+alcance). Se revocó: el cliente avisa los cambios de retención al usuario y este necesita
+autonomía para cargarlos sin deploy.
+
+- **`POST /api/v1/retenciones`** — agrega un tramo (`vigenteDesde`, `porcentaje` 0–100).
+  Fecha duplicada → 409. Se permiten fechas pasadas (el aviso puede llegar con meses de
+  atraso, como pasó con el tramo de marzo) y futuras (programar un cambio anunciado).
+- **`DELETE /api/v1/retenciones/{id}`** — elimina un tramo, con confirmación en la UI.
+  No se puede borrar el último que queda (400): el sistema nunca calcula sin retención
+  configurada. Sin edición: un typo se corrige borrando y recargando.
+- **UI:** tarjeta "Retención sobre facturas" en la pestaña Clientes
+  (`src/components/clientes/RetencionCard.tsx`): tramo vigente destacado, histórico
+  completo, agregar y eliminar. Al mutar se invalida la query `['retenciones']`, lo que
+  recalcula la vista previa de las facturas sin liquidar (lo liquidado no se mueve).
