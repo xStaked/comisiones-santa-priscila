@@ -216,7 +216,7 @@ export function ComisionistasTab() {
                       </Select>
                       <Input
                         type="number"
-                        step="0.01"
+                        step="0.0001"
                         min="0"
                         value={tarifa.valor}
                         onChange={e => updateTarifa(idx, 'valor', e.target.value)}

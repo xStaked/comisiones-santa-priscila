@@ -632,7 +632,7 @@ export function TarifasTab() {
                 <Input
                   id="valor"
                   type="number"
-                  step="0.01"
+                  step="0.0001"
                   min="0"
                   value={form.valor}
                   onChange={(e) => setForm({ ...form, valor: e.target.value })}
@@ -661,7 +661,7 @@ export function TarifasTab() {
                 <Input
                   id="valorSobreUmbral"
                   type="number"
-                  step="0.01"
+                  step="0.0001"
                   min="0"
                   value={form.valorSobreUmbral}
                   onChange={(e) => setForm({ ...form, valorSobreUmbral: e.target.value })}
@@ -791,7 +791,7 @@ export function TarifasTab() {
               <Label>Valor (vacío = sin cambio)</Label>
               <Input
                 type="number"
-                step="0.01"
+                step="0.0001"
                 min="0"
                 value={bulkForm.valor}
                 onChange={(e) => setBulkForm({ ...bulkForm, valor: e.target.value })}
