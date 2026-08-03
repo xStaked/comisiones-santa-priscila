@@ -583,7 +583,16 @@ export function exportarExcel(
   const gruposProveedor = Array.from(itemsPorHoja.values()).sort((a, b) =>
     a.grupo.localeCompare(b.grupo, 'es') || a.nombre.localeCompare(b.nombre, 'es')
   );
-  const nombresHojaUsados = new Set<string>();
+  const nombresHojaUsados = new Set<string>(['RESUMEN GENERAL']);
+
+  // Primera hoja: todas las líneas de todas las hojas juntas, filtre o no por
+  // comisionista. Se llena mientras se arman las hojas de detalle.
+  const resumen: any[] = [
+    ['RESUMEN GENERAL'],
+    [],
+    ['Fecha', 'Factura', 'Nombre', 'Cantidad', 'Tipo Comisión', 'Valor de Comisión', 'Estado', 'Sector', 'Comisionista', 'Grupo', 'Razón social'],
+  ];
+  let totalGeneral = 0;
 
   gruposProveedor.forEach(({ grupo: nombreGrupo, nombre: nombreProveedor, items: itemsProveedor }) => {
 
@@ -654,7 +663,7 @@ export function exportarExcel(
             tarifasLabel = detalle?.tarifasLabel || '-';
           }
           totalGrupo += comision;
-          data.push([
+          const fila = [
             item.fecha,
             item.numeroOrden,
             item.producto,
@@ -665,7 +674,9 @@ export function exportarExcel(
             item.sector || item.finca || 'N/A',
             grupoDelItem(item),
             razonSocialDelItem(item),
-          ]);
+          ];
+          data.push(fila);
+          resumen.push([...fila.slice(0, 8), comNombre, ...fila.slice(8)]);
         });
 
         data.push(['', '', '', '', '', `$ ${totalGrupo.toFixed(2).replace('.', ',')}`, '', '', '', '']);
@@ -691,7 +702,27 @@ export function exportarExcel(
       { wch: 30 },
     ];
     XLSX.utils.book_append_sheet(wb, ws, nombreHojaValido(`${nombreGrupo} ${nombreProveedor}`, nombresHojaUsados));
+    totalGeneral += totalProveedor;
   });
+
+  resumen.push([]);
+  resumen.push(['', '', '', '', 'TOTAL GENERAL', `$ ${totalGeneral.toFixed(2).replace('.', ',')}`, '', '', '', '', '']);
+  const wsResumen = XLSX.utils.aoa_to_sheet(resumen);
+  wsResumen['!cols'] = [
+    { wch: 12 },
+    { wch: 20 },
+    { wch: 25 },
+    { wch: 10 },
+    { wch: 16 },
+    { wch: 16 },
+    { wch: 10 },
+    { wch: 10 },
+    { wch: 22 },
+    { wch: 18 },
+    { wch: 30 },
+  ];
+  XLSX.utils.book_append_sheet(wb, wsResumen, 'RESUMEN GENERAL');
+  wb.SheetNames.unshift(wb.SheetNames.pop()!); // ponytail: book_append_sheet solo agrega al final
 
   XLSX.writeFile(wb, `${titulo.replace(/\s+/g, '_')}.xlsx`);
 }
