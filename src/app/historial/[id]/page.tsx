@@ -179,17 +179,17 @@ export default function LiquidacionDetallePage() {
   if (!liquidacion) {
     return (
       <Shell>
-        <div className="text-center py-20 bg-white rounded-2xl border border-dashed border-slate-200">
-          <FileText className="h-12 w-12 text-slate-300 mx-auto mb-4" />
-          <h3 className="text-lg font-medium text-slate-700">
+        <div className="text-center py-20 bg-white rounded-2xl border border-dashed border-border">
+          <FileText className="h-12 w-12 text-[#CBD2DA] mx-auto mb-4" />
+          <h3 className="text-lg font-medium text-[#344054]">
             Liquidación no encontrada
           </h3>
-          <p className="text-sm text-slate-500 mt-1">
+          <p className="text-sm text-[#7A8798] mt-1">
             La liquidación que buscas no existe o fue eliminada.
           </p>
           <Link
             href="/historial"
-            className="mt-6 inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
+            className="mt-6 inline-flex items-center justify-center rounded-xl border border-border bg-white px-4 py-2 text-sm font-medium text-[#344054] hover:bg-[#FAFBFC] transition-colors"
           >
             <ArrowLeft className="h-4 w-4 mr-2" />
             Volver al historial
@@ -254,23 +254,23 @@ export default function LiquidacionDetallePage() {
           <div className="flex items-center gap-3">
             <Link
               href="/historial"
-              className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
+              className="inline-flex items-center justify-center rounded-xl border border-border bg-white px-3 py-1.5 text-sm font-medium text-[#344054] hover:bg-[#FAFBFC] transition-colors"
             >
               <ArrowLeft className="h-4 w-4 mr-1" />
               Volver
             </Link>
             <div>
-              <h1 className="text-xl font-bold text-slate-900">
+              <h1 className="text-xl font-bold text-[#0B1220]">
                 {liquidacion.nombre}
               </h1>
               <div className="flex items-center gap-2 mt-0.5">
                 <Badge
                   variant="secondary"
-                  className="bg-slate-100 text-slate-700 border-0"
+                  className="bg-[#F0F2F5] text-[#344054] border-0"
                 >
                   {liquidacion.mes}
                 </Badge>
-                <span className="text-xs text-slate-500 flex items-center gap-1">
+                <span className="text-xs text-[#7A8798] flex items-center gap-1">
                   <Calendar className="h-3 w-3" />
                   Creada el{' '}
                   {new Date(liquidacion.fechaCreacion).toLocaleDateString('es-ES')}
@@ -283,25 +283,25 @@ export default function LiquidacionDetallePage() {
               variant="outline"
               size="sm"
               onClick={handleExportPDF}
-              className="rounded-xl border-slate-200"
+              className="rounded-xl border-border"
             >
-              <FileText className="h-4 w-4 mr-2 text-red-500" />
+              <FileText className="h-4 w-4 mr-2 text-[#B91C1C]" />
               PDF
             </Button>
             <Button
               variant="outline"
               size="sm"
               onClick={handleExportExcel}
-              className="rounded-xl border-slate-200"
+              className="rounded-xl border-border"
             >
-              <FileSpreadsheet className="h-4 w-4 mr-2 text-emerald-600" />
+              <FileSpreadsheet className="h-4 w-4 mr-2 text-primary" />
               Excel
             </Button>
             <Button
               variant="outline"
               size="sm"
               onClick={handleDelete}
-              className="text-red-600 hover:text-red-700 hover:bg-red-50 rounded-xl border-slate-200"
+              className="text-[#B91C1C] hover:text-[#991B1B] hover:bg-[#FDECEC] rounded-xl border-border"
             >
               <Trash2 className="h-4 w-4 mr-2" />
               Eliminar
@@ -324,42 +324,42 @@ export default function LiquidacionDetallePage() {
 
         {/* KPIs */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <Card className="rounded-2xl border-slate-200 shadow-sm">
+          <Card className="rounded-2xl border-border shadow-sm">
             <CardContent className="pt-5">
-              <div className="flex items-center gap-2 text-xs text-slate-500 mb-1">
+              <div className="flex items-center gap-2 text-xs text-[#7A8798] mb-1">
                 <Package className="h-3.5 w-3.5" />
                 Registros
               </div>
-              <p className="text-2xl font-bold text-slate-900">
+              <p className="text-2xl font-bold text-[#0B1220]">
                 {liquidacion.items.length}
               </p>
             </CardContent>
           </Card>
-          <Card className="rounded-2xl border-slate-200 shadow-sm">
+          <Card className="rounded-2xl border-border shadow-sm">
             <CardContent className="pt-5">
-              <div className="flex items-center gap-2 text-xs text-slate-500 mb-1">
+              <div className="flex items-center gap-2 text-xs text-[#7A8798] mb-1">
                 <Users className="h-3.5 w-3.5" />
                 Comisionistas
               </div>
-              <p className="text-2xl font-bold text-slate-900">
+              <p className="text-2xl font-bold text-[#0B1220]">
                 {comisionistasInvolucrados}
               </p>
             </CardContent>
           </Card>
-          <Card className="rounded-2xl border-slate-200 shadow-sm">
+          <Card className="rounded-2xl border-border shadow-sm">
             <CardContent className="pt-5">
-              <div className="flex items-center gap-2 text-xs text-slate-500 mb-1">
+              <div className="flex items-center gap-2 text-xs text-[#7A8798] mb-1">
                 <DollarSign className="h-3.5 w-3.5" />
                 Total Orden
               </div>
-              <p className="text-2xl font-bold text-slate-900 tabular-nums">
+              <p className="text-2xl font-bold text-[#0B1220] tabular-nums">
                 ${totalOrden.toFixed(2)}
               </p>
             </CardContent>
           </Card>
-          <Card className="bg-slate-900 text-white rounded-2xl border-0 shadow-sm">
+          <Card className="bg-[#0B1220] text-white rounded-2xl border-0 shadow-sm">
             <CardContent className="pt-5">
-              <div className="flex items-center gap-2 text-xs text-slate-400 mb-1">
+              <div className="flex items-center gap-2 text-xs text-[#98A2B3] mb-1">
                 <TrendingUp className="h-3.5 w-3.5" />
                 Comisión Total
               </div>
@@ -372,9 +372,9 @@ export default function LiquidacionDetallePage() {
 
         {/* Gráfico + Sectores */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <Card className="rounded-2xl border-slate-200 shadow-sm">
+          <Card className="rounded-2xl border-border shadow-sm">
             <CardHeader className="pb-2">
-              <CardTitle className="text-base text-slate-900">Comisión por Comisionista</CardTitle>
+              <CardTitle className="text-base text-[#0B1220]">Comisión por Comisionista</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="h-64">
@@ -417,7 +417,7 @@ export default function LiquidacionDetallePage() {
                     </BarChart>
                   </ResponsiveContainer>
                 ) : (
-                  <div className="h-full flex items-center justify-center text-slate-400 text-sm">
+                  <div className="h-full flex items-center justify-center text-[#98A2B3] text-sm">
                     No hay datos de comisionistas
                   </div>
                 )}
@@ -425,51 +425,51 @@ export default function LiquidacionDetallePage() {
             </CardContent>
           </Card>
 
-          <Card className="rounded-2xl border-slate-200 shadow-sm overflow-hidden">
+          <Card className="rounded-2xl border-border shadow-sm overflow-hidden">
             <CardHeader className="pb-3">
               <div className="flex items-center gap-2">
-                <MapPin className="h-4 w-4 text-slate-500" />
-                <CardTitle className="text-base text-slate-900">Resumen por Sector</CardTitle>
+                <MapPin className="h-4 w-4 text-[#7A8798]" />
+                <CardTitle className="text-base text-[#0B1220]">Resumen por Sector</CardTitle>
               </div>
             </CardHeader>
             <CardContent className="p-0">
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
-                  <thead className="bg-slate-50 border-b border-slate-200">
+                  <thead className="bg-[#FAFBFC] border-b border-border">
                     <tr>
-                      <th className="text-left px-4 py-2 font-medium text-slate-600">Sector</th>
-                      <th className="text-right px-4 py-2 font-medium text-slate-600">Órdenes</th>
-                      <th className="text-right px-4 py-2 font-medium text-slate-600">Cantidad</th>
-                      <th className="text-right px-4 py-2 font-medium text-slate-600">Total</th>
-                      <th className="text-right px-4 py-2 font-medium text-slate-600">Comisión</th>
+                      <th className="text-left px-4 py-2 font-medium text-[#475467]">Sector</th>
+                      <th className="text-right px-4 py-2 font-medium text-[#475467]">Órdenes</th>
+                      <th className="text-right px-4 py-2 font-medium text-[#475467]">Cantidad</th>
+                      <th className="text-right px-4 py-2 font-medium text-[#475467]">Total</th>
+                      <th className="text-right px-4 py-2 font-medium text-[#475467]">Comisión</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100">
+                  <tbody className="divide-y divide-[#F2F4F6]">
                     {resumenPorFinca.length === 0 ? (
                       <tr>
-                        <td colSpan={5} className="px-4 py-6 text-center text-slate-500">
+                        <td colSpan={5} className="px-4 py-6 text-center text-[#7A8798]">
                           No hay datos por sector
                         </td>
                       </tr>
                     ) : (
                       resumenPorFinca.map((f, idx) => (
-                        <tr key={idx} className="hover:bg-slate-50/50 transition-colors">
-                          <td className="px-4 py-2 text-slate-900 font-medium">{f.nombre}</td>
-                          <td className="px-4 py-2 text-right text-slate-700">{f.ordenes}</td>
-                          <td className="px-4 py-2 text-right text-slate-700">{f.cantidad.toLocaleString('es-ES')}</td>
-                          <td className="px-4 py-2 text-right text-slate-700">${f.total.toFixed(2)}</td>
-                          <td className="px-4 py-2 text-right font-semibold text-emerald-700">${f.comision.toFixed(2)}</td>
+                        <tr key={idx} className="hover:bg-[#FAFBFC] transition-colors">
+                          <td className="px-4 py-2 text-[#0B1220] font-medium">{f.nombre}</td>
+                          <td className="px-4 py-2 text-right text-[#344054]">{f.ordenes}</td>
+                          <td className="px-4 py-2 text-right text-[#344054]">{f.cantidad.toLocaleString('es-ES')}</td>
+                          <td className="px-4 py-2 text-right text-[#344054]">${f.total.toFixed(2)}</td>
+                          <td className="px-4 py-2 text-right font-semibold text-[#0B5E56]">${f.comision.toFixed(2)}</td>
                         </tr>
                       ))
                     )}
                   </tbody>
-                  <tfoot className="bg-slate-50 border-t border-slate-200">
+                  <tfoot className="bg-[#FAFBFC] border-t border-border">
                     <tr>
-                      <td className="px-4 py-2 font-medium text-slate-700">Totales</td>
-                      <td className="px-4 py-2 text-right font-bold text-slate-900">{resumenPorFinca.reduce((s, f) => s + f.ordenes, 0)}</td>
-                      <td className="px-4 py-2 text-right font-bold text-slate-900">{resumenPorFinca.reduce((s, f) => s + f.cantidad, 0).toLocaleString('es-ES')}</td>
-                      <td className="px-4 py-2 text-right font-bold text-slate-900">${resumenPorFinca.reduce((s, f) => s + f.total, 0).toFixed(2)}</td>
-                      <td className="px-4 py-2 text-right font-bold text-slate-900">${resumenPorFinca.reduce((s, f) => s + f.comision, 0).toFixed(2)}</td>
+                      <td className="px-4 py-2 font-medium text-[#344054]">Totales</td>
+                      <td className="px-4 py-2 text-right font-bold text-[#0B1220]">{resumenPorFinca.reduce((s, f) => s + f.ordenes, 0)}</td>
+                      <td className="px-4 py-2 text-right font-bold text-[#0B1220]">{resumenPorFinca.reduce((s, f) => s + f.cantidad, 0).toLocaleString('es-ES')}</td>
+                      <td className="px-4 py-2 text-right font-bold text-[#0B1220]">${resumenPorFinca.reduce((s, f) => s + f.total, 0).toFixed(2)}</td>
+                      <td className="px-4 py-2 text-right font-bold text-[#0B1220]">${resumenPorFinca.reduce((s, f) => s + f.comision, 0).toFixed(2)}</td>
                     </tr>
                   </tfoot>
                 </table>
@@ -479,43 +479,43 @@ export default function LiquidacionDetallePage() {
         </div>
 
         {/* Desglose por comisionista */}
-        <Card className="rounded-2xl border-slate-200 shadow-sm overflow-hidden">
+        <Card className="rounded-2xl border-border shadow-sm overflow-hidden">
           <CardHeader className="pb-3">
-            <CardTitle className="text-base text-slate-900">
+            <CardTitle className="text-base text-[#0B1220]">
               Desglose por Comisionista
             </CardTitle>
           </CardHeader>
           <CardContent className="p-0">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
-                <thead className="bg-slate-50 border-b border-slate-200">
+                <thead className="bg-[#FAFBFC] border-b border-border">
                   <tr>
-                    <th className="text-left px-4 py-3 font-medium text-slate-600">
+                    <th className="text-left px-4 py-3 font-medium text-[#475467]">
                       Comisionista
                     </th>
-                    <th className="text-left px-4 py-3 font-medium text-slate-600">
+                    <th className="text-left px-4 py-3 font-medium text-[#475467]">
                       Tarifas
                     </th>
-                    <th className="text-right px-4 py-3 font-medium text-slate-600">
+                    <th className="text-right px-4 py-3 font-medium text-[#475467]">
                       Órdenes
                     </th>
-                    <th className="text-right px-4 py-3 font-medium text-slate-600">
+                    <th className="text-right px-4 py-3 font-medium text-[#475467]">
                       Total Orden
                     </th>
-                    <th className="text-right px-4 py-3 font-medium text-slate-600">
+                    <th className="text-right px-4 py-3 font-medium text-[#475467]">
                       Comisión
                     </th>
-                    <th className="text-right px-4 py-3 font-medium text-slate-600">
+                    <th className="text-right px-4 py-3 font-medium text-[#475467]">
                       % del total
                     </th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
+                <tbody className="divide-y divide-[#F2F4F6]">
                   {resumenPorComisionista.length === 0 ? (
                     <tr>
                       <td
                         colSpan={6}
-                        className="px-4 py-8 text-center text-slate-500"
+                        className="px-4 py-8 text-center text-[#7A8798]"
                       >
                         No hay comisionistas asignados en esta liquidación
                       </td>
@@ -524,22 +524,22 @@ export default function LiquidacionDetallePage() {
                     resumenPorComisionista.map((r, idx) => (
                       <tr
                         key={idx}
-                        className="hover:bg-slate-50/50 transition-colors"
+                        className="hover:bg-[#FAFBFC] transition-colors"
                       >
-                        <td className="px-4 py-3 text-slate-900 font-medium">
+                        <td className="px-4 py-3 text-[#0B1220] font-medium">
                           {r.nombre}
                         </td>
-                        <td className="px-4 py-3 text-slate-500">{r.tarifas}</td>
-                        <td className="px-4 py-3 text-right text-slate-700">
+                        <td className="px-4 py-3 text-[#7A8798]">{r.tarifas}</td>
+                        <td className="px-4 py-3 text-right text-[#344054]">
                           {r.ordenes}
                         </td>
-                        <td className="px-4 py-3 text-right text-slate-700">
+                        <td className="px-4 py-3 text-right text-[#344054]">
                           ${r.totalOrden.toFixed(2)}
                         </td>
-                        <td className="px-4 py-3 text-right font-semibold text-emerald-700">
+                        <td className="px-4 py-3 text-right font-semibold text-[#0B5E56]">
                           ${r.totalComision.toFixed(2)}
                         </td>
-                        <td className="px-4 py-3 text-right text-slate-500">
+                        <td className="px-4 py-3 text-right text-[#7A8798]">
                           {totalComision > 0
                             ? ((r.totalComision / totalComision) * 100).toFixed(1)
                             : 0}
@@ -549,24 +549,24 @@ export default function LiquidacionDetallePage() {
                     ))
                   )}
                 </tbody>
-                <tfoot className="bg-slate-50 border-t border-slate-200">
+                <tfoot className="bg-[#FAFBFC] border-t border-border">
                   <tr>
                     <td
                       colSpan={3}
-                      className="px-4 py-3 font-medium text-slate-700"
+                      className="px-4 py-3 font-medium text-[#344054]"
                     >
                       Totales
                     </td>
-                    <td className="px-4 py-3 text-right font-bold text-slate-900">
+                    <td className="px-4 py-3 text-right font-bold text-[#0B1220]">
                       $
                       {resumenPorComisionista
                         .reduce((s, r) => s + r.totalOrden, 0)
                         .toFixed(2)}
                     </td>
-                    <td className="px-4 py-3 text-right font-bold text-slate-900">
+                    <td className="px-4 py-3 text-right font-bold text-[#0B1220]">
                       ${totalComision.toFixed(2)}
                     </td>
-                    <td className="px-4 py-3 text-right font-bold text-slate-900">
+                    <td className="px-4 py-3 text-right font-bold text-[#0B1220]">
                       100%
                     </td>
                   </tr>
@@ -577,69 +577,69 @@ export default function LiquidacionDetallePage() {
         </Card>
 
         {/* Detalle de registros */}
-        <Card className="rounded-2xl border-slate-200 shadow-sm overflow-hidden">
+        <Card className="rounded-2xl border-border shadow-sm overflow-hidden">
           <CardHeader className="pb-3">
-            <CardTitle className="text-base text-slate-900">
+            <CardTitle className="text-base text-[#0B1220]">
               Detalle de Registros
             </CardTitle>
           </CardHeader>
           <CardContent className="p-0">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
-                <thead className="bg-slate-50 border-b border-slate-200">
+                <thead className="bg-[#FAFBFC] border-b border-border">
                   <tr>
-                    <th className="text-left px-4 py-3 font-medium text-slate-600">
+                    <th className="text-left px-4 py-3 font-medium text-[#475467]">
                       Fecha
                     </th>
-                    <th className="text-left px-4 py-3 font-medium text-slate-600">
+                    <th className="text-left px-4 py-3 font-medium text-[#475467]">
                       Factura
                     </th>
-                    <th className="text-left px-4 py-3 font-medium text-slate-600">
+                    <th className="text-left px-4 py-3 font-medium text-[#475467]">
                       Sector
                     </th>
-                    <th className="text-left px-4 py-3 font-medium text-slate-600">
+                    <th className="text-left px-4 py-3 font-medium text-[#475467]">
                       Producto
                     </th>
-                    <th className="text-right px-4 py-3 font-medium text-slate-600">
+                    <th className="text-right px-4 py-3 font-medium text-[#475467]">
                       Cantidad
                     </th>
-                    <th className="text-right px-4 py-3 font-medium text-slate-600">
+                    <th className="text-right px-4 py-3 font-medium text-[#475467]">
                       Total
                     </th>
-                    <th className="text-left px-4 py-3 font-medium text-slate-600">
+                    <th className="text-left px-4 py-3 font-medium text-[#475467]">
                       Comisionistas
                     </th>
-                    <th className="text-right px-4 py-3 font-medium text-slate-600">
+                    <th className="text-right px-4 py-3 font-medium text-[#475467]">
                       Comisión
                     </th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
+                <tbody className="divide-y divide-[#F2F4F6]">
                   {liquidacion.items.map((item) => {
                     const rawItem = (rawLiquidacion?.items || []).find((ri: any) => ri.id === item.id);
                     const comision = (rawItem?.tarifas || []).reduce((s: number, t: any) => s + (Number(t.comisionCalculada) || 0), 0);
                     return (
                       <tr
                         key={item.id}
-                        className="hover:bg-slate-50/50 transition-colors"
+                        className="hover:bg-[#FAFBFC] transition-colors"
                       >
-                        <td className="px-4 py-3 text-slate-500">
+                        <td className="px-4 py-3 text-[#7A8798]">
                           {item.fecha}
                         </td>
-                        <td className="px-4 py-3 text-slate-900 font-medium">
+                        <td className="px-4 py-3 text-[#0B1220] font-medium">
                           {item.numeroOrden}
                         </td>
-                        <td className="px-4 py-3 text-slate-500">
+                        <td className="px-4 py-3 text-[#7A8798]">
                           {item.finca}
                         </td>
-                        <td className="px-4 py-3 text-slate-700">
+                        <td className="px-4 py-3 text-[#344054]">
                           {item.producto}
                         </td>
-                        <td className="px-4 py-3 text-right text-slate-700">
+                        <td className="px-4 py-3 text-right text-[#344054]">
                           {item.cantidad.toLocaleString('es-ES')}{' '}
                           {item.unidad}
                         </td>
-                        <td className="px-4 py-3 text-right text-slate-500">
+                        <td className="px-4 py-3 text-right text-[#7A8798]">
                           ${item.total.toFixed(2)}
                         </td>
                         <td className="px-4 py-3">
@@ -648,39 +648,39 @@ export default function LiquidacionDetallePage() {
                               {item.comisionistas.map(a => {
                                 const com = comisionistaMap.get(a.comisionistaId);
                                 return com ? (
-                                  <Badge key={a.comisionistaId} variant="secondary" className="bg-slate-100 text-slate-700 border-0 text-xs">
+                                  <Badge key={a.comisionistaId} variant="secondary" className="bg-[#F0F2F5] text-[#344054] border-0 text-xs">
                                     {com.nombre}
                                   </Badge>
                                 ) : null;
                               })}
                             </div>
                           ) : (
-                            <span className="text-xs text-slate-400">-</span>
+                            <span className="text-xs text-[#98A2B3]">-</span>
                           )}
                         </td>
-                        <td className="px-4 py-3 text-right font-medium text-slate-900">
+                        <td className="px-4 py-3 text-right font-medium text-[#0B1220]">
                           ${comision.toFixed(2)}
                         </td>
                       </tr>
                     );
                   })}
                 </tbody>
-                <tfoot className="bg-slate-50 border-t border-slate-200">
+                <tfoot className="bg-[#FAFBFC] border-t border-border">
                   <tr>
                     <td
                       colSpan={4}
-                      className="px-4 py-3 font-medium text-slate-700"
+                      className="px-4 py-3 font-medium text-[#344054]"
                     >
                       Totales
                     </td>
-                    <td className="px-4 py-3 text-right font-bold text-slate-900">
+                    <td className="px-4 py-3 text-right font-bold text-[#0B1220]">
                       {totalCantidad.toLocaleString('es-ES')}
                     </td>
-                    <td className="px-4 py-3 text-right font-bold text-slate-900">
+                    <td className="px-4 py-3 text-right font-bold text-[#0B1220]">
                       ${totalOrden.toFixed(2)}
                     </td>
                     <td colSpan={1} />
-                    <td className="px-4 py-3 text-right font-bold text-slate-900">
+                    <td className="px-4 py-3 text-right font-bold text-[#0B1220]">
                       ${totalComision.toFixed(2)}
                     </td>
                   </tr>

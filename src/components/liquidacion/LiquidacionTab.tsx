@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { FileText, FileSpreadsheet, Save, Calculator, Filter, ChevronRight } from 'lucide-react';
+import { FileText, FileSpreadsheet, Save, Calculator, ChevronRight } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import * as XLSX from 'xlsx';
 import { useApp } from '@/context/AppContext';
@@ -9,8 +9,6 @@ import { exportarPDF, exportarExcel, calcularDetalleComision, getCantidadParaTar
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import {
   Select,
@@ -19,7 +17,20 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  Avatar,
+  BarraAcciones,
+  BotonPrimario,
+  BotonSecundario,
+  Panel,
+  PanelTitulo,
+  Vacio,
+  money,
+  num,
+} from '@/components/ui/dc';
 import { toast } from 'sonner';
+
+const COLS = 'grid-cols-[34px_130px_92px_minmax(0,1.3fr)_minmax(0,1fr)_90px_108px_132px]';
 
 export function LiquidacionTab() {
   const { comisionistas, ordenItems, saveLiquidacion, tarifasClienteProducto, clientes, retenciones } = useApp();
@@ -178,6 +189,17 @@ export function LiquidacionTab() {
     return Array.from(map.values()).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
   }, [selectedItemsConComision]);
 
+  /** Base facturada sobre la que se calculó la comisión de cada persona. */
+  const basePorComisionista = useMemo(() => {
+    const map = new Map<string, number>();
+    selectedItemsConComision.forEach(item => {
+      item.comisionesAsignadas.forEach(com => {
+        map.set(com.id, (map.get(com.id) || 0) + item.total);
+      });
+    });
+    return map;
+  }, [selectedItemsConComision]);
+
   const totalComision = selectedItemsConComision.reduce((s, i) => s + i.comisionTotal, 0);
   const totalCantidad = selectedItemsConComision.reduce((s, i) => s + i.cantidad, 0);
   const totalOrden = selectedItemsConComision.reduce((s, i) => s + i.total, 0);
@@ -295,405 +317,434 @@ export function LiquidacionTab() {
 
   if (ordenItems.length === 0) {
     return (
-      <div className="text-center py-20 bg-white rounded-2xl border border-dashed border-slate-200">
-        <Calculator className="h-12 w-12 text-slate-300 mx-auto mb-4" />
-        <h3 className="text-lg font-medium text-slate-700">Sin órdenes cargadas</h3>
-        <p className="text-sm text-slate-500 mt-1 max-w-sm mx-auto">Ve a &quot;Cargar Órdenes&quot; para agregar registros y generar una liquidación.</p>
-      </div>
+      <Vacio
+        icono={Calculator}
+        titulo="Sin facturas cargadas"
+        nota="Ve a Facturas para agregar registros y generar una liquidación."
+      />
     );
   }
 
   if (ordenItemsPagados.length === 0) {
     return (
-      <div className="text-center py-20 bg-white rounded-2xl border border-dashed border-slate-200">
-        <Calculator className="h-12 w-12 text-slate-300 mx-auto mb-4" />
-        <h3 className="text-lg font-medium text-slate-700">Sin órdenes pagadas</h3>
-        <p className="text-sm text-slate-500 mt-1 max-w-sm mx-auto">Marca una orden como pagada para calcular y guardar su liquidación.</p>
-      </div>
+      <Vacio
+        icono={Calculator}
+        titulo="Sin facturas pagadas"
+        nota="Marca una factura como pagada para calcular y guardar su liquidación."
+      />
     );
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-        <div className="flex items-center gap-4 flex-wrap">
-          <div className="flex items-center gap-3">
-            <Filter className="h-5 w-5 text-slate-400" />
-            <div>
-              <Label className="text-xs text-slate-500">Filtrar por comisionista</Label>
-              <Select value={filterComisionista} onValueChange={(value) => setFilterComisionista(value ?? '')}>
-                <SelectTrigger className="mt-1 h-10 rounded-xl border-slate-200 bg-white text-sm text-slate-900 w-64">
-                  <SelectValue placeholder="Todos los comisionistas">
-                    {nombreComisionistaFiltro}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="">Todos los comisionistas</SelectItem>
-                  {comisionistas.map(c => (
-                    <SelectItem key={c.id} value={c.id}>{c.nombre}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <div>
-            <Label className="text-xs text-slate-500">Filtrar por factura</Label>
-            <Input
-              placeholder="Número de factura..."
-              value={filterFactura}
-              onChange={e => setFilterFactura(e.target.value)}
-              className="mt-1 h-10 rounded-xl border-slate-200 bg-white text-sm text-slate-900 w-64"
-            />
-          </div>
+    <div className="flex max-w-[1360px] flex-col gap-3.5 pb-24">
+      <BarraAcciones>
+        <div className="flex h-9 items-center gap-2.5 rounded-[9px] border border-[#E0E4E9] bg-white px-3">
+          <span className="text-[11.5px] text-[#7A8798]">Comisionista</span>
+          <Select value={filterComisionista} onValueChange={(value) => setFilterComisionista(value ?? '')}>
+            <SelectTrigger className="h-7 border-0 bg-transparent px-0 text-[12.5px] font-medium text-[#0B1220] shadow-none focus-visible:ring-0">
+              <SelectValue placeholder="Todos">{nombreComisionistaFiltro}</SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="">Todos los comisionistas</SelectItem>
+              {comisionistas.map((c) => (
+                <SelectItem key={c.id} value={c.id}>
+                  {c.nombre}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={handleExportPDF} className="rounded-xl border-slate-200">
-            <FileText className="h-4 w-4 mr-2 text-red-500" />
-            Exportar PDF
-          </Button>
-          <Button variant="outline" onClick={handleExportExcel} className="rounded-xl border-slate-200">
-            <FileSpreadsheet className="h-4 w-4 mr-2 text-emerald-600" />
-            Exportar Excel
-          </Button>
-          <Button onClick={handlePreviewSave} className="btn-primary-dark rounded-xl">
-            <Save className="h-4 w-4 mr-2" />
-            Guardar Liquidación
-          </Button>
 
-          <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
-            <DialogContent className="bg-white border-slate-200 sm:max-w-lg">
-              <DialogHeader>
-                <DialogTitle>Confirmar Liquidación</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-4 mt-2">
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <Label className="text-slate-900">¿A quién le pagas?</Label>
-                    <div className="flex gap-1">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 px-2 text-xs text-slate-500 hover:text-slate-900"
-                        onClick={() => setComisionistasAPagar(new Set(resumenPorComisionista.map(c => c.id)))}
-                      >
-                        Todos
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 px-2 text-xs text-slate-500 hover:text-slate-900"
-                        onClick={() => setComisionistasAPagar(new Set())}
-                      >
-                        Ninguno
-                      </Button>
-                    </div>
-                  </div>
-                  <p className="text-xs text-slate-500">
-                    Solo se liquida a los comisionistas marcados. El resto queda pendiente y podrás liquidarlo después.
-                  </p>
-                  <div className="max-h-56 overflow-y-auto rounded-xl border border-slate-200 divide-y divide-slate-100">
-                    {resumenPorComisionista.length === 0 && (
-                      <p className="px-3 py-4 text-center text-xs text-slate-500">
-                        Las órdenes seleccionadas no tienen comisionistas pendientes. Se liquidarán con comisión $0.
-                      </p>
-                    )}
-                    {resumenPorComisionista.map(com => (
-                      <label
-                        key={com.id}
-                        className="flex items-center gap-3 px-3 py-2.5 cursor-pointer hover:bg-slate-50 transition-colors"
-                      >
+        <div className="flex h-9 items-center gap-2.5 rounded-[9px] border border-[#E0E4E9] bg-white px-3 focus-within:border-primary">
+          <span className="text-[11.5px] text-[#7A8798]">Factura</span>
+          <input
+            value={filterFactura}
+            onChange={(e) => setFilterFactura(e.target.value)}
+            placeholder="Todas"
+            className="w-32 bg-transparent text-[12.5px] text-[#0B1220] outline-none placeholder:text-[#98A2B3]"
+          />
+        </div>
+
+        <div className="flex-1" />
+
+        <BotonSecundario onClick={handleExportPDF}>
+          <FileText className="size-3.5 text-[#B91C1C]" /> PDF
+        </BotonSecundario>
+        <BotonSecundario onClick={handleExportExcel}>
+          <FileSpreadsheet className="size-3.5 text-primary" /> Excel
+        </BotonSecundario>
+      </BarraAcciones>
+
+      {/* Tabla de facturas pagadas — cabecera oscura del prototipo */}
+      <Panel>
+        <div className="overflow-x-auto">
+          <div className="min-w-[1040px]">
+            <div className={`grid ${COLS} items-center gap-2.5 bg-[#0B1220] px-4 py-[11px] text-[10.5px] font-semibold uppercase tracking-[0.07em] text-[#8FA0B4]`}>
+              <div>
+                <input
+                  type="checkbox"
+                  className="size-[15px] cursor-pointer accent-primary align-middle"
+                  checked={todosSeleccionados}
+                  onChange={toggleTodos}
+                  aria-label="Seleccionar todo"
+                />
+              </div>
+              <div>Factura</div>
+              <div>Fecha</div>
+              <div>Cliente</div>
+              <div>Sector</div>
+              <div className="text-right">Cantidad</div>
+              <div className="text-right">Total</div>
+              <div className="text-right">Comisión</div>
+            </div>
+
+            {itemsConComision.length === 0 ? (
+              <div className="px-4 py-10 text-center text-sm text-[#98A2B3]">
+                No hay registros con el filtro seleccionado
+              </div>
+            ) : (
+              gruposPorOrden.map(([key, grupo]) => {
+                const seleccionado = !excludedIds.has(key);
+                const expandida = expandedOrdenIds.has(key);
+                const cab = grupo[0];
+                const cantOrden = grupo.reduce((s, i) => s + i.cantidad, 0);
+                const totOrden = grupo.reduce((s, i) => s + i.total, 0);
+                const comOrden = grupo.reduce((s, i) => s + i.comisionTotal, 0);
+                const sectores = new Set(grupo.map((i) => i.fincaRel?.nombre || i.finca).filter(Boolean));
+                const sector =
+                  sectores.size === 0 ? '—' : sectores.size === 1 ? [...sectores][0] : `${sectores.size} sectores`;
+
+                return (
+                  <div key={key}>
+                    <div
+                      onClick={() => toggleOrden(key)}
+                      className={`grid ${COLS} cursor-pointer items-center gap-2.5 border-b border-[#F2F4F6] px-4 py-3 transition-colors hover:bg-[#FAFBFC] ${seleccionado ? '' : 'opacity-[0.42]'}`}
+                    >
+                      <div>
                         <input
                           type="checkbox"
-                          className="h-4 w-4 cursor-pointer accent-emerald-600 shrink-0"
-                          checked={comisionistasAPagar.has(com.id)}
-                          onChange={() => toggleComisionistaAPagar(com.id)}
+                          className="size-[15px] cursor-pointer accent-primary align-middle"
+                          checked={seleccionado}
+                          onChange={() => toggleOrden(key)}
+                          onClick={(e) => e.stopPropagation()}
+                          aria-label={`Seleccionar factura ${cab.numeroOrden}`}
                         />
-                        <span className="flex-1 min-w-0">
-                          <span className="block text-sm font-medium text-slate-900 truncate">{com.nombre}</span>
-                          <span className="block text-xs text-slate-400">{com.tarifasLabel} · {com.items} ítem{com.items === 1 ? '' : 's'}</span>
+                      </div>
+                      <div className="flex min-w-0 items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleCollapse(key);
+                          }}
+                          aria-expanded={expandida}
+                          aria-label={`Ver productos de ${cab.numeroOrden}`}
+                          className="flex items-center text-[#98A2B3] hover:text-[#0B1220]"
+                        >
+                          <ChevronRight
+                            className={`size-3.5 shrink-0 transition-transform duration-200 ${expandida ? 'rotate-90' : ''}`}
+                          />
+                        </button>
+                        <span className="cifra truncate text-[12.5px] font-medium text-[#0B1220]">
+                          {cab.numeroOrden}
                         </span>
-                        <span className="text-sm font-semibold text-emerald-700 tabular-nums shrink-0">
-                          ${com.comision.toFixed(2)}
-                        </span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
+                      </div>
+                      <div className="cifra text-[12.5px] text-[#6B7684]">{cab.fecha}</div>
+                      <div className="truncate text-[13px] text-[#0B1220]">{cab.cliente?.nombre || '—'}</div>
+                      <div className="truncate text-[12.5px] text-[#6B7684]">{sector}</div>
+                      <div className="cifra text-right text-[12.5px] text-[#344054]">
+                        {num(cantOrden, 0)}
+                      </div>
+                      <div className="cifra text-right text-[12.5px] text-[#344054]">{money(totOrden)}</div>
+                      <div
+                        className="cifra text-right text-[13.5px] font-semibold"
+                        style={{ color: seleccionado ? '#0F766E' : '#98A2B3' }}
+                      >
+                        {money(comOrden)}
+                      </div>
+                    </div>
 
-                <div className="bg-slate-50 rounded-xl p-4 border border-slate-200 space-y-3">
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-slate-500">Órdenes a liquidar</span>
-                    <span className="text-sm font-semibold text-slate-900">{cantidadOrdenes}</span>
+                    <div
+                      className={`grid transition-[grid-template-rows] duration-200 ease-out ${expandida ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}
+                    >
+                      <div className="overflow-hidden">
+                        <div className="flex flex-col gap-1.5 border-b border-[#F2F4F6] bg-[#FBFCFD] px-4 py-3 pl-[50px]">
+                          {grupo.map((item) => (
+                            <div
+                              key={item.id}
+                              className="grid grid-cols-[minmax(0,1.6fr)_100px_110px_minmax(0,1fr)] items-center gap-3 rounded-lg border border-[#EDEFF2] bg-white px-3 py-2.5"
+                            >
+                              <div className="truncate text-[12.5px] text-[#0B1220]">
+                                {item.productoRel?.nombre || item.producto}
+                              </div>
+                              <div className="cifra text-right text-xs text-[#6B7684]">
+                                {num(item.cantidad, 0)} {item.unidad}
+                              </div>
+                              <div className="cifra text-right text-xs text-[#344054]">
+                                {money(item.total)}
+                              </div>
+                              <div className="flex flex-wrap justify-end gap-1.5">
+                                {item.comisionesAsignadas.length === 0 ? (
+                                  <span className="text-xs text-[#98A2B3]">Sin asignar</span>
+                                ) : (
+                                  item.comisionesAsignadas.map((com) => (
+                                    <span
+                                      key={com.id}
+                                      className={`inline-flex items-center gap-1.5 rounded-md px-2 py-[3px] text-[11px] font-medium ${
+                                        com.comision > 0
+                                          ? 'bg-[#E6F2F0] text-[#0B5E56]'
+                                          : 'bg-[#FEF3E2] text-[#9A5B0B]'
+                                      }`}
+                                      title={com.nombre}
+                                    >
+                                      {com.nombre.split(' ')[0]}
+                                      <span className="opacity-65">{com.tarifasLabel}</span>
+                                      <span className="cifra font-semibold">{money(com.comision)}</span>
+                                    </span>
+                                  ))
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-slate-500">Comisionistas seleccionados</span>
-                    <span className="text-sm font-semibold text-slate-900">
-                      {comisionistasAPagar.size} de {resumenPorComisionista.length}
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-slate-500">Comisiones a pagar</span>
-                    <span className="text-sm font-semibold text-slate-900">{itemsAPagar}</span>
-                  </div>
-                  <div className="border-t border-slate-200 pt-3 flex justify-between items-center">
-                    <span className="text-sm font-medium text-slate-700">Total a pagar</span>
-                    <span className="text-lg font-bold text-emerald-700">${totalAPagar.toFixed(2)}</span>
-                  </div>
-                </div>
+                );
+              })
+            )}
 
-                <div className="space-y-2">
-                  <Label>Nombre de la liquidación</Label>
-                  <Input
-                    placeholder="Ej: Liquidación Enero 2024"
-                    value={nombreLiquidacion}
-                    onChange={e => setNombreLiquidacion(e.target.value)}
-                    className="bg-white border-slate-200 rounded-xl"
-                  />
+            <div className={`grid ${COLS} items-center gap-2.5 bg-[#FAFBFC] px-4 py-3`}>
+              <div />
+              <div className="text-[12px] font-semibold text-[#475467]">Totales</div>
+              <div />
+              <div />
+              <div />
+              <div className="cifra text-right text-[12.5px] font-semibold text-[#0B1220]">
+                {num(totalCantidad, 0)}
+              </div>
+              <div className="cifra text-right text-[12.5px] font-semibold text-[#0B1220]">
+                {money(totalOrden)}
+              </div>
+              <div className="cifra text-right text-[13.5px] font-semibold text-primary">
+                {money(totalComision)}
+              </div>
+            </div>
+          </div>
+        </div>
+      </Panel>
+
+      {/* Resumen por comisionista */}
+      <Panel>
+        <PanelTitulo
+          titulo="Resumen por comisionista"
+          nota="Solo las facturas seleccionadas"
+          accion={
+            <BotonSecundario onClick={handleExportTotalesExcel} className="h-8">
+              <FileSpreadsheet className="size-3.5 text-primary" /> Exportar totales
+            </BotonSecundario>
+          }
+        />
+        <div className="overflow-x-auto">
+          <div className="min-w-[720px]">
+            <div className="th-tabla grid grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_80px_110px_130px] gap-3 border-b border-[#EDEFF2] bg-[#FAFBFC] px-5 py-2.5">
+              <div>Comisionista</div>
+              <div>Tarifa aplicada</div>
+              <div className="text-right">Ítems</div>
+              <div className="text-right">Base</div>
+              <div className="text-right">Comisión</div>
+            </div>
+            {resumenPorComisionista.length === 0 ? (
+              <div className="px-5 py-8 text-center text-sm text-[#98A2B3]">
+                No hay comisionistas asignados
+              </div>
+            ) : (
+              resumenPorComisionista.map((com) => (
+                <div
+                  key={com.id}
+                  className="grid grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_80px_110px_130px] items-center gap-3 border-b border-[#F2F4F6] px-5 py-2.5"
+                >
+                  <div className="flex min-w-0 items-center gap-2.5">
+                    <Avatar nombre={com.nombre} id={com.id} />
+                    <span className="truncate text-[13px] text-[#0B1220]">{com.nombre}</span>
+                  </div>
+                  <div className="truncate text-[12.5px] text-[#6B7684]">{com.tarifasLabel}</div>
+                  <div className="cifra text-right text-[12.5px] text-[#6B7684]">{com.items}</div>
+                  <div className="cifra text-right text-[12.5px] text-[#344054]">
+                    {money(basePorComisionista.get(com.id) ?? 0)}
+                  </div>
+                  <div className="cifra text-right text-[13px] font-semibold text-primary">
+                    {money(com.comision)}
+                  </div>
                 </div>
-                <div className="flex justify-end gap-2 pt-2">
-                  <Button variant="outline" onClick={() => setPreviewOpen(false)} className="rounded-xl border-slate-200">Cancelar</Button>
-                  <Button
-                    onClick={handleSave}
-                    disabled={
-                      (resumenPorComisionista.length > 0 && comisionistasAPagar.size === 0) ||
-                      !nombreLiquidacion.trim()
+              ))
+            )}
+          </div>
+        </div>
+      </Panel>
+
+      {/* Barra fija inferior: totales + guardar */}
+      <div className="fixed bottom-0 left-16 right-0 z-40 flex flex-wrap items-center gap-x-6 gap-y-3 bg-[#0B1220]/[0.97] px-5 py-3.5 backdrop-blur-md lg:left-[236px] lg:px-[30px]">
+        <div className="flex items-baseline gap-2.5">
+          <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#8394AA]">
+            Total a liquidar
+          </span>
+          <span className="cifra text-[26px] font-semibold text-white">{money(totalComision)}</span>
+        </div>
+        <div className="hidden h-6 w-px bg-white/[0.14] sm:block" />
+        <div className="flex gap-5">
+          <div>
+            <div className="text-[10.5px] uppercase tracking-[0.06em] text-[#8394AA]">Facturas</div>
+            <div className="cifra mt-0.5 text-sm text-[#D6DEE8]">{cantidadOrdenes}</div>
+          </div>
+          <div>
+            <div className="text-[10.5px] uppercase tracking-[0.06em] text-[#8394AA]">Registros</div>
+            <div className="cifra mt-0.5 text-sm text-[#D6DEE8]">{selectedItemsConComision.length}</div>
+          </div>
+          <div>
+            <div className="text-[10.5px] uppercase tracking-[0.06em] text-[#8394AA]">
+              Comisionistas
+            </div>
+            <div className="cifra mt-0.5 text-sm text-[#D6DEE8]">{resumenPorComisionista.length}</div>
+          </div>
+        </div>
+        <div className="flex-1" />
+        <BotonPrimario onClick={handlePreviewSave} className="h-10 px-[22px] text-sm">
+          <Save className="size-4" /> Guardar liquidación
+        </BotonPrimario>
+      </div>
+
+      {/* Diálogo de confirmación */}
+      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+        <DialogContent className="flex max-h-[90vh] flex-col overflow-hidden sm:max-w-[620px]">
+          <DialogHeader>
+            <DialogTitle>Confirmar liquidación</DialogTitle>
+            <p className="mt-1 text-[13px] leading-[1.5] text-[#6B7684]">
+              Se marcarán como liquidadas las asignaciones de los comisionistas que selecciones. Esta
+              acción queda registrada en el historial.
+            </p>
+          </DialogHeader>
+
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pt-2">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label className="text-[12.5px] font-semibold text-[#0B1220]">¿A quién le pagas?</Label>
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    className="text-xs font-medium text-primary"
+                    onClick={() =>
+                      setComisionistasAPagar(new Set(resumenPorComisionista.map((c) => c.id)))
                     }
-                    className="btn-primary-dark rounded-xl"
                   >
-                    Confirmar y Guardar
-                  </Button>
+                    Todos
+                  </button>
+                  <button
+                    type="button"
+                    className="text-xs font-medium text-[#7A8798]"
+                    onClick={() => setComisionistasAPagar(new Set())}
+                  >
+                    Ninguno
+                  </button>
                 </div>
               </div>
-            </DialogContent>
-          </Dialog>
-        </div>
-      </div>
 
-      <Card className="card-elevated rounded-2xl overflow-hidden">
-        <CardHeader className="pb-3">
-            <CardTitle className="text-base text-slate-900">Vista de Liquidación: {cantidadOrdenes} orden{cantidadOrdenes === 1 ? '' : 'es'} pagada{cantidadOrdenes === 1 ? '' : 's'} / {selectedItemsConComision.length} de {itemsConComision.length} producto{itemsConComision.length === 1 ? '' : 's'} seleccionado{selectedItemsConComision.length === 1 ? '' : 's'}</CardTitle>
-        </CardHeader>
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-slate-900 text-white">
-                <tr>
-                  <th className="px-4 py-3 w-10">
-                    <input
-                      type="checkbox"
-                      className="h-4 w-4 cursor-pointer accent-emerald-600 align-middle"
-                      checked={todosSeleccionados}
-                      onChange={toggleTodos}
-                      aria-label="Seleccionar todo"
-                    />
-                  </th>
-                  <th className="text-left px-4 py-3 font-medium">Fecha</th>
-                  <th className="text-left px-4 py-3 font-medium">Factura</th>
-                  <th className="text-left px-4 py-3 font-medium">Cliente</th>
-                  <th className="text-left px-4 py-3 font-medium">Sector</th>
-                  <th className="text-left px-4 py-3 font-medium">Producto</th>
-                  <th className="text-right px-4 py-3 font-medium">Cantidad</th>
-                  <th className="text-right px-4 py-3 font-medium">Total</th>
-                  <th className="text-left px-4 py-3 font-medium">Comisionistas</th>
-                  <th className="text-right px-4 py-3 font-medium">Comisión Total</th>
-                </tr>
-              </thead>
-              <tbody>
-                {itemsConComision.length === 0 ? (
-                  <tr>
-                    <td colSpan={10} className="px-4 py-8 text-center text-slate-500">
-                      No hay registros con el filtro seleccionado
-                    </td>
-                  </tr>
-                ) : (
-                  gruposPorOrden.flatMap(([key, grupo]) => {
-                    const seleccionado = !excludedIds.has(key);
-                    const expandida = expandedOrdenIds.has(key);
-                    const cab = grupo[0];
-                    const cantOrden = grupo.reduce((s, i) => s + i.cantidad, 0);
-                    const totOrden = grupo.reduce((s, i) => s + i.total, 0);
-                    const comOrden = grupo.reduce((s, i) => s + i.comisionTotal, 0);
-                    const filas = [
-                      <tr key={key} className={`border-t-2 border-slate-200 transition-colors ${seleccionado ? 'hover:bg-slate-50/50' : 'bg-slate-50/60 text-slate-400'}`}>
-                        <td className="px-4 py-3">
-                          <input
-                            type="checkbox"
-                            className="h-4 w-4 cursor-pointer accent-emerald-600 align-middle"
-                            checked={seleccionado}
-                            onChange={() => toggleOrden(key)}
-                            aria-label={`Seleccionar orden ${cab.numeroOrden}`}
-                          />
-                        </td>
-                        <td className="px-4 py-3 text-slate-500">{cab.fecha}</td>
-                        <td className="px-4 py-3">
-                          <button
-                            type="button"
-                            onClick={() => toggleCollapse(key)}
-                            className="flex items-center gap-1 font-medium text-slate-900 hover:text-slate-600"
-                            aria-expanded={expandida}
-                          >
-                            <ChevronRight className={`h-4 w-4 text-slate-400 shrink-0 transition-transform duration-200 ${expandida ? 'rotate-90' : ''}`} />
-                            {cab.numeroOrden}
-                          </button>
-                        </td>
-                        <td className="px-4 py-3 text-slate-500">{cab.cliente?.nombre || '-'}</td>
-                        <td className="px-4 py-3 text-slate-400">—</td>
-                        <td className="px-4 py-3 text-slate-500">{grupo.length} producto{grupo.length === 1 ? '' : 's'}</td>
-                        <td className="px-4 py-3 text-right text-slate-700">{cantOrden.toLocaleString('es-ES')}</td>
-                        <td className="px-4 py-3 text-right text-slate-500">${totOrden.toFixed(2)}</td>
-                        <td className="px-4 py-3" />
-                        <td className="px-4 py-3 text-right font-semibold text-slate-900">${comOrden.toFixed(2)}</td>
-                      </tr>
-                    ];
-                    filas.push(
-                      <tr key={`${key}-detalle`}>
-                        <td colSpan={10} className="p-0">
-                          <div className={`grid transition-[grid-template-rows] duration-200 ease-out ${expandida ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}>
-                            <div className="overflow-hidden">
-                              <table className="w-full text-sm bg-slate-50/40">
-                                <tbody>
-                                  {grupo.map(item => (
-                                    <tr key={item.id} className={`transition-colors hover:bg-slate-100/50 ${seleccionado ? '' : 'text-slate-400'}`}>
-                                      <td className="pl-14 pr-4 py-2 text-slate-500 w-[22%]">{item.fincaRel?.nombre || item.finca}</td>
-                                      <td className="px-4 py-2 text-slate-700 w-[18%]">{item.productoRel?.nombre || item.producto}</td>
-                                      <td className="px-4 py-2 text-right text-slate-700 w-[10%]">
-                                        {item.cantidad.toLocaleString('es-ES')} <span className="text-xs text-slate-400">{item.unidad}</span>
-                                      </td>
-                                      <td className="px-4 py-2 text-right text-slate-500 w-[10%]">${item.total.toFixed(2)}</td>
-                                      <td className="px-4 py-2">
-                                        {item.comisionesAsignadas.length > 0 ? (
-                                          <div className="space-y-1">
-                                            {item.comisionesAsignadas.map(com => (
-                                              <Badge key={com.id} variant="outline" className="flex w-fit gap-1 text-xs bg-white text-slate-700 border-slate-200">
-                                                <span>{com.nombre}</span>
-                                                <span className="text-slate-400">·</span>
-                                                <span>{com.tarifasLabel}</span>
-                                                <span className="text-slate-400">·</span>
-                                                <span className={com.comision > 0 ? 'text-emerald-700' : 'text-amber-700'}>
-                                                  ${com.comision.toFixed(2)}
-                                                </span>
-                                              </Badge>
-                                            ))}
-                                          </div>
-                                        ) : (
-                                          <span className="text-xs text-slate-400">-</span>
-                                        )}
-                                      </td>
-                                      <td className="px-4 py-2 text-right font-semibold text-slate-900 w-[12%]">
-                                        ${item.comisionTotal.toFixed(2)}
-                                      </td>
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
-                            </div>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                    return filas;
-                  })
+              <div className="flex flex-col gap-1.5">
+                {resumenPorComisionista.length === 0 && (
+                  <p className="rounded-[10px] border border-border px-3 py-4 text-center text-xs text-[#7A8798]">
+                    Las facturas seleccionadas no tienen comisionistas pendientes. Se liquidarán con
+                    comisión $0,00.
+                  </p>
                 )}
-              </tbody>
-              <tfoot className="bg-slate-50 border-t-2 border-slate-200">
-                <tr>
-                  <td colSpan={6} className="px-4 py-3 font-medium text-slate-700">Totales</td>
-                  <td className="px-4 py-3 text-right font-bold text-slate-900 tabular-nums">
-                    {totalCantidad.toLocaleString('es-ES')}
-                  </td>
-                  <td className="px-4 py-3 text-right font-bold text-slate-900 tabular-nums">
-                    ${totalOrden.toFixed(2)}
-                  </td>
-                  <td className="px-4 py-3 text-right font-medium text-slate-700">
-                    Total Comisión:
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <span className="text-xl font-bold text-slate-900 tabular-nums">${totalComision.toFixed(2)}</span>
-                  </td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
-        </CardContent>
-      </Card>
+                {resumenPorComisionista.map((com) => {
+                  const on = comisionistasAPagar.has(com.id);
+                  return (
+                    <label
+                      key={com.id}
+                      className={`grid cursor-pointer grid-cols-[22px_minmax(0,1fr)_130px_70px_110px] items-center gap-3 rounded-[10px] border px-3 py-2.5 transition-colors ${
+                        on ? 'border-[#CFE3E0] bg-[#F7FBFA]' : 'border-border bg-white'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        className="size-[17px] cursor-pointer accent-primary"
+                        checked={on}
+                        onChange={() => toggleComisionistaAPagar(com.id)}
+                      />
+                      <span className="truncate text-[13px] font-medium text-[#0B1220]">
+                        {com.nombre}
+                      </span>
+                      <span className="truncate text-xs text-[#6B7684]">{com.tarifasLabel}</span>
+                      <span className="cifra text-right text-xs text-[#6B7684]">
+                        {com.items} ítem{com.items === 1 ? '' : 's'}
+                      </span>
+                      <span
+                        className="cifra text-right text-[13px] font-semibold"
+                        style={{ color: on ? '#0F766E' : '#98A2B3' }}
+                      >
+                        {money(com.comision)}
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card className="card-elevated rounded-2xl">
-          <CardContent className="pt-6">
-            <p className="text-xs text-slate-500 uppercase tracking-wide">Total Orden</p>
-            <p className="text-2xl font-bold text-slate-900 mt-1 tabular-nums">${totalOrden.toFixed(2)}</p>
-          </CardContent>
-        </Card>
-        <Card className="card-elevated rounded-2xl">
-          <CardContent className="pt-6">
-            <p className="text-xs text-slate-500 uppercase tracking-wide">Cantidad Total</p>
-            <p className="text-2xl font-bold text-slate-900 mt-1 tabular-nums">{totalCantidad.toLocaleString('es-ES')}</p>
-          </CardContent>
-        </Card>
-        <Card className="bg-slate-900 text-white rounded-2xl border-0">
-          <CardContent className="pt-6">
-            <p className="text-xs text-slate-400 uppercase tracking-wide">Comisión Total</p>
-            <p className="text-2xl font-bold mt-1 tabular-nums">${totalComision.toFixed(2)}</p>
-          </CardContent>
-        </Card>
-      </div>
+            <div className="rounded-xl border border-[#CFE3E0] bg-[#F7FBFA] px-[18px] py-4">
+              <div className="grid gap-x-[18px] gap-y-2.5 sm:grid-cols-2">
+                {[
+                  { label: 'Facturas a liquidar', valor: String(cantidadOrdenes) },
+                  { label: 'Registros', valor: String(selectedItemsConComision.length) },
+                  {
+                    label: 'Comisionistas',
+                    valor: `${comisionistasAPagar.size} de ${resumenPorComisionista.length}`,
+                  },
+                  { label: 'Comisiones a pagar', valor: String(itemsAPagar) },
+                ].map((r) => (
+                  <div key={r.label} className="flex items-baseline justify-between gap-2.5">
+                    <span className="text-[12.5px] text-[#4B6A66]">{r.label}</span>
+                    <span className="cifra text-[13px] font-medium text-[#0B1220]">{r.valor}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-3.5 flex items-baseline justify-between border-t border-[#CFE3E0] pt-3.5">
+                <span className="text-[13px] font-semibold text-[#0B5E56]">Total a pagar</span>
+                <span className="cifra text-[28px] font-semibold text-primary">
+                  {money(totalAPagar)}
+                </span>
+              </div>
+            </div>
 
-      <Card className="card-elevated rounded-2xl overflow-hidden">
-        <CardHeader className="pb-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <CardTitle className="text-base text-slate-900">Resumen por Comisionista</CardTitle>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleExportTotalesExcel}
-            className="rounded-xl border-slate-200 sm:w-auto w-full"
-          >
-            <FileSpreadsheet className="h-4 w-4 mr-2 text-emerald-600" />
-            Exportar Totales
-          </Button>
-        </CardHeader>
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-slate-900 text-white">
-                <tr>
-                  <th className="text-left px-4 py-3 font-medium">Comisionista</th>
-                  <th className="text-left px-4 py-3 font-medium">Tarifa Aplicada</th>
-                  <th className="text-right px-4 py-3 font-medium">Items</th>
-                  <th className="text-right px-4 py-3 font-medium">Comisión Total</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {resumenPorComisionista.length === 0 ? (
-                  <tr>
-                    <td colSpan={4} className="px-4 py-8 text-center text-slate-500">
-                      No hay comisionistas asignados
-                    </td>
-                  </tr>
-                ) : (
-                  resumenPorComisionista.map((com) => (
-                    <tr key={com.id} className="hover:bg-slate-50/50 transition-colors">
-                      <td className="px-4 py-3 text-slate-900 font-medium">{com.nombre}</td>
-                      <td className="px-4 py-3 text-slate-500">{com.tarifasLabel}</td>
-                      <td className="px-4 py-3 text-right text-slate-700">{com.items}</td>
-                      <td className="px-4 py-3 text-right font-semibold text-emerald-700">
-                        ${com.comision.toFixed(2)}
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-              <tfoot className="bg-slate-50 border-t-2 border-slate-200">
-                <tr>
-                  <td colSpan={3} className="px-4 py-3 font-medium text-slate-700 text-right">Total Comisión:</td>
-                  <td className="px-4 py-3 text-right">
-                    <span className="text-lg font-bold text-slate-900 tabular-nums">${totalComision.toFixed(2)}</span>
-                  </td>
-                </tr>
-              </tfoot>
-            </table>
+            <div className="space-y-2">
+              <Label className="text-[11.5px] font-semibold text-[#475467]">
+                Nombre de la liquidación
+              </Label>
+              <Input
+                placeholder="Ej: Liquidación Mayo 2026"
+                value={nombreLiquidacion}
+                onChange={(e) => setNombreLiquidacion(e.target.value)}
+                className="rounded-[9px]"
+              />
+            </div>
           </div>
-        </CardContent>
-      </Card>
+
+          <div className="flex justify-end gap-2.5 border-t border-[#EDEFF2] pt-3.5">
+            <Button variant="outline" onClick={() => setPreviewOpen(false)} className="rounded-[9px]">
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleSave}
+              disabled={
+                (resumenPorComisionista.length > 0 && comisionistasAPagar.size === 0) ||
+                !nombreLiquidacion.trim()
+              }
+              className="rounded-[9px]"
+            >
+              Confirmar y guardar
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

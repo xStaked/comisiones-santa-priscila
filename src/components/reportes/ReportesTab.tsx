@@ -13,23 +13,30 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import {
-  Filter,
   FileText,
   FileSpreadsheet,
-  BarChart3,
   DollarSign,
   Package,
   Users,
   TrendingUp,
-  CalendarDays,
   MapPin,
   Fish,
   UserCheck,
   GitCompare,
-  LineChart,
   ChevronDown,
   Play,
 } from 'lucide-react';
+import {
+  BarraProgreso,
+  BotonFiltro,
+  BotonPrimario,
+  BotonSecundario,
+  Panel,
+  PanelTitulo,
+  Segmentado,
+  money,
+  num,
+} from '@/components/ui/dc';
 import { useApp } from '@/context/AppContext';
 import { OrdenItem, TarifaClienteProducto } from '@/types';
 import { fetchOrdenes, fetchTarifasClienteProducto } from '@/lib/api';
@@ -46,11 +53,19 @@ import {
   exportarReporteExcel,
   calcularComisionTotalItem,
 } from '@/lib/export-utils';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { toast } from 'sonner';
+
+const DIMENSIONES = [
+  { valor: 'cliente', label: 'Cliente' },
+  { valor: 'sector', label: 'Sector' },
+  { valor: 'producto', label: 'Producto' },
+  { valor: 'comisionista', label: 'Comisionista' },
+] as const;
+
+type Dimension = (typeof DIMENSIONES)[number]['valor'];
+
+const COLS_DESGLOSE = 'grid-cols-[minmax(0,1.6fr)_90px_120px_130px_130px_150px]';
 
 // Selector multi con buscador para listas grandes (productos, comisionistas).
 function MultiSelect({
@@ -115,7 +130,7 @@ function MultiSelect({
 
   return (
     <div className="space-y-1.5">
-      <Label className="text-xs text-slate-500 flex items-center gap-1">
+      <Label className="flex items-center gap-1 text-[11.5px] font-semibold text-[#475467]">
         <Icon className="h-3 w-3" />
         {label}
       </Label>
@@ -123,37 +138,37 @@ function MultiSelect({
         ref={triggerRef}
         type="button"
         onClick={() => setOpen(o => !o)}
-        className="w-full flex items-center justify-between gap-2 h-9 rounded-xl border border-slate-200 bg-white px-2.5 text-sm text-left"
+        className="flex h-9 w-full items-center justify-between gap-2 rounded-[9px] border border-[#E0E4E9] bg-white px-2.5 text-left text-[12.5px]"
       >
-        <span className={`truncate ${selected.length ? 'text-slate-800' : 'text-slate-400'}`}>{resumen}</span>
-        <ChevronDown className="h-4 w-4 text-slate-400 shrink-0" />
+        <span className={`truncate ${selected.length ? 'text-[#0B1220]' : 'text-[#98A2B3]'}`}>{resumen}</span>
+        <ChevronDown className="size-3.5 shrink-0 text-[#98A2B3]" />
       </button>
       {open && coords && createPortal(
         <div
           ref={panelRef}
           style={{ position: 'fixed', top: coords.top, left: coords.left, width: coords.width, zIndex: 1000 }}
-          className="min-w-[220px] rounded-xl border border-slate-200 bg-white shadow-lg"
+          className="min-w-[220px] rounded-xl border border-border bg-white shadow-lg"
         >
-          <div className="p-2 border-b border-slate-100">
+          <div className="p-2 border-b border-[#EDEFF2]">
             <input
               autoFocus
               value={query}
               onChange={e => setQuery(e.target.value)}
               placeholder="Buscar…"
-              className="w-full h-8 rounded-lg border border-slate-200 px-2 text-sm outline-none focus:border-slate-400"
+              className="w-full h-8 rounded-lg border border-border px-2 text-sm outline-none focus:border-slate-400"
             />
           </div>
           <div className="max-h-60 overflow-y-auto p-1">
             {filtradas.length === 0 ? (
-              <div className="px-2 py-3 text-center text-xs text-slate-400">Sin resultados</div>
+              <div className="px-2 py-3 text-center text-xs text-[#98A2B3]">Sin resultados</div>
             ) : (
               filtradas.map(opt => (
-                <label key={opt} className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-slate-50 cursor-pointer text-sm">
+                <label key={opt} className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-[#FAFBFC] cursor-pointer text-sm">
                   <input
                     type="checkbox"
                     checked={selected.includes(opt)}
                     onChange={() => toggle(opt)}
-                    className="h-4 w-4 rounded border-slate-300"
+                    className="h-4 w-4 rounded border-[#C6CDD6]"
                   />
                   <span className="truncate">{opt}</span>
                 </label>
@@ -161,9 +176,9 @@ function MultiSelect({
             )}
           </div>
           {selected.length > 0 && (
-            <div className="p-2 border-t border-slate-100 flex justify-between">
-              <button type="button" onClick={() => onChange([])} className="text-xs text-slate-500 hover:text-slate-700">Limpiar selección</button>
-              <span className="text-xs text-slate-400">{selected.length} de {options.length}</span>
+            <div className="p-2 border-t border-[#EDEFF2] flex justify-between">
+              <button type="button" onClick={() => onChange([])} className="text-xs text-[#7A8798] hover:text-[#344054]">Limpiar selección</button>
+              <span className="text-xs text-[#98A2B3]">{selected.length} de {options.length}</span>
             </div>
           )}
         </div>,
@@ -195,6 +210,9 @@ export function ReportesTab() {
   const [productosSel, setProductosSel] = useState<string[]>([]);
   const [comisionistasSel, setComisionistasSel] = useState<string[]>([]);
   const [clientesSel, setClientesSel] = useState<string[]>([]);
+
+  // Dimensión del desglose (una sola tabla conmutada, como en el prototipo).
+  const [dimension, setDimension] = useState<Dimension>('cliente');
 
   // Comparación de periodos (feature "comparar trimestres"). B siempre es un trimestre.
   const [comparar, setComparar] = useState(false);
@@ -310,7 +328,31 @@ export function ReportesTab() {
   const totalComision = itemsFiltrados.reduce((s, i) => s + calcularComisionTotalItem(i, comisionistas, tarifasEspecificas), 0);
   // Total de la tabla "Por Comisionista": suma solo las filas mostradas (importa al
   // filtrar por comisionista). Sin filtro coincide con totalComision.
-  const totalComisionComisionistas = resumenComisionistas.reduce((s, c) => s + c.totalComision, 0);
+
+  // Las cuatro agrupaciones normalizadas a una sola forma de fila, para el
+  // desglose conmutable del rediseño. `cantidad: null` = la dimensión no la tiene.
+  const filasDesglose = useMemo(() => {
+    const base =
+      dimension === 'sector'
+        ? resumenFincas.map((f) => ({ nombre: f.nombre, ordenes: f.ordenes, cantidad: f.cantidad, total: f.total, comision: f.comision, nota: undefined as string | undefined }))
+        : dimension === 'producto'
+          ? resumenProductos.map((p) => ({ nombre: p.nombre, ordenes: p.ordenes, cantidad: p.cantidad, total: p.total, comision: p.comision, nota: undefined as string | undefined }))
+          : dimension === 'comisionista'
+            ? resumenComisionistas.map((c) => ({
+                nombre: c.nombre,
+                ordenes: c.ordenes,
+                cantidad: null as number | null,
+                total: c.totalOrden,
+                comision: c.totalComision,
+                nota: c.tarifas,
+              }))
+            : resumenClientes.map((c) => ({ nombre: c.nombre, ordenes: c.ordenes, cantidad: c.cantidad, total: c.total, comision: c.comision, nota: undefined as string | undefined }));
+    return [...base].sort((a, b) => b.comision - a.comision);
+  }, [dimension, resumenClientes, resumenFincas, resumenProductos, resumenComisionistas]);
+
+  const etiquetaDimension = DIMENSIONES.find((d) => d.valor === dimension)!.label;
+  const totalComisionDesglose = filasDesglose.reduce((s, f) => s + f.comision, 0);
+  const maxComisionDesglose = Math.max(0, ...filasDesglose.map((f) => f.comision));
   const comisionistasInvolucrados = new Set(
     itemsFiltrados.flatMap(i => i.comisionistas.map(a => a.comisionistaId))
   ).size;
@@ -390,250 +432,258 @@ export function ReportesTab() {
     : [];
 
   return (
-    <div className="space-y-6">
-      {/* Filtros */}
-      <Card className="card-elevated rounded-2xl">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2 text-slate-900">
-            <Filter className="h-4 w-4 text-slate-700" />
-            Filtros del Reporte
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="space-y-1.5">
-              <Label className="text-xs text-slate-500 flex items-center gap-1">
-                <CalendarDays className="h-3 w-3" />
-                Desde
-              </Label>
-              <Input type="date" value={fechaDesde} onChange={e => setFechaDesde(e.target.value)} className="bg-white border-slate-200 rounded-xl" />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs text-slate-500 flex items-center gap-1">
-                <CalendarDays className="h-3 w-3" />
-                Hasta
-              </Label>
-              <Input type="date" value={fechaHasta} onChange={e => setFechaHasta(e.target.value)} className="bg-white border-slate-200 rounded-xl" />
-            </div>
-            <div className="sm:col-span-2 flex flex-wrap items-end gap-2">
-              <div className="space-y-1.5">
-                <Label className="text-xs text-slate-500">Año</Label>
-                <select
-                  value={anioSel}
-                  onChange={e => setAnioSel(Number(e.target.value))}
-                  className="h-9 rounded-xl border border-slate-200 bg-white px-2 text-sm text-slate-700"
-                >
-                  {aniosDisponibles.map(a => <option key={a} value={a}>{a}</option>)}
-                </select>
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs text-slate-500">Trimestre</Label>
-                <select
-                  value={trimAplicado}
-                  onChange={e => { if (e.target.value) aplicarTrimestre(Number(e.target.value)); }}
-                  className="h-9 rounded-xl border border-slate-200 bg-white px-2 text-sm text-slate-700"
-                >
-                  <option value="">—</option>
-                  <option value="1">T1 · Ene–Mar</option>
-                  <option value="2">T2 · Abr–Jun</option>
-                  <option value="3">T3 · Jul–Sep</option>
-                  <option value="4">T4 · Oct–Dic</option>
-                </select>
-              </div>
-              <Button variant="outline" size="sm" onClick={() => { const r = anioRango(anioSel); setFechaDesde(r.inicio); setFechaHasta(r.fin); }} className="rounded-lg border-slate-200 text-slate-600">Año {anioSel}</Button>
-              <Button variant="outline" size="sm" onClick={() => { const r = semestreRango(anioSel, 1); setFechaDesde(r.inicio); setFechaHasta(r.fin); }} className="rounded-lg border-slate-200 text-slate-600">S1</Button>
-              <Button variant="outline" size="sm" onClick={() => { const r = semestreRango(anioSel, 2); setFechaDesde(r.inicio); setFechaHasta(r.fin); }} className="rounded-lg border-slate-200 text-slate-600">S2</Button>
-              <Button variant="outline" size="sm" onClick={limpiar} className="rounded-lg border-slate-200 text-slate-600">Limpiar</Button>
-            </div>
+    <div className="flex max-w-[1360px] flex-col gap-3.5">
+      {/* Filtros del reporte */}
+      <Panel className="flex flex-col gap-3 p-3.5">
+        <div className="flex flex-wrap items-center gap-2.5">
+          <Segmentado
+            valor={String(trimAplicado || '')}
+            opciones={[
+              { valor: '1', label: 'T1' },
+              { valor: '2', label: 'T2' },
+              { valor: '3', label: 'T3' },
+              { valor: '4', label: 'T4' },
+            ]}
+            onChange={(v) => aplicarTrimestre(Number(v))}
+          />
+          <BotonSecundario
+            onClick={() => {
+              const r = semestreRango(anioSel, 1);
+              setFechaDesde(r.inicio);
+              setFechaHasta(r.fin);
+            }}
+          >
+            S1
+          </BotonSecundario>
+          <BotonSecundario
+            onClick={() => {
+              const r = semestreRango(anioSel, 2);
+              setFechaDesde(r.inicio);
+              setFechaHasta(r.fin);
+            }}
+          >
+            S2
+          </BotonSecundario>
+          <BotonSecundario
+            onClick={() => {
+              const r = anioRango(anioSel);
+              setFechaDesde(r.inicio);
+              setFechaHasta(r.fin);
+            }}
+          >
+            Año {anioSel}
+          </BotonSecundario>
+          <select
+            value={anioSel}
+            onChange={(e) => setAnioSel(Number(e.target.value))}
+            className="h-9 rounded-[9px] border border-[#E0E4E9] bg-white px-2 text-[12.5px] text-[#475467]"
+            aria-label="Año del periodo"
+          >
+            {aniosDisponibles.map((a) => (
+              <option key={a} value={a}>
+                {a}
+              </option>
+            ))}
+          </select>
+
+          <div className="flex h-9 items-center gap-2 rounded-[9px] border border-[#E0E4E9] bg-white px-3">
+            <span className="text-[11.5px] text-[#7A8798]">Desde</span>
+            <input
+              type="date"
+              value={fechaDesde}
+              onChange={(e) => setFechaDesde(e.target.value)}
+              className="cifra bg-transparent text-[12.5px] text-[#0B1220] outline-none"
+            />
+            <span className="text-[#C6CDD6]">→</span>
+            <span className="text-[11.5px] text-[#7A8798]">Hasta</span>
+            <input
+              type="date"
+              value={fechaHasta}
+              onChange={(e) => setFechaHasta(e.target.value)}
+              className="cifra bg-transparent text-[12.5px] text-[#0B1220] outline-none"
+            />
           </div>
 
-          {/* Comparar periodos */}
-          <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50/50 p-3">
-            <label className="flex items-center gap-2 text-sm font-medium text-slate-700 cursor-pointer w-fit">
-              <input type="checkbox" checked={comparar} onChange={e => setComparar(e.target.checked)} className="h-4 w-4 rounded border-slate-300" />
-              <GitCompare className="h-4 w-4 text-slate-500" />
-              Comparar con otro trimestre
-            </label>
-            {comparar && (
-              <div className="mt-3 flex flex-wrap items-end gap-2">
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-slate-500">Año (B)</Label>
-                  <select value={anioB} onChange={e => setAnioB(Number(e.target.value))} className="h-9 rounded-xl border border-slate-200 bg-white px-2 text-sm text-slate-700">
-                    {aniosDisponibles.map(a => <option key={a} value={a}>{a}</option>)}
-                  </select>
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-slate-500">Trimestre (B)</Label>
-                  <select value={trimB} onChange={e => setTrimB(Number(e.target.value))} className="h-9 rounded-xl border border-slate-200 bg-white px-2 text-sm text-slate-700">
-                    <option value={1}>T1 · Ene–Mar</option>
-                    <option value={2}>T2 · Abr–Jun</option>
-                    <option value={3}>T3 · Jul–Sep</option>
-                    <option value={4}>T4 · Oct–Dic</option>
-                  </select>
-                </div>
-                <span className="text-xs text-slate-400 pb-2">Compara el periodo A (arriba) contra B.</span>
-              </div>
-            )}
-          </div>
+          <BotonFiltro activo={comparar} onClick={() => setComparar(!comparar)}>
+            <GitCompare className="size-3.5" /> Comparar periodos
+          </BotonFiltro>
+          <BotonSecundario onClick={limpiar}>Limpiar</BotonSecundario>
 
-          <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 mt-4">
-            <MultiSelect label="Clientes" icon={Users} options={clientesUnicos} selected={clientesSel} onChange={setClientesSel} />
-            <MultiSelect label="Sectores" icon={MapPin} options={fincasUnicas} selected={fincasSel} onChange={setFincasSel} />
-            <MultiSelect label="Productos" icon={Fish} options={productosUnicos} selected={productosSel} onChange={setProductosSel} />
-            <MultiSelect label="Comisionistas" icon={UserCheck} options={comisionistas.map(c => c.nombre)} selected={comisionistasSel} onChange={setComisionistasSel} />
-          </div>
+          <div className="flex-1" />
+          <BotonSecundario onClick={handleExportPDF}>
+            <FileText className="size-3.5 text-[#B91C1C]" /> PDF
+          </BotonSecundario>
+          <BotonSecundario onClick={handleExportExcel}>
+            <FileSpreadsheet className="size-3.5 text-primary" /> Excel
+          </BotonSecundario>
+        </div>
 
-          {/* Generar: el reporte no se actualiza hasta pulsar este botón */}
-          <div className="mt-4 flex items-center justify-end gap-3">
-            {hayCambios && <span className="text-xs text-amber-600">Hay cambios sin aplicar</span>}
-            <Button onClick={generar} className="rounded-xl bg-slate-900 text-white hover:bg-slate-800">
-              <Play className="h-4 w-4 mr-2" />
-              Generar reporte
-            </Button>
+        {comparar && (
+          <div className="flex flex-wrap items-center gap-2.5 rounded-[10px] border border-border bg-[#FAFBFC] px-3 py-2.5">
+            <span className="text-[11.5px] text-[#7A8798]">Periodo B</span>
+            <select
+              value={anioB}
+              onChange={(e) => setAnioB(Number(e.target.value))}
+              className="h-8 rounded-lg border border-[#E0E4E9] bg-white px-2 text-[12.5px] text-[#475467]"
+              aria-label="Año del periodo B"
+            >
+              {aniosDisponibles.map((a) => (
+                <option key={a} value={a}>
+                  {a}
+                </option>
+              ))}
+            </select>
+            <select
+              value={trimB}
+              onChange={(e) => setTrimB(Number(e.target.value))}
+              className="h-8 rounded-lg border border-[#E0E4E9] bg-white px-2 text-[12.5px] text-[#475467]"
+              aria-label="Trimestre del periodo B"
+            >
+              <option value={1}>T1 · Ene–Mar</option>
+              <option value={2}>T2 · Abr–Jun</option>
+              <option value={3}>T3 · Jul–Sep</option>
+              <option value={4}>T4 · Oct–Dic</option>
+            </select>
+            <span className="text-[11.5px] text-[#98A2B3]">
+              Compara el periodo A (arriba) contra B.
+            </span>
           </div>
-        </CardContent>
-      </Card>
+        )}
+
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-4">
+          <MultiSelect label="Clientes" icon={Users} options={clientesUnicos} selected={clientesSel} onChange={setClientesSel} />
+          <MultiSelect label="Sectores" icon={MapPin} options={fincasUnicas} selected={fincasSel} onChange={setFincasSel} />
+          <MultiSelect label="Productos" icon={Fish} options={productosUnicos} selected={productosSel} onChange={setProductosSel} />
+          <MultiSelect label="Comisionistas" icon={UserCheck} options={comisionistas.map(c => c.nombre)} selected={comisionistasSel} onChange={setComisionistasSel} />
+        </div>
+
+        {/* Generar: el reporte no se actualiza hasta pulsar este botón */}
+        <div className="flex items-center justify-end gap-3">
+          {hayCambios && <span className="text-xs text-[#B45309]">Hay cambios sin aplicar</span>}
+          <BotonPrimario onClick={generar}>
+            <Play className="size-3.5" /> Generar reporte
+          </BotonPrimario>
+        </div>
+      </Panel>
 
       {/* KPIs */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <Card className="rounded-2xl border-slate-200 shadow-sm">
-          <CardContent className="pt-5">
-            <div className="flex items-center gap-2 text-xs text-slate-500 mb-1">
-              <Package className="h-3.5 w-3.5" />
-              Registros liquidados
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        {[
+          { label: 'Registros liquidados', valor: String(itemsFiltrados.length), icono: Package },
+          { label: 'Comisionistas', valor: String(comisionistasInvolucrados), icono: Users },
+          { label: 'Total facturado', valor: money(totalOrden), icono: DollarSign },
+        ].map((k) => (
+          <div key={k.label} className="rounded-xl border border-border bg-white px-4 py-[15px]">
+            <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.07em] text-[#7A8798]">
+              <k.icono className="size-3.5" />
+              {k.label}
             </div>
-            <p className="text-2xl font-bold text-slate-900">{itemsFiltrados.length}</p>
-          </CardContent>
-        </Card>
-        <Card className="rounded-2xl border-slate-200 shadow-sm">
-          <CardContent className="pt-5">
-            <div className="flex items-center gap-2 text-xs text-slate-500 mb-1">
-              <Users className="h-3.5 w-3.5" />
-              Comisionistas
-            </div>
-            <p className="text-2xl font-bold text-slate-900">{comisionistasInvolucrados}</p>
-          </CardContent>
-        </Card>
-        <Card className="rounded-2xl border-slate-200 shadow-sm">
-          <CardContent className="pt-5">
-            <div className="flex items-center gap-2 text-xs text-slate-500 mb-1">
-              <DollarSign className="h-3.5 w-3.5" />
-              Total Orden
-            </div>
-            <p className="text-2xl font-bold text-slate-900 tabular-nums">${totalOrden.toFixed(2)}</p>
-          </CardContent>
-        </Card>
-        <Card className="bg-slate-900 text-white rounded-2xl border-0 shadow-sm">
-          <CardContent className="pt-5">
-            <div className="flex items-center gap-2 text-xs text-slate-400 mb-1">
-              <TrendingUp className="h-3.5 w-3.5" />
-              Comisión Total
-            </div>
-            <p className="text-2xl font-bold tabular-nums">${totalComision.toFixed(2)}</p>
-          </CardContent>
-        </Card>
+            <div className="cifra mt-2.5 text-2xl font-semibold text-[#0B1220]">{k.valor}</div>
+          </div>
+        ))}
+        <div className="rounded-xl bg-[#0B1220] px-4 py-[15px] text-white">
+          <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.07em] text-[#8394AA]">
+            <TrendingUp className="size-3.5" />
+            Comisión total
+          </div>
+          <div className="cifra mt-2.5 text-2xl font-semibold">{money(totalComision)}</div>
+        </div>
       </div>
 
       {/* Comparación de periodos */}
       {aplicado.comparar && (
-        <Card className="rounded-2xl border-slate-200 shadow-sm">
-          <CardHeader className="pb-3">
-            <div className="flex items-center gap-2">
-              <GitCompare className="h-4 w-4 text-slate-500" />
-              <CardTitle className="text-base text-slate-900">
-                Comparación — A ({aplicado.fechaDesde || 'todo'} → {aplicado.fechaHasta || 'todo'}) vs B (T{aplicado.trimB} {aplicado.anioB})
-              </CardTitle>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              {[
-                { label: 'Registros', a: itemsFiltrados.length, b: itemsFiltradosB.length, money: false },
-                { label: 'Total Orden', a: totalOrden, b: totalOrdenB, money: true },
-                { label: 'Comisión Total', a: totalComision, b: totalComisionB, money: true },
-              ].map(m => {
-                const d = variacion(m.a, m.b);
-                const fmt = (v: number) => (m.money ? `$${v.toFixed(2)}` : String(v));
-                return (
-                  <div key={m.label} className="rounded-xl border border-slate-200 p-3">
-                    <div className="text-xs text-slate-500 mb-1">{m.label}</div>
-                    <div className="flex items-baseline gap-2 flex-wrap">
-                      <span className="text-lg font-bold text-slate-900 tabular-nums">{fmt(m.a)}</span>
-                      <span className="text-xs text-slate-400">vs {fmt(m.b)}</span>
-                    </div>
-                    <div className={`text-xs font-medium ${d >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
-                      {d >= 0 ? '▲' : '▼'} {Math.abs(d).toFixed(1)}%
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-slate-50 border-b border-slate-200">
-                  <tr>
-                    <th className="text-left px-4 py-2 font-medium text-slate-600">Comisionista</th>
-                    <th className="text-right px-4 py-2 font-medium text-slate-600">A</th>
-                    <th className="text-right px-4 py-2 font-medium text-slate-600">B</th>
-                    <th className="text-right px-4 py-2 font-medium text-slate-600">Variación</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {comparativaComisionistas.length === 0 ? (
-                    <tr><td colSpan={4} className="px-4 py-6 text-center text-slate-500">No hay datos</td></tr>
-                  ) : comparativaComisionistas.map((c, i) => (
-                    <tr key={i} className="hover:bg-slate-50/50 transition-colors">
-                      <td className="px-4 py-2 text-slate-900 font-medium">{c.nombre}</td>
-                      <td className="px-4 py-2 text-right text-slate-700">${c.a.toFixed(2)}</td>
-                      <td className="px-4 py-2 text-right text-slate-700">${c.b.toFixed(2)}</td>
-                      <td className={`px-4 py-2 text-right font-medium ${c.delta >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
-                        {c.delta >= 0 ? '▲' : '▼'} {Math.abs(c.delta).toFixed(1)}%
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+        <>
+          <div className="grid gap-3 sm:grid-cols-3">
+            {[
+              {
+                label: `Periodo A · ${aplicado.fechaDesde || 'todo'} → ${aplicado.fechaHasta || 'todo'}`,
+                valor: money(totalComision),
+                nota: `${itemsFiltrados.length} registros · ${money(totalOrden)} facturado`,
+                marca: '#0B1220',
+                borde: '#E5E8EC',
+              },
+              {
+                label: `Periodo B · T${aplicado.trimB} ${aplicado.anioB}`,
+                valor: money(totalComisionB),
+                nota: `${itemsFiltradosB.length} registros · ${money(totalOrdenB)} facturado`,
+                marca: '#0F766E',
+                borde: '#CFE3E0',
+              },
+              {
+                label: 'Variación',
+                valor: `${variacion(totalComision, totalComisionB) >= 0 ? '+' : '−'}${num(Math.abs(variacion(totalComision, totalComisionB)), 1)} %`,
+                nota: 'Comisión total A → B',
+                marca: '#B45309',
+                borde: '#F5E3B8',
+              },
+            ].map((c) => (
+              <div
+                key={c.label}
+                className="rounded-xl border bg-white px-[17px] py-[15px]"
+                style={{ borderColor: c.borde, borderLeft: `3px solid ${c.marca}` }}
+              >
+                <div className="truncate text-[11px] font-semibold uppercase tracking-[0.07em] text-[#7A8798]">
+                  {c.label}
+                </div>
+                <div className="cifra mt-2 text-[26px] font-semibold text-[#0B1220]">{c.valor}</div>
+                <div className="mt-1 text-xs text-[#7A8798]">{c.nota}</div>
+              </div>
+            ))}
+          </div>
 
-      {/* Acciones */}
-      <div className="flex justify-end gap-2">
-        <Button variant="outline" onClick={handleExportPDF} className="rounded-xl border-slate-200">
-          <FileText className="h-4 w-4 mr-2 text-red-500" />
-          Exportar PDF
-        </Button>
-        <Button variant="outline" onClick={handleExportExcel} className="rounded-xl border-slate-200">
-          <FileSpreadsheet className="h-4 w-4 mr-2 text-emerald-600" />
-          Exportar Excel
-        </Button>
-      </div>
+          <Panel>
+            <PanelTitulo titulo="Comisión por comisionista — A vs B" />
+            <div className="overflow-x-auto">
+              <div className="min-w-[600px]">
+                <div className="th-tabla grid grid-cols-[minmax(0,1.6fr)_130px_130px_130px] gap-3 border-b border-[#EDEFF2] bg-[#FAFBFC] px-5 py-2.5">
+                  <div>Comisionista</div>
+                  <div className="text-right">A</div>
+                  <div className="text-right">B</div>
+                  <div className="text-right">Variación</div>
+                </div>
+                {comparativaComisionistas.length === 0 ? (
+                  <div className="px-5 py-8 text-center text-sm text-[#98A2B3]">No hay datos</div>
+                ) : (
+                  comparativaComisionistas.map((c, i) => (
+                    <div
+                      key={i}
+                      className="grid grid-cols-[minmax(0,1.6fr)_130px_130px_130px] items-center gap-3 border-b border-[#F2F4F6] px-5 py-2.5 transition-colors hover:bg-[#FAFBFC]"
+                    >
+                      <div className="truncate text-[13px] text-[#0B1220]">{c.nombre}</div>
+                      <div className="cifra text-right text-[12.5px] text-[#344054]">{money(c.a)}</div>
+                      <div className="cifra text-right text-[12.5px] text-[#6B7684]">{money(c.b)}</div>
+                      <div
+                        className="cifra text-right text-[12.5px] font-semibold"
+                        style={{ color: c.delta >= 0 ? '#0F766E' : '#B45309' }}
+                      >
+                        {c.delta >= 0 ? '▲' : '▼'} {num(Math.abs(c.delta), 1)} %
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </Panel>
+        </>
+      )}
 
       {/* Gráfico */}
       {chartData.length > 0 && (
-        <Card className="rounded-2xl border-slate-200 shadow-sm">
-          <CardHeader className="pb-2">
-            <div className="flex items-center gap-2">
-              <BarChart3 className="h-4 w-4 text-slate-500" />
-              <CardTitle className="text-base text-slate-900">
-                Comisión por {resumenFincas.length > 0 ? 'Sector' : 'Producto'}
-              </CardTitle>
-            </div>
-          </CardHeader>
-          <CardContent>
+        <Panel>
+          <PanelTitulo titulo={`Comisión por ${resumenFincas.length > 0 ? 'sector' : 'producto'}`} />
+          <div className="px-5 py-4">
             <div className="h-64">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#EDEFF2" />
                   <XAxis
                     dataKey="name"
-                    tick={{ fill: '#64748b', fontSize: 11 }}
+                    tick={{ fill: '#7A8798', fontSize: 11 }}
                     axisLine={false}
                     tickLine={false}
                   />
                   <YAxis
-                    tick={{ fill: '#64748b', fontSize: 12 }}
+                    tick={{ fill: '#7A8798', fontSize: 12 }}
                     axisLine={false}
                     tickLine={false}
                     tickFormatter={(v: number) => `$${v.toLocaleString('es-ES')}`}
@@ -645,267 +695,135 @@ export function ReportesTab() {
                     }}
                     contentStyle={{
                       borderRadius: '12px',
-                      border: '1px solid #e2e8f0',
+                      border: '1px solid #E5E8EC',
                       boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
                     }}
                   />
-                  <Bar dataKey="comision" fill="#0f172a" radius={[6, 6, 0, 0]} />
+                  <Bar dataKey="comision" fill="#0F766E" radius={[6, 6, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </Panel>
       )}
 
       {/* Tendencia mensual */}
       {tendenciaMensual.length > 0 && (
-        <Card className="rounded-2xl border-slate-200 shadow-sm">
-          <CardHeader className="pb-2">
-            <div className="flex items-center gap-2">
-              <LineChart className="h-4 w-4 text-slate-500" />
-              <CardTitle className="text-base text-slate-900">Tendencia mensual de comisión</CardTitle>
-            </div>
-          </CardHeader>
-          <CardContent>
+        <Panel>
+          <PanelTitulo titulo="Tendencia mensual de comisión" nota="Comisión liquidada por mes" />
+          <div className="px-5 py-4">
             <div className="h-64">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={tendenciaMensual} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                  <XAxis dataKey="mes" tick={{ fill: '#64748b', fontSize: 11 }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fill: '#64748b', fontSize: 12 }} axisLine={false} tickLine={false} tickFormatter={(v: number) => `$${v.toLocaleString('es-ES')}`} />
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#EDEFF2" />
+                  <XAxis dataKey="mes" tick={{ fill: '#7A8798', fontSize: 11 }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fill: '#7A8798', fontSize: 12 }} axisLine={false} tickLine={false} tickFormatter={(v: number) => `$${v.toLocaleString('es-ES')}`} />
                   <Tooltip
                     formatter={(value: any) => {
                       const num = typeof value === 'number' ? value : Number(value);
                       return [`$${num.toFixed(2)}`, 'Comisión'];
                     }}
-                    contentStyle={{ borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                    contentStyle={{ borderRadius: '12px', border: '1px solid #E5E8EC', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
                   />
-                  <Bar dataKey="comision" fill="#0f172a" radius={[6, 6, 0, 0]} />
+                  <Bar dataKey="comision" fill="#0F766E" radius={[6, 6, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </Panel>
       )}
 
-      {/* Tablas */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Por Cliente */}
-        <Card className="rounded-2xl border-slate-200 shadow-sm overflow-hidden">
-          <CardHeader className="pb-3">
-            <div className="flex items-center gap-2">
-              <Users className="h-4 w-4 text-slate-500" />
-              <CardTitle className="text-base text-slate-900">Por Cliente</CardTitle>
-            </div>
-          </CardHeader>
-          <CardContent className="p-0">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-slate-50 border-b border-slate-200">
-                  <tr>
-                    <th className="text-left px-4 py-2 font-medium text-slate-600">Cliente</th>
-                    <th className="text-right px-4 py-2 font-medium text-slate-600">Órdenes</th>
-                    <th className="text-right px-4 py-2 font-medium text-slate-600">Cantidad</th>
-                    <th className="text-right px-4 py-2 font-medium text-slate-600">Total</th>
-                    <th className="text-right px-4 py-2 font-medium text-slate-600">Comisión</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {resumenClientes.length === 0 ? (
-                    <tr>
-                      <td colSpan={5} className="px-4 py-6 text-center text-slate-500">No hay datos</td>
-                    </tr>
-                  ) : (
-                    resumenClientes.map((c, idx) => (
-                      <tr key={idx} className="hover:bg-slate-50/50 transition-colors">
-                        <td className="px-4 py-2 text-slate-900 font-medium">{c.nombre}</td>
-                        <td className="px-4 py-2 text-right text-slate-700">{c.ordenes}</td>
-                        <td className="px-4 py-2 text-right text-slate-700">{c.cantidad.toLocaleString('es-ES')}</td>
-                        <td className="px-4 py-2 text-right text-slate-700">${c.total.toFixed(2)}</td>
-                        <td className="px-4 py-2 text-right font-semibold text-emerald-700">${c.comision.toFixed(2)}</td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-                {resumenClientes.length > 0 && (
-                  <tfoot className="bg-slate-50 border-t border-slate-200">
-                    <tr>
-                      <td className="px-4 py-2 font-medium text-slate-700">Totales</td>
-                      <td className="px-4 py-2 text-right font-bold text-slate-900">{resumenClientes.reduce((s, c) => s + c.ordenes, 0)}</td>
-                      <td className="px-4 py-2 text-right font-bold text-slate-900">{resumenClientes.reduce((s, c) => s + c.cantidad, 0).toLocaleString('es-ES')}</td>
-                      <td className="px-4 py-2 text-right font-bold text-slate-900">${resumenClientes.reduce((s, c) => s + c.total, 0).toFixed(2)}</td>
-                      <td className="px-4 py-2 text-right font-bold text-slate-900">${resumenClientes.reduce((s, c) => s + c.comision, 0).toFixed(2)}</td>
-                    </tr>
-                  </tfoot>
-                )}
-              </table>
-            </div>
-          </CardContent>
-        </Card>
+      {/* Desglose por dimensión — una sola tabla conmutable */}
+      <Panel>
+        <div className="flex flex-wrap items-center gap-3.5 border-b border-[#EDEFF2] px-[18px] py-3.5">
+          <div className="text-sm font-semibold text-[#0B1220]">Desglose por</div>
+          <Segmentado
+            valor={dimension}
+            opciones={DIMENSIONES}
+            onChange={(v) => setDimension(v)}
+          />
+          <div className="flex-1" />
+          <span className="text-xs text-[#7A8798]">
+            {filasDesglose.length} filas · ordenado por comisión
+          </span>
+        </div>
 
-        {/* Por Sector */}
-        <Card className="rounded-2xl border-slate-200 shadow-sm overflow-hidden">
-          <CardHeader className="pb-3">
-            <div className="flex items-center gap-2">
-              <MapPin className="h-4 w-4 text-slate-500" />
-              <CardTitle className="text-base text-slate-900">Por Sector</CardTitle>
+        <div className="overflow-x-auto">
+          <div className="min-w-[860px]">
+            <div className={`th-tabla grid ${COLS_DESGLOSE} gap-3 border-b border-[#EDEFF2] bg-[#FAFBFC] px-[18px] py-2.5`}>
+              <div>{etiquetaDimension}</div>
+              <div className="text-right">Facturas</div>
+              <div className="text-right">Cantidad</div>
+              <div className="text-right">Total</div>
+              <div className="text-right">Comisión</div>
+              <div>% del total</div>
             </div>
-          </CardHeader>
-          <CardContent className="p-0">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-slate-50 border-b border-slate-200">
-                  <tr>
-                    <th className="text-left px-4 py-2 font-medium text-slate-600">Sector</th>
-                    <th className="text-right px-4 py-2 font-medium text-slate-600">Órdenes</th>
-                    <th className="text-right px-4 py-2 font-medium text-slate-600">Cantidad</th>
-                    <th className="text-right px-4 py-2 font-medium text-slate-600">Total</th>
-                    <th className="text-right px-4 py-2 font-medium text-slate-600">Comisión</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {resumenFincas.length === 0 ? (
-                    <tr>
-                      <td colSpan={5} className="px-4 py-6 text-center text-slate-500">No hay datos</td>
-                    </tr>
-                  ) : (
-                    resumenFincas.map((f, idx) => (
-                      <tr key={idx} className="hover:bg-slate-50/50 transition-colors">
-                        <td className="px-4 py-2 text-slate-900 font-medium">{f.nombre}</td>
-                        <td className="px-4 py-2 text-right text-slate-700">{f.ordenes}</td>
-                        <td className="px-4 py-2 text-right text-slate-700">{f.cantidad.toLocaleString('es-ES')}</td>
-                        <td className="px-4 py-2 text-right text-slate-700">${f.total.toFixed(2)}</td>
-                        <td className="px-4 py-2 text-right font-semibold text-emerald-700">${f.comision.toFixed(2)}</td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-                {resumenFincas.length > 0 && (
-                  <tfoot className="bg-slate-50 border-t border-slate-200">
-                    <tr>
-                      <td className="px-4 py-2 font-medium text-slate-700">Totales</td>
-                      <td className="px-4 py-2 text-right font-bold text-slate-900">{resumenFincas.reduce((s, f) => s + f.ordenes, 0)}</td>
-                      <td className="px-4 py-2 text-right font-bold text-slate-900">{resumenFincas.reduce((s, f) => s + f.cantidad, 0).toLocaleString('es-ES')}</td>
-                      <td className="px-4 py-2 text-right font-bold text-slate-900">${resumenFincas.reduce((s, f) => s + f.total, 0).toFixed(2)}</td>
-                      <td className="px-4 py-2 text-right font-bold text-slate-900">${resumenFincas.reduce((s, f) => s + f.comision, 0).toFixed(2)}</td>
-                    </tr>
-                  </tfoot>
-                )}
-              </table>
-            </div>
-          </CardContent>
-        </Card>
 
-        {/* Por Producto */}
-        <Card className="rounded-2xl border-slate-200 shadow-sm overflow-hidden">
-          <CardHeader className="pb-3">
-            <div className="flex items-center gap-2">
-              <Fish className="h-4 w-4 text-slate-500" />
-              <CardTitle className="text-base text-slate-900">Por Producto</CardTitle>
-            </div>
-          </CardHeader>
-          <CardContent className="p-0">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-slate-50 border-b border-slate-200">
-                  <tr>
-                    <th className="text-left px-4 py-2 font-medium text-slate-600">Producto</th>
-                    <th className="text-right px-4 py-2 font-medium text-slate-600">Órdenes</th>
-                    <th className="text-right px-4 py-2 font-medium text-slate-600">Cantidad</th>
-                    <th className="text-right px-4 py-2 font-medium text-slate-600">Total</th>
-                    <th className="text-right px-4 py-2 font-medium text-slate-600">Comisión</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {resumenProductos.length === 0 ? (
-                    <tr>
-                      <td colSpan={5} className="px-4 py-6 text-center text-slate-500">No hay datos</td>
-                    </tr>
-                  ) : (
-                    resumenProductos.map((p, idx) => (
-                      <tr key={idx} className="hover:bg-slate-50/50 transition-colors">
-                        <td className="px-4 py-2 text-slate-900 font-medium">{p.nombre}</td>
-                        <td className="px-4 py-2 text-right text-slate-700">{p.ordenes}</td>
-                        <td className="px-4 py-2 text-right text-slate-700">{p.cantidad.toLocaleString('es-ES')}</td>
-                        <td className="px-4 py-2 text-right text-slate-700">${p.total.toFixed(2)}</td>
-                        <td className="px-4 py-2 text-right font-semibold text-emerald-700">${p.comision.toFixed(2)}</td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-                {resumenProductos.length > 0 && (
-                  <tfoot className="bg-slate-50 border-t border-slate-200">
-                    <tr>
-                      <td className="px-4 py-2 font-medium text-slate-700">Totales</td>
-                      <td className="px-4 py-2 text-right font-bold text-slate-900">{resumenProductos.reduce((s, p) => s + p.ordenes, 0)}</td>
-                      <td className="px-4 py-2 text-right font-bold text-slate-900">{resumenProductos.reduce((s, p) => s + p.cantidad, 0).toLocaleString('es-ES')}</td>
-                      <td className="px-4 py-2 text-right font-bold text-slate-900">${resumenProductos.reduce((s, p) => s + p.total, 0).toFixed(2)}</td>
-                      <td className="px-4 py-2 text-right font-bold text-slate-900">${resumenProductos.reduce((s, p) => s + p.comision, 0).toFixed(2)}</td>
-                    </tr>
-                  </tfoot>
-                )}
-              </table>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+            {filasDesglose.length === 0 ? (
+              <div className="px-[18px] py-10 text-center text-sm text-[#98A2B3]">
+                No hay datos para el periodo y los filtros aplicados
+              </div>
+            ) : (
+              filasDesglose.map((f, i) => {
+                const pct = totalComisionDesglose > 0 ? (f.comision / totalComisionDesglose) * 100 : 0;
+                const ancho = maxComisionDesglose > 0 ? (f.comision / maxComisionDesglose) * 100 : 0;
+                return (
+                  <div
+                    key={`${f.nombre}-${i}`}
+                    className={`grid ${COLS_DESGLOSE} items-center gap-3 border-b border-[#F2F4F6] px-[18px] py-2.5 transition-colors hover:bg-[#FAFBFC]`}
+                  >
+                    <div className="min-w-0">
+                      <div className="truncate text-[13px] text-[#0B1220]" title={f.nombre}>
+                        {f.nombre}
+                      </div>
+                      {f.nota && (
+                        <div className="truncate text-[11px] text-[#98A2B3]" title={f.nota}>
+                          {f.nota}
+                        </div>
+                      )}
+                    </div>
+                    <div className="cifra text-right text-[12.5px] text-[#6B7684]">{f.ordenes}</div>
+                    <div className="cifra text-right text-[12.5px] text-[#6B7684]">
+                      {f.cantidad === null ? '—' : num(f.cantidad, 0)}
+                    </div>
+                    <div className="cifra text-right text-[12.5px] text-[#344054]">{money(f.total)}</div>
+                    <div className="cifra text-right text-[13px] font-semibold text-primary">
+                      {money(f.comision)}
+                    </div>
+                    <div className="flex items-center gap-2.5">
+                      <BarraProgreso pct={ancho} color={i === 0 ? '#0F766E' : '#B7C3D3'} />
+                      <span className="cifra w-10 text-right text-[11.5px] text-[#6B7684]">
+                        {num(pct, 1)} %
+                      </span>
+                    </div>
+                  </div>
+                );
+              })
+            )}
 
-      {/* Por Comisionista */}
-      <Card className="rounded-2xl border-slate-200 shadow-sm overflow-hidden">
-        <CardHeader className="pb-3">
-          <div className="flex items-center gap-2">
-            <UserCheck className="h-4 w-4 text-slate-500" />
-            <CardTitle className="text-base text-slate-900">Por Comisionista</CardTitle>
+            {filasDesglose.length > 0 && (
+              <div className={`grid ${COLS_DESGLOSE} items-center gap-3 bg-[#FAFBFC] px-[18px] py-3`}>
+                <div className="text-[12px] font-semibold text-[#475467]">Totales</div>
+                <div className="cifra text-right text-[12.5px] font-semibold text-[#0B1220]">
+                  {filasDesglose.reduce((s, f) => s + f.ordenes, 0)}
+                </div>
+                <div className="cifra text-right text-[12.5px] font-semibold text-[#0B1220]">
+                  {filasDesglose.some((f) => f.cantidad === null)
+                    ? '—'
+                    : num(filasDesglose.reduce((s, f) => s + (f.cantidad ?? 0), 0), 0)}
+                </div>
+                <div className="cifra text-right text-[12.5px] font-semibold text-[#0B1220]">
+                  {money(filasDesglose.reduce((s, f) => s + f.total, 0))}
+                </div>
+                <div className="cifra text-right text-[13px] font-semibold text-primary">
+                  {money(totalComisionDesglose)}
+                </div>
+                <div className="cifra text-right text-[11.5px] text-[#6B7684]">100,0 %</div>
+              </div>
+            )}
           </div>
-        </CardHeader>
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-slate-50 border-b border-slate-200">
-                <tr>
-                  <th className="text-left px-4 py-3 font-medium text-slate-600">Comisionista</th>
-                  <th className="text-left px-4 py-3 font-medium text-slate-600">Tarifas</th>
-                  <th className="text-right px-4 py-3 font-medium text-slate-600">Órdenes</th>
-                  <th className="text-right px-4 py-3 font-medium text-slate-600">Total Orden</th>
-                  <th className="text-right px-4 py-3 font-medium text-slate-600">Comisión</th>
-                  <th className="text-right px-4 py-3 font-medium text-slate-600">% del total</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {resumenComisionistas.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className="px-4 py-8 text-center text-slate-500">No hay datos</td>
-                  </tr>
-                ) : (
-                  resumenComisionistas.map((c, idx) => (
-                    <tr key={idx} className="hover:bg-slate-50/50 transition-colors">
-                      <td className="px-4 py-3 text-slate-900 font-medium">{c.nombre}</td>
-                      <td className="px-4 py-3 text-slate-500">{c.tarifas}</td>
-                      <td className="px-4 py-3 text-right text-slate-700">{c.ordenes}</td>
-                      <td className="px-4 py-3 text-right text-slate-700">${c.totalOrden.toFixed(2)}</td>
-                      <td className="px-4 py-3 text-right font-semibold text-emerald-700">${c.totalComision.toFixed(2)}</td>
-                      <td className="px-4 py-3 text-right text-slate-500">
-                        {totalComisionComisionistas > 0 ? ((c.totalComision / totalComisionComisionistas) * 100).toFixed(1) : 0}%
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-              {resumenComisionistas.length > 0 && (
-                <tfoot className="bg-slate-50 border-t border-slate-200">
-                  <tr>
-                    <td colSpan={2} className="px-4 py-3 font-medium text-slate-700">Totales</td>
-                    <td className="px-4 py-3 text-right font-bold text-slate-900">{resumenComisionistas.reduce((s, c) => s + c.ordenes, 0)}</td>
-                    <td className="px-4 py-3 text-right font-bold text-slate-900">${resumenComisionistas.reduce((s, c) => s + c.totalOrden, 0).toFixed(2)}</td>
-                    <td className="px-4 py-3 text-right font-bold text-slate-900">${totalComisionComisionistas.toFixed(2)}</td>
-                    <td className="px-4 py-3 text-right font-bold text-slate-900">100%</td>
-                  </tr>
-                </tfoot>
-              )}
-            </table>
-          </div>
-        </CardContent>
-      </Card>
+        </div>
+      </Panel>
     </div>
   );
 }

@@ -47,7 +47,7 @@ export default function LoginPage() {
       <Card className="w-full max-w-md shadow-lg">
         <CardHeader className="space-y-1">
           <div className="flex items-center gap-3 mb-2">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-900">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#0B1220]">
               <Calculator className="h-5 w-5 text-white" />
             </div>
             <div>

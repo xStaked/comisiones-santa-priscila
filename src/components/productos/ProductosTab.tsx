@@ -1,13 +1,12 @@
 'use client';
 
 import { useState } from 'react';
-import { Plus, Pencil, Trash2, Search, Package, Weight, Droplets, Box, X, Tag } from 'lucide-react';
+import { Plus, Pencil, Trash2, Package, X, Tag } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { Producto } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -17,6 +16,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  BarraAcciones,
+  BotonPrimario,
+  Buscador,
+  Chip,
+  Etiqueta,
+  Panel,
+  Vacio,
+} from '@/components/ui/dc';
 import { toast } from 'sonner';
 
 const unidadLabels: Record<string, string> = {
@@ -29,16 +37,6 @@ const unidadLabels: Record<string, string> = {
   galon: 'Galón',
 };
 
-const unidadIcons: Record<string, React.ReactNode> = {
-  kg: <Weight className="h-3 w-3" />,
-  litro: <Droplets className="h-3 w-3" />,
-  tacho: <Box className="h-3 w-3" />,
-  saco: <Box className="h-3 w-3" />,
-  unidad: <Package className="h-3 w-3" />,
-  caneca: <Box className="h-3 w-3" />,
-  galon: <Droplets className="h-3 w-3" />,
-};
-
 const unidadPesoLabels: Record<string, string> = {
   kg: 'kg',
   litro: 'kg',
@@ -48,6 +46,33 @@ const unidadPesoLabels: Record<string, string> = {
   caneca: 'lt',
   galon: 'lt',
 };
+
+const COLS = 'grid-cols-[minmax(0,1.7fr)_150px_minmax(0,1.5fr)_minmax(0,1.2fr)_90px]';
+
+/**
+ * "Conversión verificada" del prototipo: en ámbar cuando falta el factor que
+ * la comisión necesita para pasar de envases a kg.
+ */
+function conversionDe(p: Producto): { texto: string; ok: boolean } {
+  const peso = unidadPesoLabels[p.unidadComision] ?? 'kg';
+  switch (p.unidadComision) {
+    case 'kg':
+    case 'litro':
+      return { texto: `Directo · 1 ${p.unidadComision} = 1 ${p.unidadComision}`, ok: true };
+    case 'tacho':
+      return p.tachoKilos
+        ? { texto: `1 tacho = ${p.tachoKilos} kg`, ok: true }
+        : { texto: 'Falta el factor de conversión', ok: false };
+    case 'saco':
+      return p.sacoKilos
+        ? { texto: `1 saco = ${p.sacoKilos} kg`, ok: true }
+        : { texto: 'Falta el factor de conversión', ok: false };
+    default:
+      return p.pesoPorUnidad
+        ? { texto: `1 ${p.unidadComision} = ${p.pesoPorUnidad} ${peso}`, ok: true }
+        : { texto: 'Falta el factor de conversión', ok: false };
+  }
+}
 
 export function ProductosTab() {
   const { productos, addProducto, updateProducto, deleteProducto } = useApp();
@@ -139,29 +164,25 @@ export function ProductosTab() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div className="relative w-full sm:w-80">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-          <Input
-            placeholder="Buscar producto..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9 bg-white border-slate-200 rounded-xl focus:border-slate-900 focus:ring-slate-900/10"
-          />
-        </div>
-        <Button
+    <div className="flex max-w-[1200px] flex-col gap-3.5">
+      <BarraAcciones>
+        <Buscador
+          value={search}
+          onChange={setSearch}
+          placeholder="Buscar producto…"
+          className="w-full sm:w-[280px]"
+        />
+        <div className="flex-1" />
+        <BotonPrimario
           onClick={() => {
             resetForm();
             setOpen(true);
           }}
-          className="btn-primary-dark rounded-xl"
         >
-          <Plus className="h-4 w-4 mr-2" />
-          Nuevo Producto
-        </Button>
+          <Plus className="size-3.5" /> Nuevo producto
+        </BotonPrimario>
         <Dialog open={open} onOpenChange={setOpen}>
-          <DialogContent className="sm:max-w-lg bg-white border-slate-200">
+          <DialogContent className="sm:max-w-lg">
             <DialogHeader>
               <DialogTitle>{editing ? 'Editar Producto' : 'Nuevo Producto'}</DialogTitle>
             </DialogHeader>
@@ -173,7 +194,7 @@ export function ProductosTab() {
                   value={form.nombre}
                   onChange={(e) => setForm({ ...form, nombre: e.target.value })}
                   placeholder="Ej: Camarón congelado"
-                  className="bg-white border-slate-200 rounded-xl focus:border-slate-900 focus:ring-slate-900/10"
+                  className="rounded-xl"
                 />
               </div>
 
@@ -185,7 +206,7 @@ export function ProductosTab() {
                     setForm({ ...form, unidadComision: value as 'kg' | 'litro' | 'tacho' | 'saco' | 'unidad' | 'caneca' | 'galon', tachoKilos: '', sacoKilos: '' })
                   }
                 >
-                  <SelectTrigger className="w-full rounded-xl border-slate-200 bg-white h-10 text-sm text-slate-900">
+                  <SelectTrigger className="w-full rounded-xl border-border bg-white h-10 text-sm text-[#0B1220]">
                     <SelectValue placeholder="Unidad">
                       {unidadLabels[form.unidadComision] || 'Unidad'}
                     </SelectValue>
@@ -213,7 +234,7 @@ export function ProductosTab() {
                     value={form.tachoKilos}
                     onChange={(e) => setForm({ ...form, tachoKilos: e.target.value })}
                     placeholder="Ej: 20"
-                    className="bg-white border-slate-200 rounded-xl focus:border-slate-900 focus:ring-slate-900/10"
+                    className="rounded-xl"
                   />
                 </div>
               )}
@@ -229,7 +250,7 @@ export function ProductosTab() {
                     value={form.sacoKilos}
                     onChange={(e) => setForm({ ...form, sacoKilos: e.target.value })}
                     placeholder="Ej: 25"
-                    className="bg-white border-slate-200 rounded-xl focus:border-slate-900 focus:ring-slate-900/10"
+                    className="rounded-xl"
                   />
                 </div>
               )}
@@ -244,9 +265,9 @@ export function ProductosTab() {
                   value={form.pesoPorUnidad}
                   onChange={(e) => setForm({ ...form, pesoPorUnidad: e.target.value })}
                   placeholder={form.unidadComision === 'caneca' ? 'Ej: 20 (litros por caneca)' : form.unidadComision === 'galon' ? 'Ej: 3.785 (litros por galón)' : 'Ej: 10 (para cajas de 10kg)'}
-                  className="bg-white border-slate-200 rounded-xl focus:border-slate-900 focus:ring-slate-900/10"
+                  className="rounded-xl"
                 />
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-[#7A8798]">
                   {form.unidadComision === 'caneca' || form.unidadComision === 'galon'
                     ? 'Opcional. Define cuántos litros contiene cada unidad para la conversión a kg.'
                     : 'Opcional. Usar cuando la cantidad en órdenes viene en unidades/cajas/sacas pero la comisión es por kg.'}
@@ -271,7 +292,7 @@ export function ProductosTab() {
                       }
                     }}
                     placeholder="Ej: ECU-BACILLUS SUELO-PASTILLA TH"
-                    className="bg-white border-slate-200 rounded-xl focus:border-slate-900 focus:ring-slate-900/10"
+                    className="rounded-xl"
                   />
                   <Button
                     type="button"
@@ -283,7 +304,7 @@ export function ProductosTab() {
                         setAliasInput('');
                       }
                     }}
-                    className="rounded-xl border-slate-200 shrink-0"
+                    className="shrink-0 rounded-xl"
                   >
                     <Plus className="h-4 w-4" />
                   </Button>
@@ -294,7 +315,7 @@ export function ProductosTab() {
                       <Badge
                         key={i}
                         variant="secondary"
-                        className="flex items-center gap-1 bg-slate-100 text-slate-700 border-0 pl-2 pr-1"
+                        className="flex items-center gap-1 bg-[#F0F2F5] text-[#344054] border-0 pl-2 pr-1"
                       >
                         <Tag className="h-3 w-3" />
                         {a}
@@ -303,7 +324,7 @@ export function ProductosTab() {
                           onClick={() =>
                             setForm({ ...form, alias: form.alias.filter((_, idx) => idx !== i) })
                           }
-                          className="ml-1 p-0.5 rounded hover:bg-slate-200"
+                          className="ml-1 p-0.5 rounded hover:bg-[#E5E8EC]"
                         >
                           <X className="h-3 w-3" />
                         </button>
@@ -321,106 +342,97 @@ export function ProductosTab() {
                     resetForm();
                     setOpen(false);
                   }}
-                  className="rounded-xl border-slate-200"
+                  className="rounded-xl"
                 >
                   Cancelar
                 </Button>
-                <Button type="submit" className="btn-primary-dark rounded-xl">
-                  {editing ? 'Guardar Cambios' : 'Crear Producto'}
+                <Button type="submit" className="rounded-xl">
+                  {editing ? 'Guardar cambios' : 'Crear producto'}
                 </Button>
               </div>
             </form>
           </DialogContent>
         </Dialog>
-      </div>
+      </BarraAcciones>
 
       {filtered.length === 0 ? (
-        <div className="text-center py-16 bg-white rounded-2xl border border-dashed border-slate-200">
-          <Package className="h-12 w-12 text-slate-300 mx-auto mb-4" />
-          <h3 className="text-lg font-medium text-slate-700">No hay productos</h3>
-          <p className="text-sm text-slate-500 mt-1">Crea tu primer producto para comenzar</p>
-        </div>
+        <Vacio
+          icono={Package}
+          titulo={productos.length === 0 ? 'No hay productos' : 'Ningún producto coincide'}
+          nota={
+            productos.length === 0
+              ? 'Crea tu primer producto para comenzar.'
+              : 'Prueba con otro nombre o alias.'
+          }
+        />
       ) : (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {filtered.map((p) => (
-            <Card key={p.id} className="card-elevated rounded-2xl">
-              <CardHeader className="pb-3">
-                <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-2">
-                    <CardTitle className="text-base font-semibold text-slate-900">{p.nombre}</CardTitle>
-                    {p.activo ? (
-                      <Badge variant="secondary" className="bg-emerald-50 text-emerald-700 border-0 text-xs">
-                        Activo
-                      </Badge>
-                    ) : (
-                      <Badge variant="secondary" className="bg-slate-100 text-slate-500 border-0 text-xs">
-                        Inactivo
-                      </Badge>
-                    )}
-                  </div>
-                  <div className="flex gap-1">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg"
-                      onClick={() => handleEdit(p)}
+        <Panel>
+          <div className="overflow-x-auto">
+            <div className="min-w-[900px]">
+              <div className={`th-tabla grid ${COLS} gap-3 border-b border-border bg-[#FAFBFC] px-[18px] py-2.5`}>
+                <div>Producto</div>
+                <div>Unidad de comisión</div>
+                <div>Conversión verificada</div>
+                <div>Alias</div>
+                <div className="text-right">Acciones</div>
+              </div>
+
+              {filtered.map((p) => {
+                const conv = conversionDe(p);
+                return (
+                  <div
+                    key={p.id}
+                    className={`grid ${COLS} items-center gap-3 border-b border-[#F2F4F6] px-[18px] py-3 transition-colors hover:bg-[#FAFBFC]`}
+                  >
+                    <div className="flex min-w-0 items-center gap-2">
+                      <span className="truncate text-[13px] text-[#0B1220]">{p.nombre}</span>
+                      {!p.activo && <Chip>Inactivo</Chip>}
+                    </div>
+                    <div>
+                      <Chip mono>{unidadLabels[p.unidadComision] ?? p.unidadComision}</Chip>
+                    </div>
+                    <div
+                      className="cifra truncate text-xs"
+                      style={{ color: conv.ok ? '#475467' : '#B45309' }}
+                      title={conv.texto}
                     >
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg"
-                      onClick={() => handleDelete(p.id)}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="pt-0 space-y-3">
-                <div className="flex flex-wrap gap-2">
-                  <Badge variant="secondary" className="flex items-center gap-1 bg-slate-100 text-slate-700 border-0">
-                    {unidadIcons[p.unidadComision]}
-                    {unidadLabels[p.unidadComision]}
-                  </Badge>
-                  {p.unidadComision === 'tacho' && p.tachoKilos !== undefined && (
-                    <Badge variant="secondary" className="flex items-center gap-1 bg-slate-100 text-slate-700 border-0">
-                      <Weight className="h-3 w-3" />
-                      {p.tachoKilos} kg/tacho
-                    </Badge>
-                  )}
-                  {p.unidadComision === 'saco' && p.sacoKilos !== undefined && (
-                    <Badge variant="secondary" className="flex items-center gap-1 bg-slate-100 text-slate-700 border-0">
-                      <Weight className="h-3 w-3" />
-                      {p.sacoKilos} kg/saco
-                    </Badge>
-                  )}
-                  {p.pesoPorUnidad !== undefined && (
-                    <Badge variant="secondary" className="flex items-center gap-1 bg-slate-100 text-slate-700 border-0">
-                      <Weight className="h-3 w-3" />
-                      {p.pesoPorUnidad} {unidadPesoLabels[p.unidadComision]}/unidad
-                    </Badge>
-                  )}
-                </div>
-                {p.alias && p.alias.length > 0 && (
-                  <div className="flex flex-wrap gap-1">
-                    {p.alias.map((a, i) => (
-                      <Badge
-                        key={i}
-                        variant="outline"
-                        className="text-xs text-slate-500 border-slate-200 bg-slate-50"
+                      {conv.texto}
+                    </div>
+                    <div className="flex min-w-0 flex-wrap gap-1.5">
+                      {(p.alias ?? []).length === 0 ? (
+                        <span className="text-xs text-[#98A2B3]">—</span>
+                      ) : (
+                        p.alias!.map((a, i) => (
+                          <Etiqueta key={i} title={a} className="max-w-[160px] truncate">
+                            {a}
+                          </Etiqueta>
+                        ))
+                      )}
+                    </div>
+                    <div className="flex justify-end gap-1.5">
+                      <button
+                        type="button"
+                        title="Editar"
+                        onClick={() => handleEdit(p)}
+                        className="inline-flex size-7 items-center justify-center rounded-[7px] border border-[#E0E4E9] bg-white text-[#98A2B3] transition hover:border-[#C6CDD6] hover:text-[#0B1220]"
                       >
-                        <Tag className="h-3 w-3 mr-1" />
-                        {a}
-                      </Badge>
-                    ))}
+                        <Pencil className="size-3" />
+                      </button>
+                      <button
+                        type="button"
+                        title="Eliminar"
+                        onClick={() => handleDelete(p.id)}
+                        className="inline-flex size-7 items-center justify-center rounded-[7px] border border-[#E0E4E9] bg-white text-[#98A2B3] transition hover:border-[#F5C2C2] hover:text-[#B91C1C]"
+                      >
+                        <Trash2 className="size-3" />
+                      </button>
+                    </div>
                   </div>
-                )}
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+                );
+              })}
+            </div>
+          </div>
+        </Panel>
       )}
     </div>
   );

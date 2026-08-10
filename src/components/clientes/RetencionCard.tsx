@@ -8,9 +8,8 @@ import { useApp } from '@/context/AppContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { BotonSecundario, Panel, PanelTitulo } from '@/components/ui/dc';
 import { toast } from 'sonner';
 import { createRetencion, deleteRetencion } from '@/lib/api';
 
@@ -72,33 +71,32 @@ export function RetencionCard() {
     new Date(iso.slice(0, 10) + 'T00:00:00').toLocaleDateString('es-ES');
 
   return (
-    <Card className="bg-white border-slate-200 rounded-xl">
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle className="text-sm font-medium text-slate-700 flex items-center gap-2">
-          <Percent className="h-4 w-4" />
-          Retención sobre facturas
-          {vigente && (
-            <Badge className="bg-slate-900 text-white">
-              Vigente: {vigente.porcentaje}% desde {formatearFecha(vigente.vigenteDesde)}
-            </Badge>
-          )}
-        </CardTitle>
-        <Button
-          size="sm"
-          variant="outline"
-          className="rounded-xl"
-          onClick={() => setOpen(true)}
-        >
-          <Plus className="h-4 w-4 mr-1" />
-          Agregar tramo
-        </Button>
-      </CardHeader>
-      <CardContent>
+    <Panel>
+      <PanelTitulo
+        titulo={
+          <span className="flex flex-wrap items-center gap-2">
+            <Percent className="size-3.5" />
+            Retención sobre facturas
+            {vigente && (
+              <span className="cifra rounded-full bg-[#0B1220] px-2 py-[2.5px] text-[11px] font-semibold text-white">
+                {vigente.porcentaje}% desde {formatearFecha(vigente.vigenteDesde)}
+              </span>
+            )}
+          </span>
+        }
+        nota="Se ancla a la fecha de emisión de cada factura"
+        accion={
+          <BotonSecundario onClick={() => setOpen(true)} className="h-8">
+            <Plus className="size-3.5" /> Agregar tramo
+          </BotonSecundario>
+        }
+      />
+      <div className="px-5 py-4">
         <div className="flex flex-wrap gap-2">
           {retenciones.map((r) => (
             <div
               key={r.id}
-              className="flex items-center gap-2 border border-slate-200 rounded-lg px-3 py-1.5 text-sm text-slate-600"
+              className="flex items-center gap-2 border border-border rounded-lg px-3 py-1.5 text-sm text-[#475467]"
             >
               <span>
                 {r.porcentaje}% desde {formatearFecha(r.vigenteDesde)}
@@ -106,7 +104,7 @@ export function RetencionCard() {
               <button
                 type="button"
                 aria-label="Eliminar tramo"
-                className="text-slate-400 hover:text-red-600"
+                className="text-[#98A2B3] hover:text-[#B91C1C]"
                 onClick={() => {
                   if (
                     confirm(
@@ -122,15 +120,15 @@ export function RetencionCard() {
             </div>
           ))}
         </div>
-        <p className="text-xs text-slate-400 mt-3">
+        <p className="mt-3 text-xs leading-[1.45] text-[#98A2B3]">
           Cada factura usa la retención vigente en su fecha de emisión. Agregar un
           tramo retroactivo recalcula las facturas aún no liquidadas de ese rango;
           lo ya liquidado no se modifica.
         </p>
-      </CardContent>
+      </div>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="sm:max-w-sm bg-white border-slate-200">
+        <DialogContent className="sm:max-w-sm">
           <DialogHeader>
             <DialogTitle>Nuevo tramo de retención</DialogTitle>
           </DialogHeader>
@@ -168,7 +166,7 @@ export function RetencionCard() {
               </Button>
               <Button
                 type="submit"
-                className="btn-primary-dark rounded-xl"
+                className="rounded-xl"
                 disabled={crearMutation.isPending}
               >
                 Guardar
@@ -177,6 +175,6 @@ export function RetencionCard() {
           </form>
         </DialogContent>
       </Dialog>
-    </Card>
+    </Panel>
   );
 }

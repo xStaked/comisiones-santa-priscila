@@ -1,15 +1,20 @@
 'use client';
 
 import { useState, useRef, useEffect, useMemo } from 'react';
-import { Plus, Upload, Trash2, Pencil, UserCheck, Calculator, FileUp, Check, X, Search, ChevronDown, ChevronRight, ChevronLeft, Filter, Calendar, ArrowUpDown } from 'lucide-react';
+import { Plus, Trash2, Pencil, UserCheck, Calculator, FileUp, Check, X, ChevronDown, ChevronRight, ChevronLeft, Calendar, ArrowUpDown } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { EstadoOrden, OrdenItem } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Badge } from '@/components/ui/badge';
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
 import {
   Select,
   SelectContent,
@@ -17,6 +22,20 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  Avatar,
+  BarraAcciones,
+  BotonFiltro,
+  BotonPrimario,
+  BotonSecundario,
+  Buscador,
+  Chip,
+  ChipEstado,
+  Panel,
+  Vacio,
+  money,
+  num,
+} from '@/components/ui/dc';
 import { toast } from 'sonner';
 import { uploadPDF, uploadImage, fetchFincas } from '@/lib/api';
 import { generarId } from '@/lib/id';
@@ -24,13 +43,24 @@ import { useQuery } from '@tanstack/react-query';
 import { encontrarTarifaEspecifica } from '@/lib/export-utils';
 
 const ESTADOS_ORDEN: { value: EstadoOrden; label: string; className: string }[] = [
-  { value: 'pendiente', label: 'Pendiente', className: 'bg-slate-100 text-slate-700 border-0' },
-  { value: 'parcialmente_pagada', label: 'Parcialmente pagada', className: 'bg-amber-100 text-amber-700 border-0' },
-  { value: 'pagada', label: 'Pagada', className: 'bg-emerald-100 text-emerald-700 border-0' },
-  { value: 'liquidada', label: 'Liquidada', className: 'bg-blue-100 text-blue-700 border-0' },
+  { value: 'pendiente', label: 'Pendiente', className: 'bg-[#F0F2F5] text-[#344054] border-0' },
+  { value: 'parcialmente_pagada', label: 'Parcialmente pagada', className: 'bg-[#FEF3E2] text-[#9A5B0B] border-0' },
+  { value: 'pagada', label: 'Pagada', className: 'bg-[#E6F2F0] text-[#0B5E56] border-0' },
+  { value: 'liquidada', label: 'Liquidada', className: 'bg-[#EAF0FB] text-[#1D4ED8] border-0' },
+];
+
+// Chips de estado de la barra del rediseño (mismo orden que el prototipo).
+const ESTADOS_FILTRO: { value: string; label: string }[] = [
+  { value: 'todos', label: 'Todas' },
+  { value: 'pendiente', label: 'Pendientes' },
+  { value: 'pagada', label: 'Pagadas' },
+  { value: 'liquidada', label: 'Liquidadas' },
 ];
 
 const ITEMS_PER_PAGE = 15;
+
+const COLS_ORDENES =
+  'grid-cols-[34px_minmax(0,132px)_92px_minmax(0,1.35fr)_minmax(0,1fr)_72px_108px_130px_96px_30px]';
 
 type OrdenAgrupada = {
   id: string;
@@ -113,10 +143,6 @@ function agruparOrdenes(
   });
 }
 
-function getEstadoOrdenMeta(estado?: string) {
-  return ESTADOS_ORDEN.find((item) => item.value === estado) ?? ESTADOS_ORDEN[0];
-}
-
 function getEstadoOrdenAgrupada(items: OrdenItem[]): EstadoOrden {
   const estados = items.map((item) => item.estado || 'pendiente');
   const primero = estados[0] || 'pendiente';
@@ -171,19 +197,19 @@ function MultiSelectComisionistas({
         type="button"
         disabled={disabled}
         onClick={() => setOpen(!open)}
-        className="flex items-center justify-between w-full min-h-10 px-3 py-2 rounded-xl border border-slate-200 bg-white text-sm text-slate-900 hover:border-slate-300 transition-colors disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400"
+        className="flex items-center justify-between w-full min-h-10 px-3 py-2 rounded-xl border border-border bg-white text-sm text-[#0B1220] hover:border-[#C6CDD6] transition-colors disabled:cursor-not-allowed disabled:bg-[#FAFBFC] disabled:text-[#98A2B3]"
       >
-        <span className={selectedIds.length === 0 ? 'text-slate-400' : ''}>
+        <span className={selectedIds.length === 0 ? 'text-[#98A2B3]' : ''}>
           {selectedIds.length === 0
             ? placeholder
             : (
               <span className="flex flex-wrap gap-1">
                 {selectedNames.map((name, i) => (
-                  <span key={selectedIds[i]} className="inline-flex items-center gap-0.5 bg-slate-100 px-1.5 py-0.5 rounded-md text-xs font-medium text-slate-700">
+                  <span key={selectedIds[i]} className="inline-flex items-center gap-0.5 bg-[#F0F2F5] px-1.5 py-0.5 rounded-md text-xs font-medium text-[#344054]">
                     {name}
                     <button
                       type="button"
-                      className="ml-0.5 hover:text-red-500"
+                      className="ml-0.5 hover:text-[#B91C1C]"
                       onClick={(e) => { e.stopPropagation(); toggle(selectedIds[i]); }}
                     >
                       <X className="h-3 w-3" />
@@ -194,27 +220,27 @@ function MultiSelectComisionistas({
             )
           }
         </span>
-        <ChevronDown className="h-4 w-4 text-slate-400 shrink-0 ml-1" />
+        <ChevronDown className="h-4 w-4 text-[#98A2B3] shrink-0 ml-1" />
       </button>
       {open && (
-        <div className="absolute z-[9999] mt-1 w-full bg-white border border-slate-200 rounded-xl shadow-lg max-h-60 overflow-auto">
+        <div className="absolute z-[9999] mt-1 w-full bg-white border border-border rounded-xl shadow-lg max-h-60 overflow-auto">
           {comisionistas.map(c => (
             <label
               key={c.id}
-              className="flex items-center gap-2 px-3 py-2 hover:bg-slate-50 cursor-pointer text-sm"
+              className="flex items-center gap-2 px-3 py-2 hover:bg-[#FAFBFC] cursor-pointer text-sm"
             >
               <input
                 type="checkbox"
                 checked={selectedIds.includes(c.id)}
                 disabled={disabled}
                 onChange={() => toggle(c.id)}
-                className="h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-900"
+                className="h-4 w-4 rounded border-[#C6CDD6] text-[#0B1220] focus:ring-slate-900"
               />
-              <span className="text-slate-700">{c.nombre}</span>
+              <span className="text-[#344054]">{c.nombre}</span>
             </label>
           ))}
           {comisionistas.length === 0 && (
-            <div className="px-3 py-2 text-sm text-slate-400">No hay comisionistas</div>
+            <div className="px-3 py-2 text-sm text-[#98A2B3]">No hay comisionistas</div>
           )}
         </div>
       )}
@@ -238,7 +264,7 @@ function EditFincaSelect({ clienteId, value, onChange }: { clienteId: string; va
       const f = (fincas || []).find((x: { id: string; nombre: string }) => x.id === id);
       onChange(id, f?.nombre || '');
     }}>
-      <SelectTrigger className="w-full rounded-xl border-slate-200 bg-white h-10 text-sm text-slate-900">
+      <SelectTrigger className="w-full rounded-xl border-border bg-white h-10 text-sm text-[#0B1220]">
         <SelectValue placeholder="Seleccionar sector">
           {nombreFincaSeleccionada}
         </SelectValue>
@@ -255,6 +281,8 @@ function EditFincaSelect({ clienteId, value, onChange }: { clienteId: string; va
 export function OrdenesTab() {
   const { comisionistas, ordenItems, addOrdenItems, updateOrdenItem, updateEstadoOrden, updateEstadoOrdenesMasivo, deleteOrdenItem, deleteOrdenItems, clearOrdenItems, assignComisionistasGlobal, clientes, productos, tarifasClienteProducto } = useApp();
   const [activeForm, setActiveForm] = useState<'manual' | 'pdf'>('manual');
+  // La carga vive en un panel lateral (rediseño), no en una tarjeta siempre visible.
+  const [sheetAbierto, setSheetAbierto] = useState(false);
   const [globalComisionistaIds, setGlobalComisionistaIds] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -625,7 +653,43 @@ export function OrdenesTab() {
     setFilterComisionistaId('todos');
   };
 
-  const hasActiveFilters = search || filterEstado !== 'todos' || filterFechaDesde || filterFechaHasta || filterComisionistaId !== 'todos';
+
+  // Contadores por estado para los chips de la barra (sobre facturas, no ítems).
+  const conteoPorEstado = useMemo(() => {
+    const porOrden = new Map<string, EstadoOrden | undefined>();
+    ordenItems.forEach(item => {
+      const k = item.ordenId || `${item.fecha}-${item.numeroOrden}-${item.clienteId || ''}`;
+      if (!porOrden.has(k)) porOrden.set(k, item.estado);
+    });
+    const estados = Array.from(porOrden.values());
+    return {
+      todos: estados.length,
+      pendiente: estados.filter(e => e === 'pendiente').length,
+      parcialmente_pagada: estados.filter(e => e === 'parcialmente_pagada').length,
+      pagada: estados.filter(e => e === 'pagada').length,
+      liquidada: estados.filter(e => e === 'liquidada').length,
+    } as Record<string, number>;
+  }, [ordenItems]);
+
+  const chipsActivos = [
+    filterEstado !== 'todos' && {
+      label: `Estado: ${etiquetaFiltroEstado}`,
+      quitar: () => { setFilterEstado('todos'); setCurrentPage(1); },
+    },
+    filterComisionistaId !== 'todos' && {
+      label: etiquetaFiltroComisionista,
+      quitar: () => { setFilterComisionistaId('todos'); setCurrentPage(1); },
+    },
+    filterFechaDesde && {
+      label: `Desde ${filterFechaDesde}`,
+      quitar: () => { setFilterFechaDesde(''); setCurrentPage(1); },
+    },
+    filterFechaHasta && {
+      label: `Hasta ${filterFechaHasta}`,
+      quitar: () => { setFilterFechaHasta(''); setCurrentPage(1); },
+    },
+    search && { label: `«${search}»`, quitar: () => { setSearch(''); setCurrentPage(1); } },
+  ].filter(Boolean) as { label: string; quitar: () => void }[];
 
   const toggleSort = (field: 'fecha' | 'total' | 'numeroOrden') => {
     if (sortField === field) {
@@ -637,55 +701,54 @@ export function OrdenesTab() {
   };
 
   return (
-    <div className="space-y-6">
-      <Card className="card-elevated rounded-2xl">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2 text-slate-900">
-            <Upload className="h-4 w-4 text-slate-700" />
-            Cargar Orden de Compra
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex gap-2 mb-4 flex-wrap">
-            <Button
-              variant={activeForm === 'manual' ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setActiveForm('manual')}
-              className={activeForm === 'manual' ? 'btn-primary-dark rounded-lg' : 'border-slate-200 text-slate-600 hover:bg-slate-50 rounded-lg'}
-            >
-              <Plus className="h-4 w-4 mr-1" />
-              Manual
-            </Button>
-            <Button
-              variant={activeForm === 'pdf' ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setActiveForm('pdf')}
-              className={activeForm === 'pdf' ? 'btn-primary-dark rounded-lg' : 'border-slate-200 text-slate-600 hover:bg-slate-50 rounded-lg'}
-            >
-              <FileUp className="h-4 w-4 mr-1" />
-              Cargar archivo
-            </Button>
+    <div className="flex max-w-[1360px] flex-col gap-3.5">
+      {/* Carga de facturas: panel lateral (rediseño) */}
+      <Sheet open={sheetAbierto} onOpenChange={setSheetAbierto}>
+        {/* La variante por defecto limita a max-w-sm; se sobreescribe con el mismo
+            selector para que tailwind-merge la deduplique y respete los 660px. */}
+        <SheetContent className="data-[side=right]:w-[660px] data-[side=right]:max-w-[92vw] data-[side=right]:sm:max-w-[92vw]">
+          <SheetHeader>
+            <SheetTitle>Nueva factura</SheetTitle>
+            <SheetDescription>Carga manual o extracción desde PDF o imagen.</SheetDescription>
+          </SheetHeader>
+          <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-6">
+          <div className="mb-5 flex rounded-[10px] bg-[#F2F4F6] p-[3px]">
+            {([
+              { k: 'manual', label: 'Carga manual' },
+              { k: 'pdf', label: 'PDF o imagen' },
+            ] as const).map((m) => (
+              <button
+                key={m.k}
+                type="button"
+                onClick={() => setActiveForm(m.k)}
+                className={`h-[34px] flex-1 rounded-lg text-[13px] font-medium transition ${
+                  activeForm === m.k ? 'bg-white text-[#0B1220] shadow-sm' : 'text-[#6B7684]'
+                }`}
+              >
+                {m.label}
+              </button>
+            ))}
           </div>
 
           {activeForm === 'manual' ? (
             <div className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <div className="space-y-1.5">
-                  <Label className="text-xs text-slate-500">Fecha</Label>
-                  <Input type="date" value={manualHeader.fecha} onChange={e => setManualHeader({...manualHeader, fecha: e.target.value})} className="bg-white border-slate-200 rounded-xl" />
+                  <Label className="text-xs text-[#7A8798]">Fecha</Label>
+                  <Input type="date" value={manualHeader.fecha} onChange={e => setManualHeader({...manualHeader, fecha: e.target.value})} className="bg-white border-border rounded-xl" />
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-xs text-slate-500">Factura / Orden *</Label>
-                  <Input placeholder="#001" value={manualHeader.numeroOrden} onChange={e => setManualHeader({...manualHeader, numeroOrden: e.target.value})} className="bg-white border-slate-200 rounded-xl" />
+                  <Label className="text-xs text-[#7A8798]">Factura / Orden *</Label>
+                  <Input placeholder="#001" value={manualHeader.numeroOrden} onChange={e => setManualHeader({...manualHeader, numeroOrden: e.target.value})} className="bg-white border-border rounded-xl" />
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-xs text-slate-500">Cliente</Label>
+                  <Label className="text-xs text-[#7A8798]">Cliente</Label>
                   <Select value={manualHeader.clienteId} onValueChange={(value) => {
                     const cliente = clientes.find(c => c.id === value);
                     setManualHeader({...manualHeader, clienteId: value || ''});
                     setCurrentLine({...currentLine, fincaId: '', finca: cliente?.tipo === 'individual' ? cliente.nombre : ''});
                   }}>
-                    <SelectTrigger className="w-full rounded-xl border-slate-200 bg-white h-10 text-sm text-slate-900">
+                    <SelectTrigger className="w-full rounded-xl border-border bg-white h-10 text-sm text-[#0B1220]">
                       <SelectValue placeholder="Seleccionar cliente">
                         {manualHeader.clienteId ? (clientes.find(c => c.id === manualHeader.clienteId)?.nombre || 'Cliente no encontrado') : 'Seleccionar cliente'}
                       </SelectValue>
@@ -698,23 +761,23 @@ export function OrdenesTab() {
                   </Select>
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-xs text-slate-500">Proveedor</Label>
-                  <Input placeholder="Proveedor" value={manualHeader.proveedor} onChange={e => setManualHeader({...manualHeader, proveedor: e.target.value})} className="bg-white border-slate-200 rounded-xl" />
+                  <Label className="text-xs text-[#7A8798]">Proveedor</Label>
+                  <Input placeholder="Proveedor" value={manualHeader.proveedor} onChange={e => setManualHeader({...manualHeader, proveedor: e.target.value})} className="bg-white border-border rounded-xl" />
                 </div>
               </div>
 
-              <div className="border-t border-slate-100 pt-4">
-                <p className="text-sm font-medium text-slate-700 mb-3">Agregar productos</p>
+              <div className="border-t border-[#EDEFF2] pt-4">
+                <p className="text-sm font-medium text-[#344054] mb-3">Agregar productos</p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                   {manualSelectedCliente?.tipo === 'grupo' && (
                     <div className="space-y-1.5">
-                      <Label className="text-xs text-slate-500">Sector</Label>
+                      <Label className="text-xs text-[#7A8798]">Sector</Label>
                       <Select value={currentLine.fincaId} onValueChange={(value) => {
                         const v = value ?? '';
                         const nombre = getNombreFinca(v);
                         setCurrentLine({ ...currentLine, fincaId: v, finca: nombre || currentLine.finca });
                       }}>
-                        <SelectTrigger className="w-full rounded-xl border-slate-200 bg-white h-10 text-sm text-slate-900">
+                        <SelectTrigger className="w-full rounded-xl border-border bg-white h-10 text-sm text-[#0B1220]">
                           <SelectValue placeholder="Seleccionar sector">
                             {currentLine.fincaId ? ((fincasCliente || []).find((f: { id: string; nombre: string }) => f.id === currentLine.fincaId)?.nombre || 'Sector no encontrado') : 'Seleccionar sector'}
                           </SelectValue>
@@ -729,18 +792,18 @@ export function OrdenesTab() {
                   )}
                   {manualSelectedCliente?.tipo !== 'grupo' && (
                     <div className="space-y-1.5">
-                      <Label className="text-xs text-slate-500">Sector</Label>
-                      <Input placeholder="Sector A" value={currentLine.finca} onChange={e => setCurrentLine({...currentLine, finca: e.target.value})} className="bg-white border-slate-200 rounded-xl" />
+                      <Label className="text-xs text-[#7A8798]">Sector</Label>
+                      <Input placeholder="Sector A" value={currentLine.finca} onChange={e => setCurrentLine({...currentLine, finca: e.target.value})} className="bg-white border-border rounded-xl" />
                     </div>
                   )}
                   <div className="space-y-1.5">
-                    <Label className="text-xs text-slate-500">Producto *</Label>
+                    <Label className="text-xs text-[#7A8798]">Producto *</Label>
                     <Select value={currentLine.productoId} onValueChange={(value) => {
                       const v = value ?? '';
                       const nombre = getNombreProducto(v);
                       setCurrentLine({ ...currentLine, productoId: v, producto: nombre || currentLine.producto });
                     }}>
-                      <SelectTrigger className="w-full rounded-xl border-slate-200 bg-white h-10 text-sm text-slate-900">
+                      <SelectTrigger className="w-full rounded-xl border-border bg-white h-10 text-sm text-[#0B1220]">
                         <SelectValue placeholder="Seleccionar producto">
                           {currentLine.productoId ? (productos.find(p => p.id === currentLine.productoId)?.nombre || 'Producto no encontrado') : 'Seleccionar producto'}
                         </SelectValue>
@@ -753,17 +816,17 @@ export function OrdenesTab() {
                     </Select>
                   </div>
                   <div className="space-y-1.5">
-                    <Label className="text-xs text-slate-500">Producto (texto libre)</Label>
-                    <Input placeholder="Producto" value={currentLine.producto} onChange={e => setCurrentLine({...currentLine, producto: e.target.value})} className="bg-white border-slate-200 rounded-xl" />
+                    <Label className="text-xs text-[#7A8798]">Producto (texto libre)</Label>
+                    <Input placeholder="Producto" value={currentLine.producto} onChange={e => setCurrentLine({...currentLine, producto: e.target.value})} className="bg-white border-border rounded-xl" />
                   </div>
                   <div className="space-y-1.5">
-                    <Label className="text-xs text-slate-500">Cantidad *</Label>
-                    <Input type="number" step="0.01" placeholder="0" value={currentLine.cantidad} onChange={e => setCurrentLine({...currentLine, cantidad: e.target.value})} className="bg-white border-slate-200 rounded-xl" />
+                    <Label className="text-xs text-[#7A8798]">Cantidad *</Label>
+                    <Input type="number" step="0.01" placeholder="0" value={currentLine.cantidad} onChange={e => setCurrentLine({...currentLine, cantidad: e.target.value})} className="bg-white border-border rounded-xl" />
                   </div>
                   <div className="space-y-1.5">
-                    <Label className="text-xs text-slate-500">Unidad</Label>
+                    <Label className="text-xs text-[#7A8798]">Unidad</Label>
                     <Select value={currentLine.unidad} onValueChange={(value) => setCurrentLine({...currentLine, unidad: value ?? 'kg'})}>
-                      <SelectTrigger className="w-full rounded-xl border-slate-200 bg-white h-10 text-sm text-slate-900">
+                      <SelectTrigger className="w-full rounded-xl border-border bg-white h-10 text-sm text-[#0B1220]">
                         <SelectValue placeholder="Seleccionar unidad" />
                       </SelectTrigger>
                       <SelectContent>
@@ -780,11 +843,11 @@ export function OrdenesTab() {
                     </Select>
                   </div>
                   <div className="space-y-1.5">
-                    <Label className="text-xs text-slate-500">Precio Unit. *</Label>
-                    <Input type="number" step="0.01" placeholder="0.00" value={currentLine.precioUnitario} onChange={e => setCurrentLine({...currentLine, precioUnitario: e.target.value})} className="bg-white border-slate-200 rounded-xl" />
+                    <Label className="text-xs text-[#7A8798]">Precio Unit. *</Label>
+                    <Input type="number" step="0.01" placeholder="0.00" value={currentLine.precioUnitario} onChange={e => setCurrentLine({...currentLine, precioUnitario: e.target.value})} className="bg-white border-border rounded-xl" />
                   </div>
                   <div className="space-y-1.5">
-                    <Label className="text-xs text-slate-500">Comisionistas</Label>
+                    <Label className="text-xs text-[#7A8798]">Comisionistas</Label>
                     <MultiSelectComisionistas
                       comisionistas={comisionistas}
                       selectedIds={currentLine.comisionistaIds}
@@ -802,42 +865,42 @@ export function OrdenesTab() {
 
               {stagedItems.length > 0 && (
                 <div className="space-y-4">
-                  <div className="bg-slate-50 rounded-xl p-4 border border-slate-200">
+                  <div className="bg-[#FAFBFC] rounded-xl p-4 border border-border">
                     <div className="flex items-start justify-between">
                       <div>
-                        <p className="text-sm font-medium text-slate-900">Orden {manualHeader.numeroOrden || '—'}</p>
-                        <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-xs text-slate-600">
+                        <p className="text-sm font-medium text-[#0B1220]">Orden {manualHeader.numeroOrden || '—'}</p>
+                        <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-xs text-[#475467]">
                           <span><strong>Fecha:</strong> {manualHeader.fecha}</span>
                           {manualHeader.proveedor && <span><strong>Proveedor:</strong> {manualHeader.proveedor}</span>}
                           {manualSelectedCliente && <span><strong>Cliente:</strong> {manualSelectedCliente.nombre}</span>}
                         </div>
                       </div>
-                      <Badge variant="secondary" className="bg-slate-100 text-slate-700">{stagedItems.length} producto{stagedItems.length !== 1 ? 's' : ''}</Badge>
+                      <Chip>{stagedItems.length} producto{stagedItems.length !== 1 ? 's' : ''}</Chip>
                     </div>
                   </div>
 
-                  <div className="overflow-x-auto border border-slate-200 rounded-xl">
+                  <div className="overflow-x-auto border border-border rounded-xl">
                     <table className="w-full text-sm">
-                      <thead className="bg-slate-50 border-b border-slate-200">
+                      <thead className="bg-[#FAFBFC] border-b border-border">
                         <tr>
-                          <th className="text-left px-3 py-2 font-medium text-slate-600">Sector</th>
-                          <th className="text-left px-3 py-2 font-medium text-slate-600">Producto</th>
-                          <th className="text-right px-3 py-2 font-medium text-slate-600">Cantidad</th>
-                          <th className="text-right px-3 py-2 font-medium text-slate-600">Precio Unit.</th>
-                          <th className="text-right px-3 py-2 font-medium text-slate-600">Total</th>
+                          <th className="text-left px-3 py-2 font-medium text-[#475467]">Sector</th>
+                          <th className="text-left px-3 py-2 font-medium text-[#475467]">Producto</th>
+                          <th className="text-right px-3 py-2 font-medium text-[#475467]">Cantidad</th>
+                          <th className="text-right px-3 py-2 font-medium text-[#475467]">Precio Unit.</th>
+                          <th className="text-right px-3 py-2 font-medium text-[#475467]">Total</th>
                           <th className="px-3 py-2 w-10"></th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-slate-100">
+                      <tbody className="divide-y divide-[#F2F4F6]">
                         {stagedItems.map(item => (
-                          <tr key={item.id} className="hover:bg-slate-50/50 transition-colors">
-                            <td className="px-3 py-2 text-slate-700">{item.finca}</td>
-                            <td className="px-3 py-2 text-slate-900 font-medium">{item.producto}</td>
-                            <td className="px-3 py-2 text-right text-slate-700">{item.cantidad.toLocaleString('es-ES')} {item.unidad}</td>
-                            <td className="px-3 py-2 text-right text-slate-700">${item.precioUnitario.toFixed(2)}</td>
-                            <td className="px-3 py-2 text-right font-medium text-slate-900">${item.total.toFixed(2)}</td>
+                          <tr key={item.id} className="hover:bg-[#FAFBFC] transition-colors">
+                            <td className="px-3 py-2 text-[#344054]">{item.finca}</td>
+                            <td className="px-3 py-2 text-[#0B1220] font-medium">{item.producto}</td>
+                            <td className="px-3 py-2 text-right text-[#344054]">{item.cantidad.toLocaleString('es-ES')} {item.unidad}</td>
+                            <td className="px-3 py-2 text-right text-[#344054]">${item.precioUnitario.toFixed(2)}</td>
+                            <td className="px-3 py-2 text-right font-medium text-[#0B1220]">${item.total.toFixed(2)}</td>
                             <td className="px-3 py-2">
-                              <Button variant="ghost" size="icon-xs" onClick={() => removeStagedItem(item.id)} className="text-slate-400 hover:text-red-600 hover:bg-red-50">
+                              <Button variant="ghost" size="icon-xs" onClick={() => removeStagedItem(item.id)} className="text-[#98A2B3] hover:text-[#B91C1C] hover:bg-[#FDECEC]">
                                 <X className="h-3.5 w-3.5" />
                               </Button>
                             </td>
@@ -848,7 +911,7 @@ export function OrdenesTab() {
                   </div>
 
                   <div className="flex justify-end gap-2">
-                    <Button variant="outline" onClick={resetManualForm} className="rounded-xl border-slate-200">
+                    <Button variant="outline" onClick={resetManualForm} className="rounded-xl border-border">
                       <X className="h-4 w-4 mr-2" />
                       Descartar
                     </Button>
@@ -863,10 +926,10 @@ export function OrdenesTab() {
           ) : (
             <div className="space-y-4">
               <div className="space-y-1.5">
-                <Label className="text-xs text-slate-500">Cliente (opcional)</Label>
+                <Label className="text-xs text-[#7A8798]">Cliente (opcional)</Label>
                 <Select value={pdfClienteId} onValueChange={(value) => setPdfClienteId(value ?? '')}>
-                  <SelectTrigger className="w-full rounded-xl border-slate-200 bg-white h-10 text-sm text-slate-900">
-                    <span className={`flex flex-1 truncate text-left ${pdfClienteId ? '' : 'text-slate-400'}`}>
+                  <SelectTrigger className="w-full rounded-xl border-border bg-white h-10 text-sm text-[#0B1220]">
+                    <span className={`flex flex-1 truncate text-left ${pdfClienteId ? '' : 'text-[#98A2B3]'}`}>
                       {pdfClienteId
                         ? (pdfSelectedCliente?.nombre || 'Cliente no encontrado')
                         : 'Seleccionar cliente para vincular sectores...'}
@@ -882,12 +945,12 @@ export function OrdenesTab() {
               {pdfPreviews.length === 0 ? (
                 <>
                   <div
-                    className="border-2 border-dashed border-slate-200 rounded-2xl p-8 text-center hover:border-slate-400 hover:bg-slate-50 transition-all cursor-pointer"
+                    className="border-2 border-dashed border-border rounded-2xl p-8 text-center hover:border-slate-400 hover:bg-[#FAFBFC] transition-all cursor-pointer"
                     onClick={() => fileInputRef.current?.click()}
                   >
-                    <FileUp className="h-10 w-10 text-slate-400 mx-auto mb-3" />
-                    <p className="text-sm font-medium text-slate-700">Haz clic para subir uno o varios PDF o imágenes de órdenes de compra</p>
-                    <p className="text-xs text-slate-500 mt-1">Soporta órdenes de compra tipo INDUSTRIAL ACUICOLA OCHOA & BARCIA DINACUAMAR CIA.LTDA.</p>
+                    <FileUp className="h-10 w-10 text-[#98A2B3] mx-auto mb-3" />
+                    <p className="text-sm font-medium text-[#344054]">Haz clic para subir uno o varios PDF o imágenes de órdenes de compra</p>
+                    <p className="text-xs text-[#7A8798] mt-1">Soporta órdenes de compra tipo INDUSTRIAL ACUICOLA OCHOA & BARCIA DINACUAMAR CIA.LTDA.</p>
                   </div>
                   <input
                     ref={fileInputRef}
@@ -900,7 +963,7 @@ export function OrdenesTab() {
                   {isProcessingPDF && (
                     <div className="text-center py-4">
                       <div className="inline-block h-6 w-6 animate-spin rounded-full border-2 border-solid border-slate-900 border-r-transparent align-[-0.125em] motion-reduce:animate-[spin_1.5s_linear_infinite]" />
-                      <p className="text-sm text-slate-500 mt-2">{uploadType === 'pdf' ? 'Procesando PDF...' : 'Procesando imagen...'}</p>
+                      <p className="text-sm text-[#7A8798] mt-2">{uploadType === 'pdf' ? 'Procesando PDF...' : 'Procesando imagen...'}</p>
                     </div>
                   )}
                 </>
@@ -908,11 +971,11 @@ export function OrdenesTab() {
                 <div className="space-y-4">
                   {pdfPreviews.map(preview => (
                     <div key={preview.fileName} className="space-y-3">
-                      <div className="bg-slate-50 rounded-xl p-4 border border-slate-200">
+                      <div className="bg-[#FAFBFC] rounded-xl p-4 border border-border">
                         <div className="flex items-start justify-between gap-2">
                           <div>
-                            <p className="text-sm font-medium text-slate-900">{preview.fileName}</p>
-                            <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-xs text-slate-600">
+                            <p className="text-sm font-medium text-[#0B1220]">{preview.fileName}</p>
+                            <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-xs text-[#475467]">
                               <span><strong>Orden:</strong> {preview.numeroOrden}</span>
                               <span><strong>Fecha:</strong> {preview.fecha}</span>
                               {preview.semana && <span><strong>Semana:</strong> {preview.semana}</span>}
@@ -920,33 +983,33 @@ export function OrdenesTab() {
                             </div>
                           </div>
                           <div className="flex items-center gap-2">
-                            <Badge variant="secondary" className="bg-slate-100 text-slate-700">{preview.items.length} productos</Badge>
-                            <Button variant="ghost" size="sm" onClick={() => removePdfPreview(preview.fileName)} className="rounded-lg text-slate-500 hover:text-red-600">
+                            <Chip>{preview.items.length} productos</Chip>
+                            <Button variant="ghost" size="sm" onClick={() => removePdfPreview(preview.fileName)} className="rounded-lg text-[#7A8798] hover:text-[#B91C1C]">
                               <X className="h-4 w-4" />
                             </Button>
                           </div>
                         </div>
                       </div>
 
-                      <div className="overflow-x-auto border border-slate-200 rounded-xl">
+                      <div className="overflow-x-auto border border-border rounded-xl">
                         <table className="w-full text-sm">
-                          <thead className="bg-slate-50 border-b border-slate-200">
+                          <thead className="bg-[#FAFBFC] border-b border-border">
                             <tr>
-                              <th className="text-left px-3 py-2 font-medium text-slate-600">Sector</th>
-                              <th className="text-left px-3 py-2 font-medium text-slate-600">Producto</th>
-                              <th className="text-right px-3 py-2 font-medium text-slate-600">Cantidad</th>
-                              <th className="text-right px-3 py-2 font-medium text-slate-600">Precio Unit.</th>
-                              <th className="text-right px-3 py-2 font-medium text-slate-600">Total</th>
+                              <th className="text-left px-3 py-2 font-medium text-[#475467]">Sector</th>
+                              <th className="text-left px-3 py-2 font-medium text-[#475467]">Producto</th>
+                              <th className="text-right px-3 py-2 font-medium text-[#475467]">Cantidad</th>
+                              <th className="text-right px-3 py-2 font-medium text-[#475467]">Precio Unit.</th>
+                              <th className="text-right px-3 py-2 font-medium text-[#475467]">Total</th>
                             </tr>
                           </thead>
-                          <tbody className="divide-y divide-slate-100">
+                          <tbody className="divide-y divide-[#F2F4F6]">
                             {preview.items.map(item => (
-                              <tr key={item.id} className="hover:bg-slate-50/50 transition-colors">
-                                <td className="px-3 py-2 text-slate-700">{item.finca}</td>
-                                <td className="px-3 py-2 text-slate-900 font-medium">{item.producto}</td>
-                                <td className="px-3 py-2 text-right text-slate-700">{item.cantidad.toLocaleString('es-ES')} {item.unidad}</td>
-                                <td className="px-3 py-2 text-right text-slate-700">${item.precioUnitario.toFixed(2)}</td>
-                                <td className="px-3 py-2 text-right font-medium text-slate-900">${item.total.toFixed(2)}</td>
+                              <tr key={item.id} className="hover:bg-[#FAFBFC] transition-colors">
+                                <td className="px-3 py-2 text-[#344054]">{item.finca}</td>
+                                <td className="px-3 py-2 text-[#0B1220] font-medium">{item.producto}</td>
+                                <td className="px-3 py-2 text-right text-[#344054]">{item.cantidad.toLocaleString('es-ES')} {item.unidad}</td>
+                                <td className="px-3 py-2 text-right text-[#344054]">${item.precioUnitario.toFixed(2)}</td>
+                                <td className="px-3 py-2 text-right font-medium text-[#0B1220]">${item.total.toFixed(2)}</td>
                               </tr>
                             ))}
                           </tbody>
@@ -958,12 +1021,12 @@ export function OrdenesTab() {
                   {isProcessingPDF && (
                     <div className="text-center py-4">
                       <div className="inline-block h-6 w-6 animate-spin rounded-full border-2 border-solid border-slate-900 border-r-transparent align-[-0.125em] motion-reduce:animate-[spin_1.5s_linear_infinite]" />
-                      <p className="text-sm text-slate-500 mt-2">{uploadType === 'pdf' ? 'Procesando PDF...' : 'Procesando imagen...'}</p>
+                      <p className="text-sm text-[#7A8798] mt-2">{uploadType === 'pdf' ? 'Procesando PDF...' : 'Procesando imagen...'}</p>
                     </div>
                   )}
 
                   <div className="flex justify-end gap-2">
-                    <Button variant="outline" onClick={handleDiscardPDF} className="rounded-xl border-slate-200">
+                    <Button variant="outline" onClick={handleDiscardPDF} className="rounded-xl border-border">
                       <X className="h-4 w-4 mr-2" />
                       Descartar todo
                     </Button>
@@ -976,75 +1039,92 @@ export function OrdenesTab() {
               )}
             </div>
           )}
-        </CardContent>
-      </Card>
+          </div>
+        </SheetContent>
+      </Sheet>
+
+      {/* Barra de filtros del listado */}
+      <BarraAcciones>
+        <Buscador
+          value={search}
+          onChange={(v) => {
+            setSearch(v);
+            setCurrentPage(1);
+          }}
+          placeholder="Buscar factura, cliente o producto…"
+        />
+        {ESTADOS_FILTRO.map((e) => (
+          <BotonFiltro
+            key={e.value}
+            activo={filterEstado === e.value}
+            contador={conteoPorEstado[e.value]}
+            onClick={() => {
+              setFilterEstado(e.value);
+              setCurrentPage(1);
+            }}
+          >
+            {e.label}
+          </BotonFiltro>
+        ))}
+        <button
+          type="button"
+          onClick={() => setShowFilters(!showFilters)}
+          className="inline-flex h-9 items-center gap-1.5 rounded-[9px] border border-dashed border-[#C6CDD6] bg-white px-3 text-[12.5px] font-medium text-[#475467] transition hover:border-primary hover:text-primary"
+        >
+          + Filtro
+        </button>
+        <div className="flex-1" />
+        <BotonPrimario onClick={() => setSheetAbierto(true)}>
+          <Plus className="size-3.5" /> Nueva factura
+        </BotonPrimario>
+      </BarraAcciones>
+
+      {/* Chips de filtros activos */}
+      {chipsActivos.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs text-[#7A8798]">Filtros activos:</span>
+          {chipsActivos.map((c) => (
+            <span
+              key={c.label}
+              className="inline-flex h-[26px] items-center gap-[7px] rounded-full border border-[#CFE3E0] bg-[#EAF2F1] pl-2.5 pr-1.5 text-xs font-medium text-[#0B5E56]"
+            >
+              {c.label}
+              <button
+                type="button"
+                onClick={c.quitar}
+                aria-label={`Quitar filtro ${c.label}`}
+                className="px-0.5 text-[13px] leading-none opacity-60 transition hover:opacity-100"
+              >
+                ×
+              </button>
+            </span>
+          ))}
+          <button
+            type="button"
+            onClick={clearFilters}
+            className="text-xs text-[#7A8798] underline"
+          >
+            Limpiar
+          </button>
+        </div>
+      )}
 
       {ordenItems.length > 0 && (
-        <div className="flex flex-col gap-3 bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
-            <div className="relative w-full sm:w-64">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-              <Input
-                placeholder="Buscar producto, factura..."
-                value={search}
-                onChange={e => { setSearch(e.target.value); setCurrentPage(1); }}
-                className="pl-9 bg-white border-slate-200 rounded-xl text-sm"
-              />
-            </div>
-            <Button
-              variant={showFilters ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setShowFilters(!showFilters)}
-              className={showFilters ? 'btn-primary-dark rounded-lg' : 'rounded-lg border-slate-200'}
-            >
-              <Filter className="h-4 w-4 mr-1" />
-              Filtros
-              {hasActiveFilters && (
-                <span className="ml-1 bg-white/20 text-xs px-1.5 py-0.5 rounded-md">
-                  {[search && 1, filterEstado !== 'todos' && 1, filterFechaDesde && 1, filterFechaHasta && 1, filterComisionistaId !== 'todos' && 1].filter(Boolean).length}
-                </span>
-              )}
-            </Button>
-            <div className="flex items-center gap-2 ml-auto">
-              <Button variant="outline" size="sm" onClick={collapseAll} className="rounded-lg border-slate-200 text-slate-600">
-                Colapsar todo
-              </Button>
-              <Button variant="outline" size="sm" onClick={expandAll} className="rounded-lg border-slate-200 text-slate-600">
-                Expandir todo
-              </Button>
-            </div>
-          </div>
-
+        <Panel className="flex flex-col gap-3 p-3.5">
           {showFilters && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-2 border-t border-slate-100">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <div className="space-y-1">
-                <Label className="text-xs text-slate-500">Fecha desde</Label>
-                <Input type="date" value={filterFechaDesde} onChange={e => { setFilterFechaDesde(e.target.value); setCurrentPage(1); }} className="bg-white border-slate-200 rounded-xl h-9 text-sm" />
+                <Label className="text-[11.5px] font-semibold text-[#475467]">Fecha desde</Label>
+                <Input type="date" value={filterFechaDesde} onChange={e => { setFilterFechaDesde(e.target.value); setCurrentPage(1); }} className="h-9 rounded-[9px] text-sm" />
               </div>
               <div className="space-y-1">
-                <Label className="text-xs text-slate-500">Fecha hasta</Label>
-                <Input type="date" value={filterFechaHasta} onChange={e => { setFilterFechaHasta(e.target.value); setCurrentPage(1); }} className="bg-white border-slate-200 rounded-xl h-9 text-sm" />
+                <Label className="text-[11.5px] font-semibold text-[#475467]">Fecha hasta</Label>
+                <Input type="date" value={filterFechaHasta} onChange={e => { setFilterFechaHasta(e.target.value); setCurrentPage(1); }} className="h-9 rounded-[9px] text-sm" />
               </div>
               <div className="space-y-1">
-                <Label className="text-xs text-slate-500">Estado</Label>
-                <Select value={filterEstado} onValueChange={v => { setFilterEstado(v ?? 'todos'); setCurrentPage(1); }}>
-                  <SelectTrigger className="bg-white border-slate-200 rounded-xl h-9 text-sm">
-                    <SelectValue>
-                      {etiquetaFiltroEstado}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="todos">Todos los estados</SelectItem>
-                    {ESTADOS_ORDEN.map(e => (
-                      <SelectItem key={e.value} value={e.value}>{e.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs text-slate-500">Comisionista</Label>
+                <Label className="text-[11.5px] font-semibold text-[#475467]">Comisionista</Label>
                 <Select value={filterComisionistaId} onValueChange={v => { setFilterComisionistaId(v ?? 'todos'); setCurrentPage(1); }}>
-                  <SelectTrigger className="bg-white border-slate-200 rounded-xl h-9 text-sm">
+                  <SelectTrigger className="h-9 rounded-[9px] text-sm">
                     <SelectValue>
                       {etiquetaFiltroComisionista}
                     </SelectValue>
@@ -1057,20 +1137,18 @@ export function OrdenesTab() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="sm:col-span-2 lg:col-span-4 flex justify-end">
-                <Button variant="ghost" size="sm" onClick={clearFilters} className="text-slate-500 hover:text-slate-700 rounded-lg">
-                  <X className="h-3.5 w-3.5 mr-1" />
-                  Limpiar filtros
-                </Button>
+              <div className="flex items-end gap-2">
+                <BotonSecundario onClick={collapseAll} className="h-9">Colapsar todo</BotonSecundario>
+                <BotonSecundario onClick={expandAll} className="h-9">Expandir todo</BotonSecundario>
               </div>
             </div>
           )}
 
-          <div className="flex items-center gap-3 pt-2 border-t border-slate-100">
-            <UserCheck className="h-5 w-5 text-slate-400 shrink-0" />
-            <div className="flex-1 min-w-0">
-              <Label className="text-xs text-slate-500">Asignar comisionistas a todos</Label>
-              <div className="flex gap-2 mt-1">
+          <div className="flex items-center gap-3 border-t border-[#EDEFF2] pt-3">
+            <UserCheck className="size-4 shrink-0 text-[#98A2B3]" />
+            <div className="min-w-0 flex-1">
+              <Label className="text-[11.5px] font-semibold text-[#475467]">Asignar comisionistas a todas las facturas</Label>
+              <div className="mt-1 flex gap-2">
                 <MultiSelectComisionistas
                   comisionistas={comisionistas}
                   selectedIds={globalComisionistaIds}
@@ -1105,48 +1183,50 @@ export function OrdenesTab() {
                       toast.warning(`Algunas asignaciones carecen de tarifa específica: ${sinTarifa.slice(0, 3).join(', ')}${sinTarifa.length > 3 ? '...' : ''}`);
                     }
                   }}
-                  className="border-slate-200 rounded-lg shrink-0"
+                  className="shrink-0 rounded-lg"
                 >
                   Asignar
                 </Button>
               </div>
             </div>
-            <div className="flex items-center gap-4 shrink-0">
+            <div className="flex shrink-0 items-center gap-4">
               <div className="text-right">
-                <p className="text-xs text-slate-500">{cantidadOrdenes} orden{cantidadOrdenes === 1 ? '' : 'es'} / {ordenItems.length} productos</p>
-                <p className="text-xl font-bold text-slate-900 tabular-nums">${totalGeneral.toFixed(2)}</p>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.07em] text-[#7A8798]">
+                  {cantidadOrdenes} factura{cantidadOrdenes === 1 ? '' : 's'} · {ordenItems.length} productos
+                </p>
+                <p className="cifra text-xl font-semibold text-[#0B1220]">{money(totalGeneral)}</p>
               </div>
               <Button
                 variant="outline"
                 size="sm"
                 disabled={hayItemsLiquidados}
                 onClick={clearOrdenItems}
-                className="text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg border-slate-200 disabled:text-slate-400 disabled:hover:bg-white"
+                className="rounded-lg text-[#B91C1C] hover:bg-[#FDECEC] disabled:text-[#98A2B3]"
               >
-                <Trash2 className="h-4 w-4 mr-1" />
+                <Trash2 className="mr-1 h-4 w-4" />
                 Limpiar
               </Button>
             </div>
           </div>
-        </div>
+        </Panel>
       )}
 
       {ordenesAgrupadas.length > 0 && (
-        <Card className="card-elevated rounded-2xl overflow-hidden">
-          <CardContent className="p-0">
-            <div className="flex items-center justify-between px-4 py-2 bg-slate-50 border-b border-slate-200">
-              <div className="flex items-center gap-3">
+        <Panel>
+          <div>
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-[#FAFBFC] px-4 py-2.5">
+              <div className="flex flex-wrap items-center gap-3">
                 <input
                   type="checkbox"
-                  className="h-4 w-4 cursor-pointer accent-emerald-600"
+                  className="size-[15px] cursor-pointer accent-primary"
                   checked={todasSeleccionadas}
                   onChange={toggleSeleccionarTodas}
-                  aria-label="Seleccionar todas las órdenes"
+                  aria-label="Seleccionar todas las facturas"
                 />
-                <span className="text-sm font-medium text-slate-700">
+                <span className="th-tabla">
                   {filteredOrdenItems.length === ordenItems.length
-                    ? `${cantidadOrdenes} orden${cantidadOrdenes === 1 ? '' : 'es'}`
-                    : `${ordenesAgrupadas.length} de ${cantidadOrdenes} orden${cantidadOrdenes === 1 ? '' : 'es'}`
+                    ? `${cantidadOrdenes} factura${cantidadOrdenes === 1 ? '' : 's'}`
+                    : `${ordenesAgrupadas.length} de ${cantidadOrdenes} factura${cantidadOrdenes === 1 ? '' : 's'}`
                   }
                 </span>
                 {selectedOrdenIds.size > 0 && (
@@ -1169,169 +1249,196 @@ export function OrdenesTab() {
                   </Select>
                 )}
                 {selectedOrdenIds.size > 0 && (
-                  <Button variant="ghost" size="sm" onClick={handleEliminarMasivo} className="h-7 text-xs text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg">
+                  <Button variant="ghost" size="sm" onClick={handleEliminarMasivo} className="h-7 text-xs text-[#B91C1C] hover:text-[#991B1B] hover:bg-[#FDECEC] rounded-lg">
                     <Trash2 className="h-3.5 w-3.5 mr-1" />
                     {`Eliminar (${selectedOrdenIds.size})`}
                   </Button>
                 )}
               </div>
               <div className="flex items-center gap-1">
-                <Button variant="ghost" size="sm" onClick={() => toggleSort('fecha')} className="text-xs text-slate-600 h-7 rounded-lg">
-                  <Calendar className="h-3.5 w-3.5 mr-1" />
+                <Button variant="ghost" size="sm" onClick={() => toggleSort('fecha')} className="h-7 rounded-lg text-xs text-[#6B7684]">
+                  <Calendar className="mr-1 h-3.5 w-3.5" />
                   Fecha{sortField === 'fecha' && (sortDir === 'desc' ? ' ↓' : ' ↑')}
                 </Button>
-                <Button variant="ghost" size="sm" onClick={() => toggleSort('numeroOrden')} className="text-xs text-slate-600 h-7 rounded-lg">
-                  <ArrowUpDown className="h-3.5 w-3.5 mr-1" />
+                <Button variant="ghost" size="sm" onClick={() => toggleSort('numeroOrden')} className="h-7 rounded-lg text-xs text-[#6B7684]">
+                  <ArrowUpDown className="mr-1 h-3.5 w-3.5" />
                   №{sortField === 'numeroOrden' && (sortDir === 'desc' ? ' ↓' : ' ↑')}
                 </Button>
-                <Button variant="ghost" size="sm" onClick={() => toggleSort('total')} className="text-xs text-slate-600 h-7 rounded-lg">
-                  <ArrowUpDown className="h-3.5 w-3.5 mr-1" />
+                <Button variant="ghost" size="sm" onClick={() => toggleSort('total')} className="h-7 rounded-lg text-xs text-[#6B7684]">
+                  <ArrowUpDown className="mr-1 h-3.5 w-3.5" />
                   Total{sortField === 'total' && (sortDir === 'desc' ? ' ↓' : ' ↑')}
                 </Button>
               </div>
             </div>
 
-            <div className="divide-y divide-slate-100">
+            {/* Cabecera de columnas del listado */}
+            <div className={`th-tabla hidden ${COLS_ORDENES} items-center gap-2.5 border-b border-border bg-[#FAFBFC] px-4 py-2.5 lg:grid`}>
+              <div />
+              <div>Factura</div>
+              <div>Fecha</div>
+              <div>Cliente</div>
+              <div>Razón social</div>
+              <div className="text-right">Reg.</div>
+              <div className="text-right">Total</div>
+              <div>Comisionistas</div>
+              <div>Estado</div>
+              <div />
+            </div>
+
+            <div>
               {paginatedOrdenes.map(orden => {
                 const collapsed = !expandedOrdenIds.has(orden.id);
                 return (
                   <div key={orden.id} className="group">
-                    <div className="flex items-center pl-4 hover:bg-slate-50/70 transition-colors">
-                      <input
-                        type="checkbox"
-                        className="h-4 w-4 cursor-pointer accent-emerald-600 shrink-0"
-                        checked={selectedOrdenIds.has(orden.id)}
-                        disabled={orden.estado === 'liquidada'}
-                        onChange={() => toggleSeleccionOrden(orden.id)}
-                        aria-label={`Seleccionar orden ${orden.numeroOrden}`}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => toggleCollapse(orden.id)}
-                        className="flex-1 flex items-center gap-3 px-3 py-3 text-left min-w-0"
-                      >
-                      {collapsed ? <ChevronRight className="h-4 w-4 text-slate-400 shrink-0" /> : <ChevronDown className="h-4 w-4 text-slate-400 shrink-0" />}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-semibold text-slate-900 text-sm">{orden.numeroOrden}</span>
-                          <Badge variant="secondary" className={getEstadoOrdenMeta(orden.estado).className}>
-                            {getEstadoOrdenMeta(orden.estado).label}
-                          </Badge>
-                          <span className="text-xs text-slate-500">{orden.fecha}</span>
-                          {orden.fechaPago && (
-                            <span className="text-xs text-emerald-600">
-                              Pagada el {new Date(`${orden.fechaPago}T00:00:00`).toLocaleDateString('es-ES')}
-                            </span>
-                          )}
-                          {orden.comisionistaIds.length > 0 && (
-                            <div className="flex items-center gap-1">
-                              {orden.comisionistaIds.slice(0, 3).map(cid => {
-                                const com = comisionistas.find(c => c.id === cid);
-                                return com ? (
-                                  <Badge key={cid} variant="secondary" className="text-xs border-0 bg-slate-100 text-slate-700">
-                                    {com.nombre}
-                                  </Badge>
-                                ) : null;
-                              })}
-                              {orden.comisionistaIds.length > 3 && (
-                                <Badge variant="secondary" className="text-xs border-0 bg-slate-200 text-slate-600">
-                                  +{orden.comisionistaIds.length - 3}
-                                </Badge>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-3 mt-0.5 text-xs text-slate-500">
-                          <span>{orden.cliente}</span>
-                          {orden.fincas.length > 0 && (
-                            <span>{orden.fincas.length > 1 ? `${orden.fincas.length} sectores` : orden.fincas[0]}</span>
-                          )}
-                          <span>{orden.items.length} producto{orden.items.length !== 1 ? 's' : ''}</span>
-                          {orden.comisionistaIds.length === 0 && (
-                            <span className="text-slate-400">Sin asignar</span>
-                          )}
-                        </div>
+                    <div
+                      className={`grid ${COLS_ORDENES} cursor-pointer items-center gap-2.5 border-b border-[#F2F4F6] px-4 py-3 transition-colors hover:bg-[#FAFBFC] ${collapsed ? '' : 'bg-[#F7FBFA]'}`}
+                      onClick={() => toggleCollapse(orden.id)}
+                    >
+                      <div>
+                        <input
+                          type="checkbox"
+                          className="size-[15px] cursor-pointer accent-primary align-middle"
+                          checked={selectedOrdenIds.has(orden.id)}
+                          disabled={orden.estado === 'liquidada'}
+                          onChange={() => toggleSeleccionOrden(orden.id)}
+                          onClick={(e) => e.stopPropagation()}
+                          aria-label={`Seleccionar factura ${orden.numeroOrden}`}
+                        />
                       </div>
-                      <span className="text-sm font-semibold text-slate-900 tabular-nums shrink-0">${orden.total.toFixed(2)}</span>
-                      </button>
+                      <div className="cifra truncate text-[12.5px] font-medium text-[#0B1220]">
+                        {orden.numeroOrden}
+                      </div>
+                      <div className="cifra text-[12.5px] text-[#6B7684]">
+                        {orden.fecha}
+                        {orden.fechaPago && (
+                          <span className="ml-1 text-[10.5px] text-primary" title={`Pagada el ${orden.fechaPago}`}>
+                            ✓
+                          </span>
+                        )}
+                      </div>
+                      <div className="truncate text-[13px] text-[#0B1220]" title={orden.cliente}>
+                        {orden.cliente}
+                      </div>
+                      <div className="truncate text-[12.5px] text-[#6B7684]">
+                        {orden.fincas.length > 1
+                          ? `${orden.fincas.length} sectores`
+                          : orden.fincas[0] || '—'}
+                      </div>
+                      <div className="cifra text-right text-[12.5px] text-[#6B7684]">
+                        {orden.items.length}
+                      </div>
+                      <div className="cifra text-right text-[13px] font-semibold text-[#0B1220]">
+                        {money(orden.total)}
+                      </div>
+                      <div className="flex items-center">
+                        {orden.comisionistaIds.length === 0 ? (
+                          <span className="text-[11px] text-[#98A2B3]">Sin asignar</span>
+                        ) : (
+                          <>
+                            {orden.comisionistaIds.slice(0, 3).map((cid, i) => {
+                              const com = comisionistas.find(c => c.id === cid);
+                              return com ? (
+                                <Avatar
+                                  key={cid}
+                                  nombre={com.nombre}
+                                  id={cid}
+                                  className={`border-[1.5px] border-white ${i > 0 ? '-ml-1.5' : ''}`}
+                                />
+                              ) : null;
+                            })}
+                            {orden.comisionistaIds.length > 3 && (
+                              <span className="cifra -ml-1.5 flex size-6 items-center justify-center rounded-full border-[1.5px] border-white bg-[#F0F2F5] text-[10px] font-semibold text-[#475467]">
+                                +{orden.comisionistaIds.length - 3}
+                              </span>
+                            )}
+                          </>
+                        )}
+                      </div>
+                      <div>
+                        <ChipEstado estado={orden.estado} />
+                      </div>
+                      <div className="text-right text-[11px] text-[#98A2B3]">
+                        {collapsed ? '▸' : '▾'}
+                      </div>
                     </div>
 
                     {!collapsed && (
-                      <div className="border-t border-slate-100">
-                        <table className="w-full text-sm">
-                          <thead className="bg-slate-50/50">
-                            <tr>
-                              <th className="text-left px-4 py-2 font-medium text-slate-500 text-xs">Producto</th>
-                              <th className="text-left px-4 py-2 font-medium text-slate-500 text-xs">Cliente</th>
-                              <th className="text-left px-4 py-2 font-medium text-slate-500 text-xs">Sector</th>
-                              <th className="text-right px-4 py-2 font-medium text-slate-500 text-xs">Cantidad</th>
-                              <th className="text-right px-4 py-2 font-medium text-slate-500 text-xs">Total</th>
-                              <th className="text-left px-4 py-2 font-medium text-slate-500 text-xs">Comisionistas</th>
-                              <th className="text-left px-4 py-2 font-medium text-slate-500 text-xs">Estado</th>
-                              <th className="text-center px-4 py-2 font-medium text-slate-500 text-xs w-20"></th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-slate-50">
+                      <div className="border-b border-[#F2F4F6] bg-[#FBFCFD] px-4 pb-3.5 pt-1 pl-4 lg:pl-[50px]">
+                        <div className="overflow-x-auto">
+                          <div className="min-w-[720px]">
+                            <div className="th-tabla grid grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_92px_100px_108px_minmax(0,150px)_64px] gap-2.5 px-3 py-2.5">
+                              <div>Producto</div>
+                              <div>Sector</div>
+                              <div className="text-right">Cantidad</div>
+                              <div className="text-right">P. unit.</div>
+                              <div className="text-right">Total</div>
+                              <div className="text-right">Comisionistas</div>
+                              <div />
+                            </div>
                             {orden.items.map(item => {
                               const grupoBloqueado = orden.estado === 'liquidada' || orden.items.some((ordenItem) => ordenItem.estado === 'liquidada');
                               return (
-                                <tr key={item.id} className="hover:bg-slate-50/30 transition-colors">
-                                  <td className="px-4 py-2.5">
-                                    <span className="text-sm font-medium text-slate-900">{item.productoRel?.nombre || item.producto}</span>
-                                    <span className="ml-1.5 text-xs text-slate-400">${item.precioUnitario.toFixed(2)} unit.</span>
-                                  </td>
-                                  <td className="px-4 py-2.5 text-sm text-slate-600">{item.cliente?.nombre || '-'}</td>
-                                  <td className="px-4 py-2.5 text-sm text-slate-600">{item.fincaRel?.nombre || item.finca}</td>
-                                  <td className="px-4 py-2.5 text-right text-sm text-slate-700">
-                                    {item.cantidad.toLocaleString('es-ES')} <span className="text-xs text-slate-400">{item.unidad}</span>
-                                  </td>
-                                  <td className="px-4 py-2.5 text-right font-medium text-sm text-slate-900">${item.total.toFixed(2)}</td>
-                                  <td className="px-4 py-2.5">
-                                    {item.comisionistas.length > 0 ? (
-                                      <div className="flex flex-wrap gap-1">
-                                        {item.comisionistas.map(a => {
-                                          const com = comisionistas.find(c => c.id === a.comisionistaId);
-                                          const tieneTarifa = item.clienteId && item.productoId && encontrarTarifaEspecifica(item, a.comisionistaId, tarifasClienteProducto);
-                                          const nombre = com?.nombre || a.comisionistaId;
-                                          return (
-                                            <Badge key={a.comisionistaId} variant="secondary" className={`text-xs border-0 ${tieneTarifa ? 'bg-slate-100 text-slate-700' : 'bg-amber-100 text-amber-700'}`} title={tieneTarifa ? '' : 'Sin tarifa específica configurada'}>
-                                              {nombre}
-                                            </Badge>
-                                          );
-                                        })}
-                                      </div>
+                                <div
+                                  key={item.id}
+                                  className="mb-1.5 grid grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_92px_100px_108px_minmax(0,150px)_64px] items-center gap-2.5 rounded-lg border border-[#EDEFF2] bg-white px-3 py-2.5"
+                                >
+                                  <div className="truncate text-[12.5px] text-[#0B1220]" title={item.productoRel?.nombre || item.producto}>
+                                    {item.productoRel?.nombre || item.producto}
+                                  </div>
+                                  <div className="truncate text-[12.5px] text-[#6B7684]">
+                                    {item.fincaRel?.nombre || item.finca}
+                                  </div>
+                                  <div className="cifra text-right text-[12.5px] text-[#344054]">
+                                    {num(item.cantidad, 0)} <span className="text-[11px] text-[#98A2B3]">{item.unidad}</span>
+                                  </div>
+                                  <div className="cifra text-right text-[12.5px] text-[#6B7684]">
+                                    {money(item.precioUnitario)}
+                                  </div>
+                                  <div className="cifra text-right text-[12.5px] font-medium text-[#0B1220]">
+                                    {money(item.total)}
+                                  </div>
+                                  <div className="flex flex-wrap justify-end gap-1.5">
+                                    {item.comisionistas.length === 0 ? (
+                                      <span className="text-[11px] text-[#98A2B3]">Sin asignar</span>
                                     ) : (
-                                      <span className="text-xs text-slate-400">Sin asignar</span>
+                                      item.comisionistas.map(a => {
+                                        const com = comisionistas.find(c => c.id === a.comisionistaId);
+                                        const tieneTarifa = item.clienteId && item.productoId && encontrarTarifaEspecifica(item, a.comisionistaId, tarifasClienteProducto);
+                                        const nombre = com?.nombre || a.comisionistaId;
+                                        return (
+                                          <Chip
+                                            key={a.comisionistaId}
+                                            tono={tieneTarifa ? 'acento' : 'ambar'}
+                                            className="rounded-md font-medium"
+                                            title={tieneTarifa ? nombre : `${nombre} — sin tarifa específica configurada`}
+                                          >
+                                            {nombre.split(' ')[0]}
+                                          </Chip>
+                                        );
+                                      })
                                     )}
-                                  </td>
-                                  <td className="px-4 py-2.5">
-                                    <Badge variant="secondary" className={getEstadoOrdenMeta(item.estado).className}>
-                                      {getEstadoOrdenMeta(item.estado).label}
-                                    </Badge>
-                                  </td>
-                                  <td className="px-4 py-2.5">
-                                    <div className="flex justify-center gap-1">
-                                      <Button variant="ghost" size="icon-xs" disabled={grupoBloqueado} className="text-slate-400 hover:text-slate-700 hover:bg-slate-100 disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-slate-400" onClick={() => handleEdit(item)}>
-                                        <Pencil className="h-3.5 w-3.5" />
-                                      </Button>
-                                      <Button variant="ghost" size="icon-xs" disabled={grupoBloqueado} className="text-slate-400 hover:text-red-600 hover:bg-red-50 disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-slate-400" onClick={() => deleteOrdenItem(item.id)}>
-                                        <Trash2 className="h-3.5 w-3.5" />
-                                      </Button>
-                                    </div>
-                                  </td>
-                                </tr>
+                                  </div>
+                                  <div className="flex justify-end gap-1">
+                                    <Button variant="ghost" size="icon-xs" disabled={grupoBloqueado} className="text-[#98A2B3] hover:text-[#0B1220] disabled:opacity-40" onClick={() => handleEdit(item)}>
+                                      <Pencil className="h-3.5 w-3.5" />
+                                    </Button>
+                                    <Button variant="ghost" size="icon-xs" disabled={grupoBloqueado} className="text-[#98A2B3] hover:text-[#B91C1C] disabled:opacity-40" onClick={() => deleteOrdenItem(item.id)}>
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                    </Button>
+                                  </div>
+                                </div>
                               );
                             })}
-                          </tbody>
-                        </table>
-                        <div className="flex items-center justify-between px-4 py-2 bg-slate-50/50 border-t border-slate-100">
+                          </div>
+                        </div>
+                        <div className="mt-1 flex flex-wrap items-center justify-between gap-2">
                           <div className="flex items-center gap-2">
                             <Select
                               value={orden.estado}
                               onValueChange={(value) => pedirFechaDePago(value as EstadoOrden, [orden.id], false, orden.fechaPago)}
                               disabled={orden.estado === 'liquidada' || orden.items.some(item => item.estado === 'liquidada')}
                             >
-                              <SelectTrigger className="h-7 w-40 rounded-lg border-slate-200 bg-white text-xs">
+                              <SelectTrigger className="h-7 w-40 rounded-lg border-border bg-white text-xs">
                                 <SelectValue>
                                   {getEtiquetaEstado(orden.estado)}
                                 </SelectValue>
@@ -1345,19 +1452,19 @@ export function OrdenesTab() {
                               </SelectContent>
                             </Select>
                             {orden.estado !== 'pendiente' && (
-                              <label className="flex items-center gap-1.5 text-xs text-slate-600">
+                              <label className="flex items-center gap-1.5 text-xs text-[#475467]">
                                 Pagada el
                                 <input
                                   type="date"
                                   value={orden.fechaPago || ''}
                                   disabled={orden.estado === 'liquidada'}
                                   onChange={(e) => e.target.value && updateEstadoOrden(orden.id, orden.estado, e.target.value)}
-                                  className="h-7 rounded-lg border border-slate-200 bg-white px-2 text-xs text-slate-700 disabled:opacity-50"
+                                  className="h-7 rounded-lg border border-border bg-white px-2 text-xs text-[#344054] disabled:opacity-50"
                                 />
                               </label>
                             )}
                           </div>
-                          <Button variant="ghost" size="sm" disabled={orden.estado === 'liquidada' || orden.items.some(item => item.estado === 'liquidada')} className="text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-red-300" onClick={() => {
+                          <Button variant="ghost" size="sm" disabled={orden.estado === 'liquidada' || orden.items.some(item => item.estado === 'liquidada')} className="text-[#B91C1C] hover:text-[#991B1B] hover:bg-[#FDECEC] rounded-lg disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-red-300" onClick={() => {
                             if (confirm('¿Eliminar toda la orden y sus productos?')) {
                               orden.items.forEach(item => deleteOrdenItem(item.id));
                             }
@@ -1374,12 +1481,12 @@ export function OrdenesTab() {
             </div>
 
             {totalPages > 1 && (
-              <div className="flex items-center justify-between px-4 py-3 border-t border-slate-200 bg-slate-50/70">
-                <p className="text-xs text-slate-500">
-                  Mostrando {(safePage - 1) * ITEMS_PER_PAGE + 1}-{Math.min(safePage * ITEMS_PER_PAGE, ordenesAgrupadas.length)} de {ordenesAgrupadas.length} órdenes
+              <div className="flex items-center justify-between bg-[#FAFBFC] px-4 py-3">
+                <p className="text-xs text-[#7A8798]">
+                  Mostrando <span className="cifra text-[#344054]">{(safePage - 1) * ITEMS_PER_PAGE + 1}-{Math.min(safePage * ITEMS_PER_PAGE, ordenesAgrupadas.length)}</span> de <span className="cifra text-[#344054]">{ordenesAgrupadas.length}</span> facturas
                 </p>
                 <div className="flex items-center gap-1">
-                  <Button variant="outline" size="icon-xs" disabled={safePage === 1} onClick={() => setCurrentPage(p => p - 1)} className="rounded-lg border-slate-200">
+                  <Button variant="outline" size="icon-xs" disabled={safePage === 1} onClick={() => setCurrentPage(p => p - 1)} className="rounded-lg">
                     <ChevronLeft className="h-3.5 w-3.5" />
                   </Button>
                   {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
@@ -1394,46 +1501,46 @@ export function OrdenesTab() {
                       page = safePage - 2 + i;
                     }
                     return (
-                      <Button key={page} variant={page === safePage ? 'default' : 'outline'} size="icon-xs" onClick={() => setCurrentPage(page)} className={page === safePage ? 'rounded-lg btn-primary-dark' : 'rounded-lg border-slate-200'}>
+                      <Button key={page} variant={page === safePage ? 'default' : 'outline'} size="icon-xs" onClick={() => setCurrentPage(page)} className={page === safePage ? 'cifra rounded-lg border-[#0B1220] bg-[#0B1220] text-white' : 'cifra rounded-lg'}>
                         {page}
                       </Button>
                     );
                   })}
-                  <Button variant="outline" size="icon-xs" disabled={safePage === totalPages} onClick={() => setCurrentPage(p => p + 1)} className="rounded-lg border-slate-200">
+                  <Button variant="outline" size="icon-xs" disabled={safePage === totalPages} onClick={() => setCurrentPage(p => p + 1)} className="rounded-lg">
                     <ChevronRight className="h-3.5 w-3.5" />
                   </Button>
                 </div>
               </div>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </Panel>
       )}
 
       {ordenItems.length === 0 && pdfPreviews.length === 0 && (
-        <div className="text-center py-16 bg-white rounded-2xl border border-dashed border-slate-200">
-          <Calculator className="h-12 w-12 text-slate-300 mx-auto mb-4" />
-          <h3 className="text-lg font-medium text-slate-700">Sin órdenes cargadas</h3>
-          <p className="text-sm text-slate-500 mt-1 max-w-sm mx-auto">Carga un PDF de orden de compra o agrega registros manualmente para comenzar.</p>
-          <div className="mt-6 flex justify-center gap-3">
-            <Button variant="outline" size="sm" onClick={() => setActiveForm('manual')} className="rounded-xl border-slate-200">
-              <Plus className="h-4 w-4 mr-2" />
-              Agregar manual
-            </Button>
-            <Button size="sm" onClick={() => setActiveForm('pdf')} className="btn-primary-dark rounded-xl">
-              <FileUp className="h-4 w-4 mr-2" />
-              Cargar archivo
-            </Button>
-          </div>
-        </div>
+        <Vacio
+          icono={Calculator}
+          titulo="Sin facturas cargadas"
+          nota="Carga un PDF o una imagen de la factura, o agrega los registros manualmente."
+          accion={
+            <div className="flex gap-2.5">
+              <BotonSecundario onClick={() => { setActiveForm('manual'); setSheetAbierto(true); }}>
+                <Plus className="size-3.5" /> Agregar manual
+              </BotonSecundario>
+              <BotonPrimario onClick={() => { setActiveForm('pdf'); setSheetAbierto(true); }}>
+                <FileUp className="size-3.5" /> Cargar archivo
+              </BotonPrimario>
+            </div>
+          }
+        />
       )}
 
       <Dialog open={pagoPendiente !== null} onOpenChange={(abierto) => !abierto && setPagoPendiente(null)}>
-        <DialogContent className="sm:max-w-sm bg-white border-slate-200">
+        <DialogContent className="sm:max-w-sm">
           <DialogHeader>
             <DialogTitle>¿Cuándo se pagó?</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
-            <p className="text-sm text-slate-600">
+            <p className="text-sm text-[#475467]">
               {pagoPendiente?.ordenIds.length === 1
                 ? `Marcar la orden como ${getEtiquetaEstado(pagoPendiente.estado).toLowerCase()}.`
                 : `Marcar ${pagoPendiente?.ordenIds.length} órdenes como ${pagoPendiente ? getEtiquetaEstado(pagoPendiente.estado).toLowerCase() : ''}.`}
@@ -1459,22 +1566,22 @@ export function OrdenesTab() {
       </Dialog>
 
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent className="sm:max-w-lg bg-white border-slate-200">
+        <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Editar Registro</DialogTitle>
           </DialogHeader>
           <div className="grid gap-4 mt-4">
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <Label className="text-xs text-slate-500">Fecha</Label>
-                <Input type="date" value={editForm.fecha || ''} onChange={e => setEditForm({...editForm, fecha: e.target.value})} className="bg-white border-slate-200 rounded-xl" />
+                <Label className="text-xs text-[#7A8798]">Fecha</Label>
+                <Input type="date" value={editForm.fecha || ''} onChange={e => setEditForm({...editForm, fecha: e.target.value})} className="bg-white border-border rounded-xl" />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs text-slate-500">Factura/Orden</Label>
-                <Input value={editForm.numeroOrden || ''} onChange={e => setEditForm({...editForm, numeroOrden: e.target.value})} className="bg-white border-slate-200 rounded-xl" />
+                <Label className="text-xs text-[#7A8798]">Factura/Orden</Label>
+                <Input value={editForm.numeroOrden || ''} onChange={e => setEditForm({...editForm, numeroOrden: e.target.value})} className="bg-white border-border rounded-xl" />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs text-slate-500">Cliente</Label>
+                <Label className="text-xs text-[#7A8798]">Cliente</Label>
                 <Select value={editForm.clienteId || ''} onValueChange={(value) => {
                   const cliente = clientes.find(c => c.id === value);
                   setEditForm({
@@ -1484,7 +1591,7 @@ export function OrdenesTab() {
                     finca: cliente?.tipo === 'individual' ? cliente.nombre : editForm.finca,
                   });
                 }}>
-                  <SelectTrigger className="w-full rounded-xl border-slate-200 bg-white h-10 text-sm text-slate-900">
+                  <SelectTrigger className="w-full rounded-xl border-border bg-white h-10 text-sm text-[#0B1220]">
                     <SelectValue placeholder="Seleccionar cliente">
                       {editForm.clienteId ? (clientes.find(c => c.id === editForm.clienteId)?.nombre || 'Cliente no encontrado') : 'Seleccionar cliente'}
                     </SelectValue>
@@ -1498,7 +1605,7 @@ export function OrdenesTab() {
               </div>
               {(clientes.find(c => c.id === editForm.clienteId)?.tipo === 'grupo') && (
                 <div className="space-y-1.5">
-                  <Label className="text-xs text-slate-500">Sector</Label>
+                  <Label className="text-xs text-[#7A8798]">Sector</Label>
                   <EditFincaSelect
                     clienteId={editForm.clienteId || ''}
                     value={editForm.fincaId || ''}
@@ -1508,17 +1615,17 @@ export function OrdenesTab() {
               )}
               {!(clientes.find(c => c.id === editForm.clienteId)?.tipo === 'grupo') && (
                 <div className="space-y-1.5">
-                  <Label className="text-xs text-slate-500">Sector</Label>
-                  <Input value={editForm.finca || ''} onChange={e => setEditForm({...editForm, finca: e.target.value})} className="bg-white border-slate-200 rounded-xl" />
+                  <Label className="text-xs text-[#7A8798]">Sector</Label>
+                  <Input value={editForm.finca || ''} onChange={e => setEditForm({...editForm, finca: e.target.value})} className="bg-white border-border rounded-xl" />
                 </div>
               )}
               <div className="space-y-1.5">
-                <Label className="text-xs text-slate-500">Producto</Label>
+                <Label className="text-xs text-[#7A8798]">Producto</Label>
                 <Select value={editForm.productoId || ''} onValueChange={(value) => {
                   const nombre = productos.find(p => p.id === value)?.nombre;
                   setEditForm({ ...editForm, productoId: value || undefined, producto: nombre || editForm.producto });
                 }}>
-                  <SelectTrigger className="w-full rounded-xl border-slate-200 bg-white h-10 text-sm text-slate-900">
+                  <SelectTrigger className="w-full rounded-xl border-border bg-white h-10 text-sm text-[#0B1220]">
                     <SelectValue placeholder="Seleccionar producto">
                       {editForm.productoId ? (productos.find(p => p.id === editForm.productoId)?.nombre || 'Producto no encontrado') : 'Seleccionar producto'}
                     </SelectValue>
@@ -1531,17 +1638,17 @@ export function OrdenesTab() {
                 </Select>
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs text-slate-500">Producto (texto libre)</Label>
-                <Input value={editForm.producto || ''} onChange={e => setEditForm({...editForm, producto: e.target.value})} className="bg-white border-slate-200 rounded-xl" />
+                <Label className="text-xs text-[#7A8798]">Producto (texto libre)</Label>
+                <Input value={editForm.producto || ''} onChange={e => setEditForm({...editForm, producto: e.target.value})} className="bg-white border-border rounded-xl" />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs text-slate-500">Cantidad</Label>
-                <Input type="number" step="0.01" value={editForm.cantidad || ''} onChange={e => setEditForm({...editForm, cantidad: parseFloat(e.target.value) || 0})} className="bg-white border-slate-200 rounded-xl" />
+                <Label className="text-xs text-[#7A8798]">Cantidad</Label>
+                <Input type="number" step="0.01" value={editForm.cantidad || ''} onChange={e => setEditForm({...editForm, cantidad: parseFloat(e.target.value) || 0})} className="bg-white border-border rounded-xl" />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs text-slate-500">Unidad</Label>
+                <Label className="text-xs text-[#7A8798]">Unidad</Label>
                 <Select value={editForm.unidad || 'kg'} onValueChange={(value) => setEditForm({...editForm, unidad: value ?? 'kg'})}>
-                  <SelectTrigger className="w-full rounded-xl border-slate-200 bg-white h-10 text-sm text-slate-900">
+                  <SelectTrigger className="w-full rounded-xl border-border bg-white h-10 text-sm text-[#0B1220]">
                     <SelectValue placeholder="Seleccionar unidad" />
                   </SelectTrigger>
                   <SelectContent>
@@ -1558,11 +1665,11 @@ export function OrdenesTab() {
                 </Select>
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs text-slate-500">Precio Unit.</Label>
-                <Input type="number" step="0.01" value={editForm.precioUnitario || ''} onChange={e => setEditForm({...editForm, precioUnitario: parseFloat(e.target.value) || 0})} className="bg-white border-slate-200 rounded-xl" />
+                <Label className="text-xs text-[#7A8798]">Precio Unit.</Label>
+                <Input type="number" step="0.01" value={editForm.precioUnitario || ''} onChange={e => setEditForm({...editForm, precioUnitario: parseFloat(e.target.value) || 0})} className="bg-white border-border rounded-xl" />
               </div>
               <div className="space-y-1.5 sm:col-span-2">
-                <Label className="text-xs text-slate-500">Comisionistas</Label>
+                <Label className="text-xs text-[#7A8798]">Comisionistas</Label>
                 <MultiSelectComisionistas
                   comisionistas={comisionistas}
                   selectedIds={(editForm.comisionistas || []).map(a => a.comisionistaId)}
@@ -1574,7 +1681,7 @@ export function OrdenesTab() {
               </div>
             </div>
             <div className="flex justify-end gap-2 pt-2">
-              <Button variant="outline" onClick={() => setEditOpen(false)} className="rounded-xl border-slate-200">Cancelar</Button>
+              <Button variant="outline" onClick={() => setEditOpen(false)} className="rounded-xl border-border">Cancelar</Button>
               <Button onClick={handleSaveEdit} className="btn-primary-dark rounded-xl">Guardar</Button>
             </div>
           </div>

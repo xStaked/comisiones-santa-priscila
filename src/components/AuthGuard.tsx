@@ -19,7 +19,7 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#F8F9FB]">
-        <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
+        <Loader2 className="h-8 w-8 animate-spin text-[#98A2B3]" />
       </div>
     );
   }
@@ -27,7 +27,7 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   if (!isAuthenticated && pathname !== '/login') {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#F8F9FB]">
-        <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
+        <Loader2 className="h-8 w-8 animate-spin text-[#98A2B3]" />
       </div>
     );
   }

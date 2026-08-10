@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { isAxiosError } from 'axios';
-import { Plus, Pencil, Trash2, Search, Building2, X, PlusCircle, ToggleLeft, ToggleRight, Tag } from 'lucide-react';
+import { Plus, Pencil, Trash2, Building2, X, PlusCircle, ToggleLeft, ToggleRight, Tag } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useApp } from '@/context/AppContext';
 import { Cliente, Finca, Grupo } from '@/types';
@@ -19,9 +19,22 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  BarraAcciones,
+  BotonPrimario,
+  Buscador,
+  Chip,
+  Etiqueta,
+  Panel,
+  PanelTitulo,
+  Vacio,
+} from '@/components/ui/dc';
 import { toast } from 'sonner';
 import { RetencionCard } from '@/components/clientes/RetencionCard';
 import { fetchFincas, createFinca, updateFinca as apiUpdateFinca, deleteFinca as apiDeleteFinca, fetchGrupos, createGrupo, deleteGrupo } from '@/lib/api';
+
+const COLS =
+  'grid-cols-[minmax(0,1.5fr)_110px_minmax(0,1.1fr)_minmax(0,1fr)_minmax(0,1.4fr)_90px]';
 
 function mostrarErrorFinca(error: unknown, mensaje: string) {
   const detalle = isAxiosError<{ detail?: string }>(error) ? error.response?.data?.detail : undefined;
@@ -255,30 +268,26 @@ export function ClientesTab() {
     cliente.fincas ?? fincasExistentes.filter((f) => f.clienteId === cliente.id);
 
   return (
-    <div className="space-y-6">
+    <div className="flex max-w-[1200px] flex-col gap-3.5">
       <RetencionCard />
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div className="relative w-full sm:w-80">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-          <Input
-            placeholder="Buscar cliente..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9 bg-white border-slate-200 rounded-xl focus:border-slate-900 focus:ring-slate-900/10"
-          />
-        </div>
-        <Button
+      <BarraAcciones>
+        <Buscador
+          value={search}
+          onChange={setSearch}
+          placeholder="Buscar cliente o alias…"
+          className="w-full sm:w-[280px]"
+        />
+        <div className="flex-1" />
+        <BotonPrimario
           onClick={() => {
             resetForm();
             setOpen(true);
           }}
-          className="btn-primary-dark rounded-xl"
         >
-          <Plus className="h-4 w-4 mr-2" />
-          Nuevo Cliente
-        </Button>
+          <Plus className="size-3.5" /> Nuevo cliente
+        </BotonPrimario>
         <Dialog open={open} onOpenChange={setOpen}>
-          <DialogContent className="sm:max-w-lg bg-white border-slate-200 max-h-[90vh] overflow-y-auto">
+          <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
             <DialogHeader>
               <DialogTitle>{editing ? 'Editar Cliente' : 'Nuevo Cliente'}</DialogTitle>
             </DialogHeader>
@@ -290,7 +299,7 @@ export function ClientesTab() {
                   value={form.nombre}
                   onChange={(e) => setForm({ ...form, nombre: e.target.value })}
                   placeholder="Ej: Grupo Acuícola S.A."
-                  className="bg-white border-slate-200 rounded-xl focus:border-slate-900 focus:ring-slate-900/10"
+                  className="bg-white border-border rounded-xl focus:border-slate-900 focus:ring-slate-900/10"
                 />
               </div>
 
@@ -300,7 +309,7 @@ export function ClientesTab() {
                   value={form.tipo}
                   onValueChange={(value) => setForm({ ...form, tipo: value as 'grupo' | 'individual' })}
                 >
-                  <SelectTrigger className="w-full rounded-xl border-slate-200 bg-white h-10 text-sm text-slate-900">
+                  <SelectTrigger className="w-full rounded-xl border-border bg-white h-10 text-sm text-[#0B1220]">
                     <SelectValue placeholder="Tipo">
                       {form.tipo === 'individual' ? 'Individual' : 'Grupo'}
                     </SelectValue>
@@ -318,7 +327,7 @@ export function ClientesTab() {
                   value={form.grupoId}
                   onValueChange={(value) => setForm({ ...form, grupoId: value || '' })}
                 >
-                  <SelectTrigger className="w-full rounded-xl border-slate-200 bg-white h-10 text-sm text-slate-900">
+                  <SelectTrigger className="w-full rounded-xl border-border bg-white h-10 text-sm text-[#0B1220]">
                     <span className="flex flex-1 truncate text-left">
                       {grupos.find((g) => g.id === form.grupoId)?.nombre || 'N/A (sin grupo)'}
                     </span>
@@ -348,13 +357,13 @@ export function ClientesTab() {
                       }
                     }}
                     placeholder="Ej: CAMARONERA FAGUILL S.A."
-                    className="bg-white border-slate-200 rounded-xl focus:border-slate-900 focus:ring-slate-900/10"
+                    className="bg-white border-border rounded-xl focus:border-slate-900 focus:ring-slate-900/10"
                   />
                   <Button
                     type="button"
                     variant="outline"
                     onClick={agregarAlias}
-                    className="rounded-xl border-slate-200 shrink-0"
+                    className="rounded-xl border-border shrink-0"
                   >
                     <Plus className="h-4 w-4" />
                   </Button>
@@ -365,7 +374,7 @@ export function ClientesTab() {
                       <Badge
                         key={i}
                         variant="secondary"
-                        className="flex items-center gap-1 bg-slate-100 text-slate-700 border-0 pl-2 pr-1"
+                        className="flex items-center gap-1 bg-[#F0F2F5] text-[#344054] border-0 pl-2 pr-1"
                       >
                         <Tag className="h-3 w-3" />
                         {a}
@@ -374,7 +383,7 @@ export function ClientesTab() {
                           onClick={() =>
                             setForm({ ...form, alias: form.alias.filter((_, idx) => idx !== i) })
                           }
-                          className="ml-1 p-0.5 rounded hover:bg-slate-200"
+                          className="ml-1 p-0.5 rounded hover:bg-[#E5E8EC]"
                         >
                           <X className="h-3 w-3" />
                         </button>
@@ -390,7 +399,7 @@ export function ClientesTab() {
                   variant="ghost"
                   size="sm"
                   onClick={() => setForm({ ...form, activo: !form.activo })}
-                  className={form.activo ? 'text-emerald-600' : 'text-slate-400'}
+                  className={form.activo ? 'text-primary' : 'text-[#98A2B3]'}
                 >
                   {form.activo ? <ToggleRight className="h-5 w-5 mr-1" /> : <ToggleLeft className="h-5 w-5 mr-1" />}
                   {form.activo ? 'Activo' : 'Inactivo'}
@@ -398,7 +407,7 @@ export function ClientesTab() {
               </div>
 
               {form.tipo === 'grupo' && editing && (
-                <div className="space-y-3 border rounded-xl p-4 border-slate-200 bg-slate-50/50">
+                <div className="space-y-3 border rounded-xl p-4 border-border bg-[#FAFBFC]">
                   <Label>Sectores del grupo</Label>
                   {form.fincas.map((f, idx) => (
                     <div key={idx} className="flex items-center gap-2">
@@ -406,13 +415,13 @@ export function ClientesTab() {
                         value={f.nombre}
                         onChange={(e) => updateFincaForm(idx, e.target.value)}
                         placeholder="Nombre del sector"
-                        className="bg-white border-slate-200 rounded-xl flex-1"
+                        className="bg-white border-border rounded-xl flex-1"
                       />
                       <Button
                         type="button"
                         variant="ghost"
                         size="icon"
-                        className="h-9 w-9 text-slate-400 hover:text-red-600"
+                        className="h-9 w-9 text-[#98A2B3] hover:text-[#B91C1C]"
                         onClick={() => removeFincaForm(idx)}
                       >
                         <X className="h-4 w-4" />
@@ -424,7 +433,7 @@ export function ClientesTab() {
                       value={form.nuevaFinca}
                       onChange={(e) => setForm({ ...form, nuevaFinca: e.target.value })}
                       placeholder="Nuevo sector..."
-                      className="bg-white border-slate-200 rounded-xl flex-1"
+                      className="bg-white border-border rounded-xl flex-1"
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') {
                           e.preventDefault();
@@ -437,7 +446,7 @@ export function ClientesTab() {
                       variant="outline"
                       size="sm"
                       onClick={addFincaForm}
-                      className="rounded-xl border-slate-200 text-slate-600"
+                      className="rounded-xl border-border text-[#475467]"
                     >
                       <PlusCircle className="h-4 w-4 mr-1" />
                       Agregar
@@ -454,141 +463,149 @@ export function ClientesTab() {
                     resetForm();
                     setOpen(false);
                   }}
-                  className="rounded-xl border-slate-200"
+                  className="rounded-xl"
                 >
                   Cancelar
                 </Button>
-                <Button type="submit" className="btn-primary-dark rounded-xl">
-                  {editing ? 'Guardar Cambios' : 'Crear Cliente'}
+                <Button type="submit" className="rounded-xl">
+                  {editing ? 'Guardar cambios' : 'Crear cliente'}
                 </Button>
               </div>
             </form>
           </DialogContent>
         </Dialog>
-      </div>
+      </BarraAcciones>
 
-      <Card className="rounded-2xl border-slate-200">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base text-slate-900">Grupos empresariales</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
+      <Panel>
+        <PanelTitulo titulo="Grupos empresariales" nota="Agrupan clientes que comparten matriz" />
+        <div className="space-y-3 px-5 py-4">
           <form onSubmit={handleCrearGrupo} className="flex gap-2">
             <Input
-              placeholder="Nombre del nuevo grupo..."
+              placeholder="Nombre del nuevo grupo…"
               value={nuevoGrupo}
               onChange={(e) => setNuevoGrupo(e.target.value)}
-              className="bg-white border-slate-200 rounded-xl w-72"
+              className="w-72 rounded-xl"
             />
-            <Button type="submit" className="btn-primary-dark rounded-xl">
-              <Plus className="h-4 w-4 mr-2" />
-              Crear Grupo
+            <Button type="submit" className="rounded-xl">
+              <Plus className="mr-2 h-4 w-4" />
+              Crear grupo
             </Button>
           </form>
           <div className="flex flex-wrap gap-2">
             {grupos.length === 0 ? (
-              <p className="text-sm text-slate-500">No hay grupos creados</p>
+              <p className="text-sm text-[#98A2B3]">No hay grupos creados</p>
             ) : (
               grupos.map((g) => (
-                <Badge key={g.id} variant="secondary" className="flex items-center gap-2 bg-slate-100 text-slate-700 border-0 py-1.5 px-3">
+                <span
+                  key={g.id}
+                  className="inline-flex items-center gap-2 rounded-full bg-[#F2F4F6] py-1 pl-3 pr-2 text-xs font-medium text-[#475467]"
+                >
                   {g.nombre}
                   <button
                     type="button"
                     onClick={() => {
-                      if (confirm(`¿Eliminar el grupo "${g.nombre}"? Los clientes asignados quedarán sin grupo.`)) {
+                      if (
+                        confirm(
+                          `¿Eliminar el grupo "${g.nombre}"? Los clientes asignados quedarán sin grupo.`
+                        )
+                      ) {
                         eliminarGrupoMutation.mutate(g.id);
                       }
                     }}
-                    className="text-slate-400 hover:text-red-600"
+                    className="text-[#98A2B3] transition hover:text-[#B91C1C]"
                     aria-label={`Eliminar grupo ${g.nombre}`}
                   >
-                    <Trash2 className="h-3.5 w-3.5" />
+                    <Trash2 className="size-3" />
                   </button>
-                </Badge>
+                </span>
               ))
             )}
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </Panel>
 
       {filtered.length === 0 ? (
-        <div className="text-center py-16 bg-white rounded-2xl border border-dashed border-slate-200">
-          <Building2 className="h-12 w-12 text-slate-300 mx-auto mb-4" />
-          <h3 className="text-lg font-medium text-slate-700">No hay clientes</h3>
-          <p className="text-sm text-slate-500 mt-1">Crea tu primer cliente para comenzar</p>
-        </div>
+        <Vacio
+          icono={Building2}
+          titulo={clientes.length === 0 ? 'No hay clientes' : 'Ningún cliente coincide'}
+          nota={
+            clientes.length === 0
+              ? 'Crea tu primer cliente para comenzar.'
+              : 'Prueba con otro nombre o alias.'
+          }
+        />
       ) : (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {filtered.map((c) => (
-            <Card key={c.id} className="card-elevated rounded-2xl">
-              <CardHeader className="pb-3">
-                <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-2">
-                    <CardTitle className="text-base font-semibold text-slate-900">{c.nombre}</CardTitle>
-                    {c.activo ? (
-                      <Badge variant="secondary" className="bg-emerald-50 text-emerald-700 border-0 text-xs">
-                        Activo
-                      </Badge>
-                    ) : (
-                      <Badge variant="secondary" className="bg-slate-100 text-slate-500 border-0 text-xs">
-                        Inactivo
-                      </Badge>
-                    )}
-                  </div>
-                  <div className="flex gap-1">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg"
-                      onClick={() => handleEdit(c)}
-                    >
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg"
-                      onClick={() => handleDelete(c.id)}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="pt-0 space-y-3">
-                <div className="flex flex-wrap gap-2">
-                  <Badge variant="secondary" className="flex items-center gap-1 bg-slate-100 text-slate-700 border-0">
-                    <Tag className="h-3 w-3" />
-                    {c.tipo === 'grupo' ? 'Grupo' : 'Individual'}
-                  </Badge>
-                  {c.grupo && (
-                    <Badge variant="secondary" className="flex items-center gap-1 bg-indigo-50 text-indigo-700 border-0">
-                      {c.grupo.nombre}
-                    </Badge>
-                  )}
-                </div>
-                {c.tipo === 'grupo' && (
-                  <div className="pt-2 border-t border-slate-100">
-                    <p className="text-xs text-slate-500 mb-1.5 font-medium">Sectores</p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {fincasPorCliente(c).map((f) => (
-                        <Badge
-                          key={f.id}
-                          variant="outline"
-                          className="text-xs border-slate-200 text-slate-600 bg-white"
-                        >
-                          {f.nombre}
-                        </Badge>
-                      ))}
-                      {fincasPorCliente(c).length === 0 && (
-                        <span className="text-xs text-slate-400">Sin sectores registrados</span>
+        <Panel>
+          <div className="overflow-x-auto">
+            <div className="min-w-[1000px]">
+              <div className={`th-tabla grid ${COLS} gap-3 border-b border-border bg-[#FAFBFC] px-[18px] py-2.5`}>
+                <div>Cliente</div>
+                <div>Tipo</div>
+                <div>Grupo</div>
+                <div>Sectores</div>
+                <div>Alias de importación</div>
+                <div className="text-right">Acciones</div>
+              </div>
+
+              {filtered.map((c) => {
+                const sectores = fincasPorCliente(c);
+                return (
+                  <div
+                    key={c.id}
+                    className={`grid ${COLS} items-center gap-3 border-b border-[#F2F4F6] px-[18px] py-3 transition-colors hover:bg-[#FAFBFC]`}
+                  >
+                    <div className="flex min-w-0 items-center gap-2">
+                      <span className="truncate text-[13px] font-medium text-[#0B1220]">{c.nombre}</span>
+                      {!c.activo && <Chip>Inactivo</Chip>}
+                    </div>
+                    <div>
+                      <Chip tono={c.tipo === 'grupo' ? 'azul' : 'neutro'}>
+                        {c.tipo === 'grupo' ? 'Grupo' : 'Individual'}
+                      </Chip>
+                    </div>
+                    <div className="truncate text-[12.5px] text-[#6B7684]">{c.grupo?.nombre ?? '—'}</div>
+                    <div className="truncate text-[12.5px] text-[#344054]" title={sectores.map((f) => f.nombre).join(', ')}>
+                      {c.tipo === 'grupo'
+                        ? sectores.length > 0
+                          ? `${sectores.length} sector${sectores.length === 1 ? '' : 'es'}`
+                          : 'Sin sectores'
+                        : '—'}
+                    </div>
+                    <div className="flex min-w-0 flex-wrap gap-1.5">
+                      {(c.alias ?? []).length === 0 ? (
+                        <span className="text-xs text-[#98A2B3]">—</span>
+                      ) : (
+                        c.alias!.map((a, i) => (
+                          <Etiqueta key={i} title={a} className="max-w-[150px] truncate">
+                            {a}
+                          </Etiqueta>
+                        ))
                       )}
                     </div>
+                    <div className="flex justify-end gap-1.5">
+                      <button
+                        type="button"
+                        title="Editar"
+                        onClick={() => handleEdit(c)}
+                        className="inline-flex size-7 items-center justify-center rounded-[7px] border border-[#E0E4E9] bg-white text-[#98A2B3] transition hover:border-[#C6CDD6] hover:text-[#0B1220]"
+                      >
+                        <Pencil className="size-3" />
+                      </button>
+                      <button
+                        type="button"
+                        title="Eliminar"
+                        onClick={() => handleDelete(c.id)}
+                        className="inline-flex size-7 items-center justify-center rounded-[7px] border border-[#E0E4E9] bg-white text-[#98A2B3] transition hover:border-[#F5C2C2] hover:text-[#B91C1C]"
+                      >
+                        <Trash2 className="size-3" />
+                      </button>
+                    </div>
                   </div>
-                )}
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+                );
+              })}
+            </div>
+          </div>
+        </Panel>
       )}
     </div>
   );

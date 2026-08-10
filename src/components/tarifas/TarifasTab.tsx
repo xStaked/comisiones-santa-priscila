@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { Plus, Pencil, Trash2, Percent, Weight, Search, FileSpreadsheet } from 'lucide-react';
+import { Plus, Pencil, Trash2, Percent, FileSpreadsheet } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import * as XLSX from 'xlsx';
 import { useApp } from '@/context/AppContext';
@@ -10,9 +10,7 @@ import { fetchProveedores } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Badge } from '@/components/ui/badge';
 import {
   Select,
   SelectContent,
@@ -20,14 +18,31 @@ import {
   SelectTrigger,
 } from '@/components/ui/select';
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
+  BarraAcciones,
+  BotonPrimario,
+  BotonSecundario,
+  Buscador,
+  Chip,
+  Panel,
+  Vacio,
+  num,
+} from '@/components/ui/dc';
 import { toast } from 'sonner';
+
+const COLS =
+  'grid-cols-[34px_minmax(0,1.15fr)_minmax(0,1.25fr)_minmax(0,1.3fr)_minmax(0,1fr)_120px_minmax(0,1.1fr)_100px_80px]';
+
+/** "Regla escalonada" del prototipo: el umbral en kg y el valor sobre umbral. */
+function reglaEscalonada(t: TarifaClienteProducto): { texto: string; conRegla: boolean } {
+  const umbral = t.umbralKg ? Number(t.umbralKg) : 0;
+  const sobre = t.valorSobreUmbral ? Number(t.valorSobreUmbral) : 0;
+  if (!umbral || !sobre) return { texto: 'Sin umbral', conRegla: false };
+  const base = Number(t.valor);
+  return {
+    texto: `Hasta ${num(umbral, 0)} kg → $${num(base, 2)} · sobre → $${num(sobre, 2)}`,
+    conRegla: true,
+  };
+}
 
 function FincaSelect({
   fincas,
@@ -45,7 +60,7 @@ function FincaSelect({
     <div className="space-y-2">
       <Label htmlFor="finca">Sector (opcional)</Label>
       <Select value={value} onValueChange={(v) => onChange(v ?? '')}>
-        <SelectTrigger className="w-full rounded-xl border-slate-200 bg-white h-10 text-sm text-slate-900">
+        <SelectTrigger className="h-10 w-full rounded-xl">
           <span className="flex flex-1 truncate text-left">{etiqueta}</span>
         </SelectTrigger>
         <SelectContent>
@@ -90,6 +105,7 @@ export function TarifasTab() {
   const [tarifaToDelete, setTarifaToDelete] = useState<TarifaClienteProducto | null>(null);
   const [proveedoresSeleccionados, setProveedoresSeleccionados] = useState<string[]>([]);
   const [seleccionadas, setSeleccionadas] = useState<Set<string>>(new Set());
+  const [filtrosAbiertos, setFiltrosAbiertos] = useState(false);
   const [bulkOpen, setBulkOpen] = useState(false);
   const [bulkForm, setBulkForm] = useState<{ tipo: string; valor: string; activo: string }>({
     tipo: 'sin_cambio',
@@ -379,137 +395,187 @@ export function TarifasTab() {
   const etiquetaFormProducto = form.productoId ? nombreProducto(form.productoId) : 'Selecciona un producto';
   const etiquetaFormTipo = form.tipo === 'porcentaje' ? 'Porcentaje (%)' : form.tipo === 'fijo_kg' ? 'Fijo por kg (USD)' : 'Fijo por unidad (USD)';
 
+  const filtrosActivos =
+    (filtroComisionista !== 'todos' ? 1 : 0) +
+    (filtroCliente !== 'todos' ? 1 : 0) +
+    (filtroProducto !== 'todos' ? 1 : 0) +
+    (filtroFinca !== 'todas' ? 1 : 0);
+
+  // Vista previa "Así se va a pagar" del prototipo, con el ejemplo calculado en vivo.
+  const unidadValor = form.tipo === 'porcentaje' ? '%' : form.tipo === 'fijo_kg' ? '/kg' : '/unidad';
+  const valorNum = parseFloat(form.valor) || 0;
+  const umbralNum = parseFloat(form.umbralKg) || 0;
+  const sobreNum = parseFloat(form.valorSobreUmbral) || 0;
+  const hayEscalon = umbralNum > 0 && sobreNum > 0 && form.tipo !== 'porcentaje';
+  const kgEjemplo = hayEscalon ? Math.round(umbralNum * 1.25) : 0;
+  // Sobre el umbral toda la comisión pasa al valor reducido (ver calcularComisionPorTarifa).
+  const comisionEjemplo = hayEscalon ? kgEjemplo * sobreNum : 0;
+
   return (
-    <div className="space-y-6">
+    <div className="flex max-w-[1360px] flex-col gap-3.5">
       {/* Filtros y acciones */}
-      <Card className="rounded-2xl border-slate-200">
-        <CardContent className="p-4">
-          <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 flex-wrap">
-              <div className="relative w-full sm:w-64">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                <Input
-                  placeholder="Buscar tarifa..."
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  className="pl-9 bg-white border-slate-200 rounded-xl focus:border-slate-900 focus:ring-slate-900/10"
-                />
-              </div>
+      <BarraAcciones>
+        <Buscador value={search} onChange={setSearch} placeholder="Buscar tarifa…" className="w-full sm:w-[280px]" />
+        <BotonSecundario onClick={() => setFiltrosAbiertos((v) => !v)}>
+          Filtros
+          {filtrosActivos > 0 && (
+            <span className="cifra rounded-full bg-[#0B1220] px-1.5 py-px text-[10.5px] text-white">
+              {filtrosActivos}
+            </span>
+          )}
+        </BotonSecundario>
+        {seleccionadas.size > 0 && (
+          <BotonSecundario onClick={() => setBulkOpen(true)}>
+            <Pencil className="size-3.5" /> Editar {seleccionadas.size} seleccionadas
+          </BotonSecundario>
+        )}
+        <div className="flex-1" />
+        <BotonSecundario onClick={handleExportarExcel}>
+          <FileSpreadsheet className="size-3.5 text-primary" /> Exportar Excel
+        </BotonSecundario>
+        <BotonSecundario onClick={handleImportarExcel}>Importar Excel</BotonSecundario>
+        <BotonPrimario
+          onClick={() => {
+            resetForm();
+            setOpen(true);
+          }}
+        >
+          <Plus className="size-3.5" /> Nueva tarifa
+        </BotonPrimario>
+      </BarraAcciones>
 
-              <Select value={filtroComisionista} onValueChange={(v) => setFiltroComisionista(v ?? 'todos')}>
-                <SelectTrigger className="w-48 rounded-xl border-slate-200 bg-white h-10 text-sm text-slate-900">
-                  <span className="flex flex-1 truncate text-left">{etiquetaFiltroComisionista}</span>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="todos">Todos los comisionistas</SelectItem>
-                  {comisionistas.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {c.nombre}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+      {filtrosAbiertos && (
+        <Panel className="flex flex-wrap items-center gap-2.5 p-3.5">
+          <Select value={filtroComisionista} onValueChange={(v) => setFiltroComisionista(v ?? 'todos')}>
+            <SelectTrigger className="h-9 w-52 rounded-[9px]">
+              <span className="flex flex-1 truncate text-left">{etiquetaFiltroComisionista}</span>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todos">Todos los comisionistas</SelectItem>
+              {comisionistas.map((c) => (
+                <SelectItem key={c.id} value={c.id}>
+                  {c.nombre}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
 
-              <Select value={filtroCliente} onValueChange={(v) => { setFiltroCliente(v ?? 'todos'); setFiltroFinca('todas'); }}>
-                <SelectTrigger className="w-48 rounded-xl border-slate-200 bg-white h-10 text-sm text-slate-900">
-                  <span className="flex flex-1 truncate text-left">{etiquetaFiltroCliente}</span>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="todos">Todos los clientes</SelectItem>
-                  {clientes.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {c.nombre}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+          <Select
+            value={filtroCliente}
+            onValueChange={(v) => {
+              setFiltroCliente(v ?? 'todos');
+              setFiltroFinca('todas');
+            }}
+          >
+            <SelectTrigger className="h-9 w-52 rounded-[9px]">
+              <span className="flex flex-1 truncate text-left">{etiquetaFiltroCliente}</span>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todos">Todos los clientes</SelectItem>
+              {clientes.map((c) => (
+                <SelectItem key={c.id} value={c.id}>
+                  {c.nombre}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
 
-              <Select value={filtroProducto} onValueChange={(v) => setFiltroProducto(v ?? 'todos')}>
-                <SelectTrigger className="w-48 rounded-xl border-slate-200 bg-white h-10 text-sm text-slate-900">
-                  <span className="flex flex-1 truncate text-left">{etiquetaFiltroProducto}</span>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="todos">Todos los productos</SelectItem>
-                  {productos.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>
-                      {p.nombre}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+          <Select value={filtroProducto} onValueChange={(v) => setFiltroProducto(v ?? 'todos')}>
+            <SelectTrigger className="h-9 w-52 rounded-[9px]">
+              <span className="flex flex-1 truncate text-left">{etiquetaFiltroProducto}</span>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todos">Todos los productos</SelectItem>
+              {productos.map((p) => (
+                <SelectItem key={p.id} value={p.id}>
+                  {p.nombre}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
 
-              <Select value={filtroFinca} onValueChange={(v) => setFiltroFinca(v ?? 'todas')}>
-                <SelectTrigger className="w-48 rounded-xl border-slate-200 bg-white h-10 text-sm text-slate-900">
-                  <span className="flex flex-1 truncate text-left">{etiquetaFiltroFinca}</span>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="todas">Todos los sectores</SelectItem>
-                  <SelectItem value="ninguna">Sin sector</SelectItem>
-                  {fincasFiltro.map((f: Finca) => (
-                    <SelectItem key={f.id} value={f.id}>
-                      {f.nombre}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+          <Select value={filtroFinca} onValueChange={(v) => setFiltroFinca(v ?? 'todas')}>
+            <SelectTrigger className="h-9 w-52 rounded-[9px]">
+              <span className="flex flex-1 truncate text-left">{etiquetaFiltroFinca}</span>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todas">Todos los sectores</SelectItem>
+              <SelectItem value="ninguna">Sin sector</SelectItem>
+              {fincasFiltro.map((f: Finca) => (
+                <SelectItem key={f.id} value={f.id}>
+                  {f.nombre}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
 
-            <div className="flex items-center gap-2">
-              {seleccionadas.size > 0 && (
-                <Button
-                  variant="outline"
-                  onClick={() => setBulkOpen(true)}
-                  className="rounded-xl border-slate-200 text-slate-600"
-                >
-                  <Pencil className="h-4 w-4 mr-2" />
-                  Editar seleccionadas ({seleccionadas.size})
-                </Button>
-              )}
-              <Button
-                variant="outline"
-                onClick={handleExportarExcel}
-                className="rounded-xl border-slate-200 text-slate-600"
-              >
-                <FileSpreadsheet className="h-4 w-4 mr-2 text-emerald-600" />
-                Exportar Excel
-              </Button>
-              <Button
-                variant="outline"
-                onClick={handleImportarExcel}
-                className="rounded-xl border-slate-200 text-slate-600"
-              >
-                <FileSpreadsheet className="h-4 w-4 mr-2" />
-                Importar desde Excel
-              </Button>
-              <Button
-                onClick={() => {
-                  resetForm();
-                  setOpen(true);
-                }}
-                className="btn-primary-dark rounded-xl"
-              >
-                <Plus className="h-4 w-4 mr-2" />
-                Nueva Tarifa
-              </Button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+          {filtrosActivos > 0 && (
+            <button
+              type="button"
+              onClick={() => {
+                setFiltroComisionista('todos');
+                setFiltroCliente('todos');
+                setFiltroProducto('todos');
+                setFiltroFinca('todas');
+              }}
+              className="text-xs text-[#7A8798] underline"
+            >
+              Limpiar
+            </button>
+          )}
+        </Panel>
+      )}
 
       {/* Dialog */}
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="sm:max-w-lg bg-white border-slate-200">
+        <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-[660px]">
           <DialogHeader>
-            <DialogTitle>{editing ? 'Editar Tarifa' : 'Nueva Tarifa'}</DialogTitle>
+            <DialogTitle>{editing ? 'Editar tarifa' : 'Nueva tarifa'}</DialogTitle>
+            <DialogDescription>
+              Dos pasos: a quién aplica y cuánto se paga.
+            </DialogDescription>
           </DialogHeader>
-          <form onSubmit={handleSubmit} className="space-y-4 mt-4">
+
+          {/* Cabecera de pasos del prototipo */}
+          <div className="mt-1 flex items-center gap-2.5">
+            {[
+              { n: '1', titulo: 'A quién aplica', sub: 'Comisionista, cliente, producto', on: true },
+              { n: '2', titulo: 'Cuánto se paga', sub: 'Tipo, valor y umbral', on: valorNum > 0 },
+            ].map((p) => (
+              <div
+                key={p.n}
+                className={`flex flex-1 items-center gap-2.5 rounded-[10px] border px-3 py-2.5 ${
+                  p.on ? 'border-[#CFE3E0] bg-[#F7FBFA]' : 'border-border bg-white'
+                }`}
+              >
+                <span
+                  className={`cifra flex size-[22px] items-center justify-center rounded-full text-[11px] font-semibold ${
+                    p.on ? 'bg-primary text-white' : 'bg-[#F0F2F5] text-[#6B7684]'
+                  }`}
+                >
+                  {p.n}
+                </span>
+                <div className="min-w-0">
+                  <div
+                    className="truncate text-[12.5px] font-semibold"
+                    style={{ color: p.on ? '#0B1220' : '#6B7684' }}
+                  >
+                    {p.titulo}
+                  </div>
+                  <div className="truncate text-[11px] text-[#8B96A5]">{p.sub}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <form onSubmit={handleSubmit} className="mt-4 space-y-4">
             <div className="space-y-2">
               <Label htmlFor="comisionista">Comisionista</Label>
               <Select
                 value={form.comisionistaId}
                 onValueChange={(value) => setForm({ ...form, comisionistaId: value ?? '' })}
               >
-                <SelectTrigger className="w-full rounded-xl border-slate-200 bg-white h-10 text-sm text-slate-900">
+                <SelectTrigger className="h-10 w-full rounded-xl">
                   <span className="flex flex-1 truncate text-left">{etiquetaFormComisionista}</span>
                 </SelectTrigger>
                 <SelectContent>
@@ -528,7 +594,7 @@ export function TarifasTab() {
                 value={form.clienteId}
                 onValueChange={(value) => setForm({ ...form, clienteId: value ?? '', fincaId: '' })}
               >
-                <SelectTrigger className="w-full rounded-xl border-slate-200 bg-white h-10 text-sm text-slate-900">
+                <SelectTrigger className="h-10 w-full rounded-xl">
                   <span className="flex flex-1 truncate text-left">{etiquetaFormCliente}</span>
                 </SelectTrigger>
                 <SelectContent>
@@ -547,7 +613,7 @@ export function TarifasTab() {
                 value={form.productoId}
                 onValueChange={(value) => setForm({ ...form, productoId: value ?? '' })}
               >
-                <SelectTrigger className="w-full rounded-xl border-slate-200 bg-white h-10 text-sm text-slate-900">
+                <SelectTrigger className="h-10 w-full rounded-xl">
                   <span className="flex flex-1 truncate text-left">{etiquetaFormProducto}</span>
                 </SelectTrigger>
                 <SelectContent>
@@ -576,16 +642,16 @@ export function TarifasTab() {
                 value={form.proveedor}
                 onChange={(e) => setForm({ ...form, proveedor: e.target.value })}
                 placeholder="Ej: INDUSTRIAL ACUICOLA OCHOA & BARCIA DINACUAMAR"
-                className="bg-white border-slate-200 rounded-xl focus:border-slate-900 focus:ring-slate-900/10"
+                className="rounded-xl"
               />
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-muted-foreground">
                 Dejar en blanco para aplicar a cualquier proveedor.
               </p>
             </div>
 
             <div className="space-y-2">
               <Label>Proveedores excluidos</Label>
-              <div className="space-y-2 max-h-40 overflow-y-auto rounded-xl border border-slate-200 bg-white p-3">
+              <div className="space-y-2 max-h-40 overflow-y-auto rounded-xl border border-border bg-white p-3">
                 {proveedores.map((p) => (
                   <label key={p.id} className="flex items-center gap-2 text-sm cursor-pointer">
                     <input
@@ -598,13 +664,13 @@ export function TarifasTab() {
                           setProveedoresSeleccionados(proveedoresSeleccionados.filter((n) => n !== p.nombre));
                         }
                       }}
-                      className="h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-900"
+                      className="h-4 w-4 rounded border-[#C6CDD6] text-[#0B1220] focus:ring-slate-900"
                     />
-                    <span className="text-slate-700">{p.nombre}</span>
+                    <span className="text-[#344054]">{p.nombre}</span>
                   </label>
                 ))}
               </div>
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-muted-foreground">
                 Estos proveedores no cobrarán comisión con esta tarifa.
               </p>
             </div>
@@ -616,7 +682,7 @@ export function TarifasTab() {
                   value={form.tipo}
                   onValueChange={(value) => setForm({ ...form, tipo: value as 'porcentaje' | 'fijo_kg' | 'fijo_unidad' })}
                 >
-                  <SelectTrigger className="w-full rounded-xl border-slate-200 bg-white h-10 text-sm text-slate-900">
+                  <SelectTrigger className="h-10 w-full rounded-xl">
                     <span className="flex flex-1 truncate text-left">{etiquetaFormTipo}</span>
                   </SelectTrigger>
                   <SelectContent>
@@ -637,7 +703,7 @@ export function TarifasTab() {
                   value={form.valor}
                   onChange={(e) => setForm({ ...form, valor: e.target.value })}
                   placeholder={form.tipo === 'porcentaje' ? 'Ej: 2.5' : form.tipo === 'fijo_kg' ? 'Ej: 0.05' : 'Ej: 1.00'}
-                  className="bg-white border-slate-200 rounded-xl focus:border-slate-900 focus:ring-slate-900/10"
+                  className="rounded-xl"
                 />
               </div>
             </div>
@@ -653,7 +719,7 @@ export function TarifasTab() {
                   value={form.umbralKg}
                   onChange={(e) => setForm({ ...form, umbralKg: e.target.value })}
                   placeholder="Ej: 1000"
-                  className="bg-white border-slate-200 rounded-xl"
+                  className="rounded-xl"
                 />
               </div>
               <div className="space-y-2">
@@ -666,13 +732,56 @@ export function TarifasTab() {
                   value={form.valorSobreUmbral}
                   onChange={(e) => setForm({ ...form, valorSobreUmbral: e.target.value })}
                   placeholder="Ej: 3.50"
-                  className="bg-white border-slate-200 rounded-xl"
+                  className="rounded-xl"
                 />
               </div>
             </div>
-            <p className="text-xs text-slate-500">
-              Si el comisionista acumula el umbral en kg dentro de una liquidación, toda su comisión se paga a $/kg con el valor sobre umbral.
-            </p>
+            {/* "Así se va a pagar": vista previa en vivo del prototipo */}
+            <div className="rounded-[11px] bg-[#0B1220] px-[17px] py-4">
+              <div className="mb-2.5 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-[#8394AA]">
+                Así se va a pagar
+              </div>
+              {valorNum <= 0 ? (
+                <div className="text-xs text-[#8394AA]">
+                  Ingresa un valor para ver cómo queda la regla.
+                </div>
+              ) : hayEscalon ? (
+                <>
+                  <div className="cifra flex flex-wrap items-center gap-3 text-[13px] text-[#D6DEE8]">
+                    <span>
+                      Hasta{' '}
+                      <span className="font-semibold text-white">{num(umbralNum, 0)} kg</span> →{' '}
+                      <span className="font-semibold text-[#5EEAD4]">
+                        ${num(valorNum, 2)}
+                        {unidadValor}
+                      </span>
+                    </span>
+                    <span className="text-[#4E5C70]">·</span>
+                    <span>
+                      Desde{' '}
+                      <span className="font-semibold text-white">{num(umbralNum, 0)} kg</span> →{' '}
+                      <span className="font-semibold text-[#5EEAD4]">
+                        ${num(sobreNum, 2)}
+                        {unidadValor}
+                      </span>
+                    </span>
+                  </div>
+                  <div className="mt-2.5 text-xs leading-[1.45] text-[#8394AA]">
+                    Al superar el umbral, <strong className="font-semibold text-[#B7C3D3]">toda</strong> la
+                    comisión acumulada pasa al valor reducido: con {num(kgEjemplo, 0)} kg se pagarían{' '}
+                    <span className="cifra text-white">${num(comisionEjemplo, 2)}</span>.
+                  </div>
+                </>
+              ) : (
+                <div className="cifra text-[13px] text-[#D6DEE8]">
+                  Todo el volumen →{' '}
+                  <span className="font-semibold text-[#5EEAD4]">
+                    {form.tipo === 'porcentaje' ? `${num(valorNum, 2)} %` : `$${num(valorNum, 2)}${unidadValor}`}
+                  </span>
+                  <span className="ml-2 text-[#8394AA]">· sin umbral</span>
+                </div>
+              )}
+            </div>
 
             <div className="space-y-2">
               <Label htmlFor="vigenteHasta">Vigente hasta (opcional)</Label>
@@ -681,9 +790,9 @@ export function TarifasTab() {
                 type="date"
                 value={form.vigenteHasta}
                 onChange={(e) => setForm({ ...form, vigenteHasta: e.target.value })}
-                className="bg-white border-slate-200 rounded-xl"
+                className="rounded-xl"
               />
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-muted-foreground">
                 Déjalo vacío si la tarifa no caduca. Con fecha, solo se aplica a órdenes hasta ese día
                 inclusive; las posteriores no la usan (las ya liquidadas no cambian).
               </p>
@@ -695,7 +804,7 @@ export function TarifasTab() {
                 type="checkbox"
                 checked={form.activo}
                 onChange={(e) => setForm({ ...form, activo: e.target.checked })}
-                className="h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-900"
+                className="h-4 w-4 rounded border-[#C6CDD6] text-[#0B1220] focus:ring-slate-900"
               />
               <Label htmlFor="activo" className="text-sm font-normal cursor-pointer">
                 Tarifa activa
@@ -710,11 +819,11 @@ export function TarifasTab() {
                   resetForm();
                   setOpen(false);
                 }}
-                className="rounded-xl border-slate-200"
+                className="rounded-xl"
               >
                 Cancelar
               </Button>
-              <Button type="submit" className="btn-primary-dark rounded-xl">
+              <Button type="submit" className="rounded-xl">
                 {editing ? 'Guardar Cambios' : 'Crear Tarifa'}
               </Button>
             </div>
@@ -724,16 +833,16 @@ export function TarifasTab() {
 
       {/* Dialog de confirmación para eliminar */}
       <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
-        <DialogContent className="sm:max-w-md bg-white border-slate-200">
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>¿Eliminar tarifa?</DialogTitle>
             <DialogDescription>
               Esta acción no se puede deshacer. Se eliminará permanentemente la tarifa de{' '}
-              <span className="font-medium text-slate-900">
+              <span className="font-medium text-foreground">
                 {tarifaToDelete ? getComisionistaTarifa(tarifaToDelete) : ''}
               </span>{' '}
               para el producto{' '}
-              <span className="font-medium text-slate-900">
+              <span className="font-medium text-foreground">
                 {tarifaToDelete ? getProductoTarifa(tarifaToDelete) : ''}
               </span>
               .
@@ -746,7 +855,7 @@ export function TarifasTab() {
                 setDeleteConfirmOpen(false);
                 setTarifaToDelete(null);
               }}
-              className="rounded-xl border-slate-200"
+              className="rounded-xl"
             >
               Cancelar
             </Button>
@@ -763,7 +872,7 @@ export function TarifasTab() {
 
       {/* Dialog de edición masiva */}
       <Dialog open={bulkOpen} onOpenChange={setBulkOpen}>
-        <DialogContent className="sm:max-w-md bg-white border-slate-200">
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Editar {seleccionadas.size} tarifas</DialogTitle>
             <DialogDescription>
@@ -774,7 +883,7 @@ export function TarifasTab() {
             <div className="space-y-2">
               <Label>Tipo</Label>
               <Select value={bulkForm.tipo} onValueChange={(v) => setBulkForm({ ...bulkForm, tipo: v ?? 'sin_cambio' })}>
-                <SelectTrigger className="w-full rounded-xl border-slate-200 bg-white h-10 text-sm text-slate-900">
+                <SelectTrigger className="h-10 w-full rounded-xl">
                   <span className="flex flex-1 truncate text-left">
                     {bulkForm.tipo === 'sin_cambio' ? 'Sin cambio' : bulkForm.tipo === 'porcentaje' ? 'Porcentaje (%)' : bulkForm.tipo === 'fijo_kg' ? 'Fijo por kg (USD)' : 'Fijo por unidad (USD)'}
                   </span>
@@ -795,13 +904,13 @@ export function TarifasTab() {
                 min="0"
                 value={bulkForm.valor}
                 onChange={(e) => setBulkForm({ ...bulkForm, valor: e.target.value })}
-                className="bg-white border-slate-200 rounded-xl"
+                className="rounded-xl"
               />
             </div>
             <div className="space-y-2">
               <Label>Estado</Label>
               <Select value={bulkForm.activo} onValueChange={(v) => setBulkForm({ ...bulkForm, activo: v ?? 'sin_cambio' })}>
-                <SelectTrigger className="w-full rounded-xl border-slate-200 bg-white h-10 text-sm text-slate-900">
+                <SelectTrigger className="h-10 w-full rounded-xl">
                   <span className="flex flex-1 truncate text-left">
                     {bulkForm.activo === 'sin_cambio' ? 'Sin cambio' : bulkForm.activo === 'activa' ? 'Activa' : 'Inactiva'}
                   </span>
@@ -814,10 +923,10 @@ export function TarifasTab() {
               </Select>
             </div>
             <div className="flex justify-end gap-2 pt-2">
-              <Button type="button" variant="outline" onClick={() => setBulkOpen(false)} className="rounded-xl border-slate-200">
+              <Button type="button" variant="outline" onClick={() => setBulkOpen(false)} className="rounded-xl">
                 Cancelar
               </Button>
-              <Button type="submit" className="btn-primary-dark rounded-xl">
+              <Button type="submit" className="rounded-xl">
                 Aplicar a {seleccionadas.size} tarifas
               </Button>
             </div>
@@ -827,113 +936,111 @@ export function TarifasTab() {
 
       {/* Tabla */}
       {filtered.length === 0 ? (
-        <div className="text-center py-16 bg-white rounded-2xl border border-dashed border-slate-200">
-          <Percent className="h-12 w-12 text-slate-300 mx-auto mb-4" />
-          <h3 className="text-lg font-medium text-slate-700">No hay tarifas</h3>
-          <p className="text-sm text-slate-500 mt-1">Crea tu primera tarifa para comenzar</p>
-        </div>
+        <Vacio
+          icono={Percent}
+          titulo={tarifasClienteProducto.length === 0 ? 'No hay tarifas' : 'Ninguna tarifa coincide'}
+          nota={
+            tarifasClienteProducto.length === 0
+              ? 'Crea tu primera tarifa específica para comenzar.'
+              : 'Ajusta la búsqueda o limpia los filtros.'
+          }
+        />
       ) : (
-        <Card className="rounded-2xl border-slate-200 overflow-hidden">
+        <Panel>
           <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow className="border-slate-100 hover:bg-transparent">
-                  <TableHead className="w-10">
-                    <input
-                      type="checkbox"
-                      className="h-4 w-4 cursor-pointer accent-emerald-600"
-                      checked={todasFiltradasSeleccionadas}
-                      onChange={toggleSeleccionTodas}
-                      aria-label="Seleccionar todas las tarifas"
-                    />
-                  </TableHead>
-                  <TableHead className="text-slate-500 font-medium">Comisionista</TableHead>
-                  <TableHead className="text-slate-500 font-medium">Cliente</TableHead>
-                  <TableHead className="text-slate-500 font-medium">Sector</TableHead>
-                  <TableHead className="text-slate-500 font-medium">Producto</TableHead>
-                  <TableHead className="text-slate-500 font-medium">Proveedor</TableHead>
-                  <TableHead className="text-slate-500 font-medium">Excluidos</TableHead>
-                  <TableHead className="text-slate-500 font-medium">Tipo</TableHead>
-                  <TableHead className="text-slate-500 font-medium">Valor</TableHead>
-                  <TableHead className="text-slate-500 font-medium">Estado</TableHead>
-                  <TableHead className="text-slate-500 font-medium text-right">Acciones</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filtered.map((t) => (
-                  <TableRow key={t.id} className="border-slate-100">
-                    <TableCell>
+            <div className="min-w-[1180px]">
+              <div className={`th-tabla grid ${COLS} items-center gap-2.5 border-b border-border bg-[#FAFBFC] px-4 py-2.5`}>
+                <div>
+                  <input
+                    type="checkbox"
+                    className="size-[15px] cursor-pointer accent-primary align-middle"
+                    checked={todasFiltradasSeleccionadas}
+                    onChange={toggleSeleccionTodas}
+                    aria-label="Seleccionar todas las tarifas"
+                  />
+                </div>
+                <div>Comisionista</div>
+                <div>Cliente</div>
+                <div>Producto</div>
+                <div>Sector</div>
+                <div className="text-right">Valor</div>
+                <div>Regla escalonada</div>
+                <div>Vigencia</div>
+                <div className="text-right">Acciones</div>
+              </div>
+
+              {filtered.map((t) => {
+                const regla = reglaEscalonada(t);
+                const excluidos = (t.proveedoresExcluidos || []).join(', ');
+                return (
+                  <div
+                    key={t.id}
+                    className={`grid ${COLS} items-center gap-2.5 border-b border-[#F2F4F6] px-4 py-3 transition-colors hover:bg-[#FAFBFC] ${t.activo ? '' : 'opacity-60'}`}
+                  >
+                    <div>
                       <input
                         type="checkbox"
-                        className="h-4 w-4 cursor-pointer accent-emerald-600"
+                        className="size-[15px] cursor-pointer accent-primary align-middle"
                         checked={seleccionadas.has(t.id)}
                         onChange={() => toggleSeleccion(t.id)}
                         aria-label={`Seleccionar tarifa de ${getComisionistaTarifa(t)}`}
                       />
-                    </TableCell>
-                    <TableCell className="font-medium text-slate-900">
-                      {getComisionistaTarifa(t)}
-                    </TableCell>
-                    <TableCell className="text-slate-700">{getClienteTarifa(t)}</TableCell>
-                    <TableCell className="text-slate-700">{getFincaTarifa(t)}</TableCell>
-                    <TableCell className="text-slate-700">{getProductoTarifa(t)}</TableCell>
-                    <TableCell className="text-slate-700 text-xs max-w-[180px] truncate" title={getProveedorTarifa(t)}>
-                      {getProveedorTarifa(t)}
-                    </TableCell>
-                    <TableCell className="text-slate-700 text-xs max-w-[180px] truncate" title={(t.proveedoresExcluidos || []).join(', ')}>
-                      {(t.proveedoresExcluidos || []).join(', ') || '—'}
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        variant="secondary"
-                        className="flex items-center gap-1 bg-slate-100 text-slate-700 border-0 w-fit"
-                      >
-                        {t.tipo === 'porcentaje' ? (
-                          <Percent className="h-3 w-3" />
-                        ) : (
-                          <Weight className="h-3 w-3" />
-                        )}
-                        {t.tipo === 'porcentaje' ? 'Porcentaje' : t.tipo === 'fijo_kg' ? 'Fijo/kg' : 'Fijo/unidad'}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-slate-900 font-medium">{formatValor(t)}</TableCell>
-                    <TableCell>
-                      {t.activo ? (
-                        <Badge className="bg-emerald-50 text-emerald-700 hover:bg-emerald-50 border-0">
-                          Activa
-                        </Badge>
-                      ) : (
-                        <Badge className="bg-slate-100 text-slate-500 hover:bg-slate-100 border-0">
-                          Inactiva
-                        </Badge>
+                    </div>
+                    <div className="min-w-0">
+                      <div className="truncate text-[13px] text-[#0B1220]">{getComisionistaTarifa(t)}</div>
+                      {!t.activo && <Chip className="mt-0.5">Inactiva</Chip>}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="truncate text-[12.5px] text-[#344054]">{getClienteTarifa(t)}</div>
+                      {excluidos && (
+                        <div className="truncate text-[11px] text-[#B45309]" title={excluidos}>
+                          Excluye {(t.proveedoresExcluidos || []).length} razón(es)
+                        </div>
                       )}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex items-center justify-end gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg"
-                          onClick={() => handleEdit(t)}
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg"
-                          onClick={() => handleDelete(t)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                    </div>
+                    <div className="truncate text-[12.5px] text-[#344054]" title={getProductoTarifa(t)}>
+                      {getProductoTarifa(t)}
+                    </div>
+                    <div className="truncate text-[12.5px] text-[#6B7684]">{getFincaTarifa(t)}</div>
+                    <div className="text-right">
+                      <span className="cifra rounded-md bg-[#F2F4F6] px-2 py-[3px] text-[12.5px] font-semibold text-[#0B1220]">
+                        {formatValor(t)}
+                      </span>
+                    </div>
+                    <div
+                      className="truncate text-[11.5px] leading-[1.35]"
+                      style={{ color: regla.conRegla ? '#0B5E56' : '#98A2B3' }}
+                      title={regla.texto}
+                    >
+                      {regla.texto}
+                    </div>
+                    <div className="cifra text-[11.5px] text-[#6B7684]">
+                      {t.vigenteHasta ? t.vigenteHasta.slice(0, 10) : 'Sin caducidad'}
+                    </div>
+                    <div className="flex justify-end gap-1.5">
+                      <button
+                        type="button"
+                        title="Editar"
+                        onClick={() => handleEdit(t)}
+                        className="inline-flex size-7 items-center justify-center rounded-[7px] border border-[#E0E4E9] bg-white text-[#98A2B3] transition hover:border-[#C6CDD6] hover:text-[#0B1220]"
+                      >
+                        <Pencil className="size-3" />
+                      </button>
+                      <button
+                        type="button"
+                        title="Eliminar"
+                        onClick={() => handleDelete(t)}
+                        className="inline-flex size-7 items-center justify-center rounded-[7px] border border-[#E0E4E9] bg-white text-[#98A2B3] transition hover:border-[#F5C2C2] hover:text-[#B91C1C]"
+                      >
+                        <Trash2 className="size-3" />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
-        </Card>
+        </Panel>
       )}
     </div>
   );
