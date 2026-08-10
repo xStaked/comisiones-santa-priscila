@@ -8,7 +8,7 @@
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-ibm-plex), 'IBM Plex Sans', system-ui, sans-serif;
-  --font-mono: ui-monospace, monospace;
+  --font-mono: var(--font-ibm-plex-mono), 'IBM Plex Mono', ui-monospace, monospace;
   --font-heading: var(--font-ibm-plex), 'IBM Plex Sans', system-ui, sans-serif;
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
@@ -49,38 +49,39 @@
 }
 
 :root {
-  --background: #F8F9FB;
-  --foreground: #0F172A;
+  /* Paleta del rediseño: tinta #0B1220, lienzo #F5F6F8, acento teal #0F766E */
+  --background: #F5F6F8;
+  --foreground: #0B1220;
   --card: #ffffff;
-  --card-foreground: #0F172A;
+  --card-foreground: #0B1220;
   --popover: #ffffff;
-  --popover-foreground: #0F172A;
-  --primary: #0F172A;
+  --popover-foreground: #0B1220;
+  --primary: #0F766E;
   --primary-foreground: #ffffff;
-  --secondary: #F1F5F9;
-  --secondary-foreground: #0F172A;
-  --muted: #F1F5F9;
-  --muted-foreground: #64748B;
-  --accent: #F1F5F9;
-  --accent-foreground: #0F172A;
-  --destructive: #EF4444;
-  --border: #E2E8F0;
-  --input: #E2E8F0;
-  --ring: #0F172A;
-  --chart-1: #0F172A;
-  --chart-2: #334155;
-  --chart-3: #64748B;
-  --chart-4: #94A3B8;
-  --chart-5: #CBD5E1;
-  --radius: 0.875rem;
-  --sidebar: #ffffff;
-  --sidebar-foreground: #0F172A;
-  --sidebar-primary: #0F172A;
+  --secondary: #F2F4F6;
+  --secondary-foreground: #0B1220;
+  --muted: #F2F4F6;
+  --muted-foreground: #7A8798;
+  --accent: #EAF2F1;
+  --accent-foreground: #0B5E56;
+  --destructive: #B91C1C;
+  --border: #E5E8EC;
+  --input: #E0E4E9;
+  --ring: #0F766E;
+  --chart-1: #0F766E;
+  --chart-2: #1D4ED8;
+  --chart-3: #B45309;
+  --chart-4: #6D28D9;
+  --chart-5: #0E7490;
+  --radius: 0.75rem;
+  --sidebar: #0B1220;
+  --sidebar-foreground: #93A1B4;
+  --sidebar-primary: #0F766E;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #F1F5F9;
-  --sidebar-accent-foreground: #0F172A;
-  --sidebar-border: #E2E8F0;
-  --sidebar-ring: #0F172A;
+  --sidebar-accent: rgba(255, 255, 255, 0.1);
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: rgba(255, 255, 255, 0.07);
+  --sidebar-ring: #0F766E;
 }
 
 @layer base {
@@ -99,57 +100,71 @@
 @layer utilities {
   .card-elevated {
     background: #ffffff;
-    border: 1px solid #E2E8F0;
-    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04), 0 1px 2px rgba(15, 23, 42, 0.02);
+    border: 1px solid var(--border);
+    box-shadow: 0 1px 3px rgba(11, 18, 32, 0.04), 0 1px 2px rgba(11, 18, 32, 0.02);
     transition: all 0.2s ease;
   }
   .card-elevated:hover {
-    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.06), 0 2px 4px rgba(15, 23, 42, 0.04);
-    border-color: #CBD5E1;
+    box-shadow: 0 4px 12px rgba(11, 18, 32, 0.06), 0 2px 4px rgba(11, 18, 32, 0.04);
+    border-color: #C6CDD6;
   }
   .btn-primary-dark {
-    background: #0F172A;
+    background: #0B1220;
     color: #ffffff;
     font-weight: 500;
     transition: all 0.2s ease;
   }
   .btn-primary-dark:hover {
-    background: #1E293B;
+    background: #1B2739;
     transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.2);
+    box-shadow: 0 4px 12px rgba(11, 18, 32, 0.2);
   }
   .input-clean {
     background: #ffffff;
-    border: 1px solid #E2E8F0;
-    color: #0F172A;
+    border: 1px solid var(--input);
+    color: #0B1220;
     transition: all 0.2s ease;
   }
   .input-clean:focus {
-    border-color: #0F172A;
-    box-shadow: 0 0 0 3px rgba(15, 23, 42, 0.08);
+    border-color: #0F766E;
+    box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.12);
     outline: none;
   }
   .input-clean::placeholder {
-    color: #94A3B8;
+    color: #98A2B3;
   }
   .tabular-nums {
     font-variant-numeric: tabular-nums;
   }
+  /* Cifras: mono + ancho fijo, como en el prototipo */
+  .cifra {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.01em;
+  }
+  /* Cabecera de tabla del rediseño */
+  .th-tabla {
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: #7A8798;
+    font-weight: 600;
+  }
 }
 
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
 }
 ::-webkit-scrollbar-track {
-  background: #F1F5F9;
+  background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #CBD5E1;
-  border-radius: 3px;
+  background: #CBD2DA;
+  border-radius: 4px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #94A3B8;
+  background: #98A2B3;
 }
 
 @media (prefers-reduced-motion: reduce) {

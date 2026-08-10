@@ -1,89 +1,60 @@
 'use client';
 
-import Link from 'next/link';
-import { LayoutDashboard, Calculator, Users, FileText, Download, History, BarChart3, LogOut, UserCircle, Building2, Package, Percent, Truck } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { useAuth } from '@/context/AuthContext';
+import { useMemo } from 'react';
+import { usePathname } from 'next/navigation';
+import { itemActivo } from './nav';
+import { useApp } from '@/context/AppContext';
 
-interface HeaderProps {
-  activeTab: string;
+/** Registros pagados que aún tienen alguna asignación sin liquidar. */
+export function useSinLiquidar() {
+  const { ordenItems } = useApp();
+  return useMemo(
+    () =>
+      ordenItems.filter(
+        (o) => o.estado === 'pagada' && o.comisionistas.some((a) => !a.liquidacionId)
+      ).length,
+    [ordenItems]
+  );
 }
 
-const tabs = [
-  { value: 'dashboard', label: 'Resumen', href: '/', icon: LayoutDashboard },
-  { value: 'clientes', label: 'Clientes', href: '/clientes', icon: Building2 },
-  { value: 'productos', label: 'Productos', href: '/productos', icon: Package },
-  { value: 'tarifas', label: 'Tarifas', href: '/tarifas', icon: Percent },
-  { value: 'comisionistas', label: 'Comisionistas', href: '/comisionistas', icon: Users },
-  { value: 'proveedores', label: 'Proveedores', href: '/proveedores', icon: Truck },
-  { value: 'ordenes', label: 'Órdenes', href: '/ordenes', icon: FileText },
-  { value: 'liquidacion', label: 'Liquidación', href: '/liquidacion', icon: Download },
-  { value: 'historial', label: 'Historial', href: '/historial', icon: History },
-  { value: 'reportes', label: 'Reportes', href: '/reportes', icon: BarChart3 },
-];
+/** Subtítulos con conteos en vivo; el resto usa el subtítulo estático de nav.ts. */
+function useSubtitulo(href: string | undefined, porDefecto: string) {
+  const { ordenItems, clientes, productos, comisionistas, liquidaciones } = useApp();
+  const sinLiquidar = useSinLiquidar();
 
-export function Header({ activeTab }: HeaderProps) {
-  const { user, logout } = useAuth();
+  switch (href) {
+    case '/ordenes': {
+      const facturas = new Set(ordenItems.map((o) => o.numeroOrden)).size;
+      return `${facturas} facturas cargadas · ${sinLiquidar} registros sin liquidar`;
+    }
+    case '/liquidacion':
+      return `${sinLiquidar} registros pagados sin liquidar`;
+    case '/historial':
+      return `${liquidaciones.length} liquidaciones guardadas`;
+    case '/clientes':
+      return `${clientes.length} clientes`;
+    case '/productos':
+      return `${productos.length} productos · unidades de comisión`;
+    case '/comisionistas':
+      return `${comisionistas.length} comisionistas activos`;
+    default:
+      return porDefecto;
+  }
+}
+
+export function Header() {
+  const pathname = usePathname();
+  const item = itemActivo(pathname);
+  const subtitulo = useSubtitulo(item?.href, item?.subtitulo ?? '');
 
   return (
-    <div className="sticky top-0 z-50 bg-white border-b border-slate-200 shadow-sm">
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div className="flex h-16 items-center justify-between">
-          <Link href="/" className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-900">
-              <Calculator className="h-5 w-5 text-white" />
-            </div>
-            <div>
-              <h1 className="text-lg font-bold text-slate-900 leading-tight">Dinacuamar</h1>
-              <p className="text-xs text-slate-500">INDUSTRIAL ACUICOLA OCHOA & BARCIA DINACUAMAR CIA.LTDA.</p>
-            </div>
-          </Link>
-          <div className="hidden sm:flex items-center gap-3">
-            {user && (
-              <div className="flex items-center gap-3">
-                <div className="flex items-center gap-1.5">
-                  <UserCircle className="h-4 w-4 text-slate-500" />
-                  <span className="text-xs text-slate-600 font-medium">{user.username}</span>
-                </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    if (confirm('¿Cerrar sesión?')) {
-                      logout();
-                    }
-                  }}
-                  className="text-slate-500 hover:text-red-600 gap-1.5 h-8 text-xs"
-                >
-                  <LogOut className="h-3.5 w-3.5" />
-                  Salir
-                </Button>
-              </div>
-            )}
-          </div>
-        </div>
-        <nav className="mt-2 flex gap-1 h-11 items-center overflow-x-auto">
-          {tabs.map((tab) => {
-            const isActive = activeTab === tab.value;
-            const Icon = tab.icon;
-            return (
-              <Link
-                key={tab.value}
-                href={tab.href}
-                className={
-                  'flex items-center rounded-lg px-4 py-2.5 text-sm font-medium transition-all border whitespace-nowrap ' +
-                  (isActive
-                    ? 'bg-slate-100 text-slate-900 border-slate-200 shadow-none'
-                    : 'text-slate-500 hover:text-slate-700 border-transparent hover:bg-slate-50/50')
-                }
-              >
-                <Icon className="h-4 w-4 mr-2" />
-                {tab.label}
-              </Link>
-            );
-          })}
-        </nav>
+    <header className="sticky top-0 z-30 flex h-[62px] items-center gap-[18px] border-b border-border bg-white/[0.92] px-5 backdrop-blur-md lg:px-[30px]">
+      <div className="min-w-0 flex-1">
+        <h1 className="m-0 text-lg font-semibold tracking-[-0.015em] text-[#0B1220]">
+          {item?.label ?? 'Dinacuamar'}
+        </h1>
+        <div className="mt-px truncate text-xs text-[#6B7684]">{subtitulo}</div>
       </div>
-    </div>
+    </header>
   );
 }

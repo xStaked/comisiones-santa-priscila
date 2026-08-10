@@ -2,432 +2,322 @@
 
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
-  Legend,
-} from 'recharts';
-import {
-  TrendingUp,
-  Users,
-  FileText,
-  DollarSign,
-  ArrowRight,
-  BarChart3,
-  TrendingDown,
-  Package,
-  Clock,
-} from 'lucide-react';
 import Link from 'next/link';
 import { useApp } from '@/context/AppContext';
 import { calcularComisionTotalItem } from '@/lib/export-utils';
 import { fetchGlobalStats, fetchTendencias, fetchPorComisionista } from '@/lib/api';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+import type { EstadoOrden } from '@/types';
 
-const COLORS = ['#0f172a', '#10b981', '#3b82f6', '#f59e0b', '#ef4444'];
+const PALETA = ['#0F766E', '#1D4ED8', '#B45309', '#6D28D9', '#0E7490'];
+const MESES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+
+const n = (v: number, d = 2) =>
+  v.toLocaleString('es-ES', { minimumFractionDigits: d, maximumFractionDigits: d });
+const m = (v: number) => '$' + n(v);
+
+const CHIPS: Record<EstadoOrden, { label: string; bg: string; fg: string }> = {
+  pagada: { label: 'Pagada', bg: '#E6F2F0', fg: '#0B5E56' },
+  pendiente: { label: 'Pendiente', bg: '#FEF3E2', fg: '#9A5B0B' },
+  parcialmente_pagada: { label: 'Parcial', bg: '#EAF0FB', fg: '#1D4ED8' },
+  liquidada: { label: 'Liquidada', bg: '#F0F2F5', fg: '#475467' },
+};
+
+function ChipEstado({ estado }: { estado?: EstadoOrden }) {
+  const c = CHIPS[estado ?? 'pendiente'] ?? CHIPS.pendiente;
+  return (
+    <span
+      className="rounded-full px-2 py-[2.5px] text-[11px] font-semibold"
+      style={{ background: c.bg, color: c.fg }}
+    >
+      {c.label}
+    </span>
+  );
+}
 
 export function DashboardTab() {
   const { comisionistas, ordenItems, liquidaciones } = useApp();
 
-  const comisionistaMap = useMemo(
-    () => new Map(comisionistas.map((c) => [c.id, c])),
-    [comisionistas]
-  );
-
-  const { data: globalStats } = useQuery({
-    queryKey: ['reportes', 'global'],
-    queryFn: fetchGlobalStats,
-  });
-
-  const { data: tendenciasData } = useQuery({
-    queryKey: ['reportes', 'tendencias'],
-    queryFn: fetchTendencias,
-  });
-
-  const { data: porComisionista } = useQuery({
-    queryKey: ['reportes', 'por-comisionista'],
-    queryFn: fetchPorComisionista,
-  });
+  const { data: globalStats } = useQuery({ queryKey: ['reportes', 'global'], queryFn: fetchGlobalStats });
+  const { data: tendenciasData } = useQuery({ queryKey: ['reportes', 'tendencias'], queryFn: fetchTendencias });
+  const { data: porComisionista } = useQuery({ queryKey: ['reportes', 'por-comisionista'], queryFn: fetchPorComisionista });
 
   const totalLiquidado = globalStats?.totalComisionadoHistorico ?? 0;
+  const porLiquidar = globalStats?.totalComisionPagadas ?? globalStats?.totalComisionActivas ?? 0;
   const ordenesPagadas = globalStats?.totalOrdenesPagadas ?? globalStats?.totalOrdenesActivas ?? 0;
-  const totalComisionPorLiquidar = globalStats?.totalComisionPagadas ?? globalStats?.totalComisionActivas ?? 0;
-  const totalVendido = (globalStats?.totalVendidoHistorico ?? 0) + (globalStats?.totalVendidoPagadas ?? globalStats?.totalVendidoActivas ?? 0);
+  const totalVendido =
+    (globalStats?.totalVendidoHistorico ?? 0) +
+    (globalStats?.totalVendidoPagadas ?? globalStats?.totalVendidoActivas ?? 0);
 
-  const tendencias = useMemo(() => {
-    if (!tendenciasData || tendenciasData.length === 0) return { diff: 0, up: true };
+  // Registros pagados aún sin liquidar y comisionistas involucrados
+  const pendientes = useMemo(() => {
+    const items = ordenItems.filter(
+      (o) => o.estado === 'pagada' && o.comisionistas.some((a) => !a.liquidacionId)
+    );
+    const personas = new Set<string>();
+    items.forEach((o) => o.comisionistas.forEach((a) => !a.liquidacionId && personas.add(a.comisionistaId)));
+    const facturas = new Set(items.map((o) => o.numeroOrden));
+    return { registros: items.length, facturas: facturas.size, personas: personas.size };
+  }, [ordenItems]);
+
+  const variacion = useMemo(() => {
+    if (!tendenciasData || tendenciasData.length < 2) return null;
     const actual = tendenciasData[tendenciasData.length - 1].comision;
-    const anterior = tendenciasData.length > 1 ? tendenciasData[tendenciasData.length - 2].comision : 0;
-    const diff = anterior > 0 ? ((actual - anterior) / anterior) * 100 : 0;
-    return { diff: Math.round(diff * 10) / 10, up: diff >= 0 };
+    const anterior = tendenciasData[tendenciasData.length - 2].comision;
+    if (anterior <= 0) return null;
+    return Math.round(((actual - anterior) / anterior) * 1000) / 10;
   }, [tendenciasData]);
 
-  const comisionesPorMes = useMemo(() => {
-    if (!tendenciasData) return [];
-    const nombresMes = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
-    return tendenciasData.map((d: any) => {
-      const [anio, mesNum] = d.mes.split('-');
-      return {
-        mes: `${nombresMes[parseInt(mesNum) - 1]} ${anio}`,
-        total: Math.round(d.comision * 100) / 100,
-      };
-    });
+  const barras = useMemo(() => {
+    const datos: { mes: string; valor: number }[] = (tendenciasData ?? [])
+      .slice(-6)
+      .map((d: { mes: string; comision: number }) => {
+        const [, mesNum] = d.mes.split('-');
+        return { mes: MESES[parseInt(mesNum, 10) - 1] ?? d.mes, valor: d.comision };
+      });
+    const max = Math.max(1, ...datos.map((b) => b.valor));
+    return datos.map((b, i) => ({
+      ...b,
+      etiqueta: b.valor >= 1000 ? n(b.valor / 1000, 1) + 'k' : n(b.valor, 0),
+      altura: Math.max(2, Math.round((b.valor / max) * 130)),
+      ultima: i === datos.length - 1,
+    }));
   }, [tendenciasData]);
 
   const topComisionistas = useMemo(() => {
     if (!porComisionista) return [];
-    return porComisionista
-      .sort((a: any, b: any) => b.totalComision - a.totalComision)
-      .slice(0, 5)
-      .map((c: any, idx: number) => {
-        const shortName = c.comisionistaNombre.length > 16 ? c.comisionistaNombre.slice(0, 16) + '…' : c.comisionistaNombre;
-        return {
-          name: shortName,
-          fullName: c.comisionistaNombre,
-          value: Math.round(c.totalComision * 100) / 100,
-          color: COLORS[idx % COLORS.length],
-        };
-      });
+    const orden = [...porComisionista].sort((a, b) => b.totalComision - a.totalComision).slice(0, 5);
+    const max = Math.max(1, ...orden.map((c) => c.totalComision));
+    return orden.map((c, i) => ({
+      nombre: c.comisionistaNombre,
+      monto: m(c.totalComision),
+      ancho: Math.round((c.totalComision / max) * 100),
+      color: PALETA[i % PALETA.length],
+    }));
   }, [porComisionista]);
 
-  const totalComisionTop = topComisionistas.reduce((s: number, c: any) => s + c.value, 0);
+  const recientes = useMemo(
+    () =>
+      [...ordenItems]
+        .sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime())
+        .slice(0, 6),
+    [ordenItems]
+  );
 
+  const ultimasLiquidaciones = useMemo(
+    () =>
+      [...liquidaciones]
+        .sort((a, b) => new Date(b.fechaCreacion).getTime() - new Date(a.fechaCreacion).getTime())
+        .slice(0, 4),
+    [liquidaciones]
+  );
 
-  const ultimasLiquidaciones = useMemo(() => {
-    return [...liquidaciones]
-      .sort((a, b) => new Date(b.fechaCreacion).getTime() - new Date(a.fechaCreacion).getTime())
-      .slice(0, 5);
-  }, [liquidaciones]);
-
-  const ordenesRecientes = useMemo(() => {
-    return [...ordenItems]
-      .sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime())
-      .slice(0, 5);
-  }, [ordenItems]);
+  const kpis = [
+    { label: 'Total vendido', valor: m(totalVendido), delta: variacion !== null ? (variacion >= 0 ? '+' : '−') + n(Math.abs(variacion), 1) + ' %' : '—', deltaColor: variacion === null ? '#98A2B3' : variacion >= 0 ? '#0F766E' : '#B45309', nota: 'comisión vs mes anterior' },
+    { label: 'Facturas pagadas', valor: String(ordenesPagadas), delta: String(pendientes.facturas), deltaColor: '#0F766E', nota: 'listas para liquidar' },
+    { label: 'Total liquidado', valor: m(totalLiquidado), delta: String(liquidaciones.length), deltaColor: '#0F766E', nota: 'liquidaciones guardadas' },
+    { label: 'Comisionistas', valor: String(comisionistas.length), delta: String(pendientes.personas), deltaColor: '#B45309', nota: 'con saldo pendiente' },
+  ];
 
   return (
-    <div className="space-y-6">
-      {/* KPIs */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-        <Card className="rounded-2xl border-slate-200 shadow-sm">
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs text-slate-500 uppercase tracking-wide font-medium">Total Liquidado</p>
-                <p className="text-2xl font-bold text-slate-900 mt-1 tabular-nums">${totalLiquidado.toFixed(2)}</p>
-              </div>
-              <div className="h-10 w-10 rounded-xl bg-emerald-50 flex items-center justify-center">
-                <DollarSign className="h-5 w-5 text-emerald-600" />
-              </div>
+    <div className="flex max-w-[1360px] flex-col gap-4">
+      {/* Hero + KPIs secundarios */}
+      <div className="grid gap-4 lg:grid-cols-[1.15fr_1fr]">
+        <div className="relative flex min-h-[196px] flex-col justify-between overflow-hidden rounded-[14px] bg-[#0B1220] px-6 py-[22px] text-white">
+          <div className="pointer-events-none absolute -right-10 -top-10 size-[200px] rounded-full bg-primary opacity-[0.16]" />
+          <div className="relative">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.09em] text-[#8394AA]">
+              Comisión por liquidar
             </div>
-          </CardContent>
-        </Card>
-
-        <Card className="rounded-2xl border-slate-200 shadow-sm">
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs text-slate-500 uppercase tracking-wide font-medium">Comisión por Liquidar</p>
-                <p className="text-2xl font-bold text-slate-900 mt-1 tabular-nums">${totalComisionPorLiquidar.toFixed(2)}</p>
-                {tendencias.diff !== 0 && (
-                  <p className={`text-xs mt-1 flex items-center gap-1 ${tendencias.up ? 'text-emerald-600' : 'text-red-500'}`}>
-                    {tendencias.up ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
-                    {Math.abs(tendencias.diff)}% vs mes anterior
-                  </p>
-                )}
-              </div>
-              <div className="h-10 w-10 rounded-xl bg-slate-900 flex items-center justify-center">
-                <TrendingUp className="h-5 w-5 text-white" />
-              </div>
+            <div className="cifra mt-2 text-[44px] font-semibold leading-none">{m(porLiquidar)}</div>
+            <div className="mt-2 text-[13px] text-[#A9B6C7]">
+              {pendientes.registros} registros de {pendientes.facturas} facturas pagadas ·{' '}
+              {pendientes.personas} comisionistas
             </div>
-          </CardContent>
-        </Card>
-
-        <Card className="rounded-2xl border-slate-200 shadow-sm">
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs text-slate-500 uppercase tracking-wide font-medium">Total Vendido</p>
-                <p className="text-2xl font-bold text-slate-900 mt-1 tabular-nums">${totalVendido.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
-              </div>
-              <div className="h-10 w-10 rounded-xl bg-blue-50 flex items-center justify-center">
-                <Package className="h-5 w-5 text-blue-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="rounded-2xl border-slate-200 shadow-sm">
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs text-slate-500 uppercase tracking-wide font-medium">Comisionistas Activos</p>
-                <p className="text-2xl font-bold text-slate-900 mt-1 tabular-nums">{comisionistas.length}</p>
-              </div>
-              <div className="h-10 w-10 rounded-xl bg-indigo-50 flex items-center justify-center">
-                <Users className="h-5 w-5 text-indigo-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="rounded-2xl border-slate-200 shadow-sm">
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs text-slate-500 uppercase tracking-wide font-medium">Órdenes Pagadas</p>
-                <p className="text-2xl font-bold text-slate-900 mt-1 tabular-nums">{ordenesPagadas}</p>
-              </div>
-              <div className="h-10 w-10 rounded-xl bg-amber-50 flex items-center justify-center">
-                <FileText className="h-5 w-5 text-amber-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Gráficos */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <Card className="rounded-2xl border-slate-200 shadow-sm lg:col-span-2">
-          <CardHeader className="pb-2">
-            <div className="flex items-center gap-2">
-              <BarChart3 className="h-4 w-4 text-slate-500" />
-              <CardTitle className="text-base text-slate-900">Comisiones por Período</CardTitle>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="h-72">
-              {comisionesPorMes.length > 0 ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={comisionesPorMes} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                    <XAxis
-                      dataKey="mes"
-                      tick={{ fill: '#64748b', fontSize: 12 }}
-                      axisLine={false}
-                      tickLine={false}
-                    />
-                    <YAxis
-                      tick={{ fill: '#64748b', fontSize: 12 }}
-                      axisLine={false}
-                      tickLine={false}
-                      tickFormatter={(v: number) => `$${v.toLocaleString('es-ES')}`}
-                    />
-                    <Tooltip
-                      formatter={(value: any) => {
-                        const num = typeof value === 'number' ? value : Number(value);
-                        return [`$${num.toFixed(2)}`, 'Comisión'];
-                      }}
-                      contentStyle={{
-                        borderRadius: '12px',
-                        border: '1px solid #e2e8f0',
-                        boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
-                      }}
-                    />
-                    <Bar dataKey="total" fill="#0f172a" radius={[6, 6, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              ) : (
-                <div className="h-full flex items-center justify-center text-slate-400 text-sm">
-                  No hay datos suficientes
-                </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="rounded-2xl border-slate-200 shadow-sm">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base text-slate-900">Top Comisionistas</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="h-72">
-              {topComisionistas.length > 0 ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={topComisionistas}
-                      cx="42%"
-                      cy="50%"
-                      innerRadius={50}
-                      outerRadius={78}
-                      paddingAngle={3}
-                      dataKey="value"
-                    >
-                      {topComisionistas.map((entry: any, index: number) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} />
-                      ))}
-                    </Pie>
-                    <Tooltip
-                      formatter={(value: any, _name: any, props: any) => {
-                        const num = typeof value === 'number' ? value : Number(value);
-                        const pct = totalComisionTop > 0 ? ((num / totalComisionTop) * 100).toFixed(1) : '0';
-                        return [`$${num.toFixed(2)} (${pct}%)`, props.payload.fullName];
-                      }}
-                      contentStyle={{
-                        borderRadius: '12px',
-                        border: '1px solid #e2e8f0',
-                        boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
-                      }}
-                    />
-                    <Legend
-                      layout="vertical"
-                      verticalAlign="middle"
-                      align="right"
-                      iconType="circle"
-                      iconSize={8}
-                      wrapperStyle={{ fontSize: '12px', color: '#475569', paddingLeft: '8px' }}
-                    />
-                  </PieChart>
-                </ResponsiveContainer>
-              ) : (
-                <div className="h-full flex items-center justify-center text-slate-400 text-sm">
-                  No hay datos suficientes
-                </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Grilla inferior: últimas órdenes + liquidaciones */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card className="rounded-2xl border-slate-200 shadow-sm overflow-hidden">
-          <CardHeader className="pb-3 flex flex-row items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Clock className="h-4 w-4 text-slate-500" />
-              <CardTitle className="text-base text-slate-900">Órdenes Recientes</CardTitle>
-            </div>
+          </div>
+          <div className="relative mt-5 flex gap-2.5">
+            <Link
+              href="/liquidacion"
+              className="flex h-[38px] items-center rounded-[9px] bg-primary px-[18px] text-[13.5px] font-semibold text-white transition hover:brightness-110 hover:no-underline"
+            >
+              Liquidar ahora →
+            </Link>
             <Link
               href="/ordenes"
-              className="inline-flex items-center justify-center rounded-lg px-2.5 py-1.5 text-sm font-medium text-slate-500 hover:text-slate-900 hover:bg-slate-50 transition-colors gap-1"
+              className="flex h-[38px] items-center rounded-[9px] border border-white/[0.18] px-4 text-[13.5px] font-medium text-[#D6DEE8] transition hover:bg-white/[0.07] hover:no-underline hover:text-[#D6DEE8]"
             >
-              Ver todas
-              <ArrowRight className="h-4 w-4" />
+              Ver facturas pagadas
             </Link>
-          </CardHeader>
-          <CardContent className="p-0">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-slate-50 border-b border-slate-200">
-                  <tr>
-                    <th className="text-left px-4 py-3 font-medium text-slate-600">Factura</th>
-                    <th className="text-left px-4 py-3 font-medium text-slate-600">Cliente</th>
-                    <th className="text-left px-4 py-3 font-medium text-slate-600">Sector</th>
-                    <th className="text-left px-4 py-3 font-medium text-slate-600">Producto</th>
-                    <th className="text-right px-4 py-3 font-medium text-slate-600">Total</th>
-                    <th className="text-left px-4 py-3 font-medium text-slate-600">Comisionistas</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {ordenesRecientes.length === 0 ? (
-                    <tr>
-                      <td colSpan={6} className="px-4 py-8 text-center text-slate-500">
-                        No hay órdenes recientes
-                      </td>
-                    </tr>
-                  ) : (
-                    ordenesRecientes.map((item) => {
-                      return (
-                        <tr key={item.id} className="hover:bg-slate-50/50 transition-colors">
-                          <td className="px-4 py-3 text-slate-900 font-medium">{item.numeroOrden}</td>
-                          <td className="px-4 py-3 text-slate-500">{item.cliente?.nombre || '-'}</td>
-                          <td className="px-4 py-3 text-slate-500">{item.fincaRel?.nombre || item.finca}</td>
-                          <td className="px-4 py-3 text-slate-700 max-w-[200px] truncate">{item.productoRel?.nombre || item.producto}</td>
-                          <td className="px-4 py-3 text-right text-slate-700 tabular-nums">
-                            ${item.total.toFixed(2)}
-                          </td>
-                          <td className="px-4 py-3">
-                            {item.comisionistas.length > 0 ? (
-                              <div className="flex flex-wrap gap-1">
-                                {item.comisionistas.map(a => {
-                                  const com = comisionistaMap.get(a.comisionistaId);
-                                  return com ? (
-                                    <Badge key={a.comisionistaId} variant="secondary" className="bg-slate-100 text-slate-700 border-0 text-xs">
-                                      {com.nombre}
-                                    </Badge>
-                                  ) : null;
-                                })}
-                              </div>
-                            ) : (
-                              <span className="text-xs text-slate-400">Sin asignar</span>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
 
-        <Card className="rounded-2xl border-slate-200 shadow-sm overflow-hidden">
-          <CardHeader className="pb-3 flex flex-row items-center justify-between">
-            <CardTitle className="text-base text-slate-900">Últimas Liquidaciones</CardTitle>
-            <Link
-              href="/historial"
-              className="inline-flex items-center justify-center rounded-lg px-2.5 py-1.5 text-sm font-medium text-slate-500 hover:text-slate-900 hover:bg-slate-50 transition-colors gap-1"
+        <div className="grid grid-cols-2 gap-3">
+          {kpis.map((k) => (
+            <div
+              key={k.label}
+              className="flex flex-col justify-between rounded-xl border border-border bg-white px-4 py-[15px]"
             >
-              Ver historial
-              <ArrowRight className="h-4 w-4" />
-            </Link>
-          </CardHeader>
-          <CardContent className="p-0">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-slate-50 border-b border-slate-200">
-                  <tr>
-                    <th className="text-left px-4 py-3 font-medium text-slate-600">Nombre</th>
-                    <th className="text-left px-4 py-3 font-medium text-slate-600">Período</th>
-                    <th className="text-right px-4 py-3 font-medium text-slate-600">Registros</th>
-                    <th className="text-right px-4 py-3 font-medium text-slate-600">Total Comisión</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {ultimasLiquidaciones.length === 0 ? (
-                    <tr>
-                      <td colSpan={4} className="px-4 py-8 text-center text-slate-500">
-                        No hay liquidaciones guardadas aún
-                      </td>
-                    </tr>
-                  ) : (
-                    ultimasLiquidaciones.map((liq) => {
-                      const totalComision = liq.items.reduce((s, item) => {
-                        return s + calcularComisionTotalItem(item, comisionistas);
-                      }, 0);
-                      return (
-                        <tr key={liq.id} className="hover:bg-slate-50/50 transition-colors">
-                          <td className="px-4 py-3 text-slate-900 font-medium">{liq.nombre}</td>
-                          <td className="px-4 py-3">
-                            <Badge variant="secondary" className="bg-slate-100 text-slate-700 border-0">
-                              {liq.mes}
-                            </Badge>
-                          </td>
-                          <td className="px-4 py-3 text-right text-slate-700">{liq.items.length}</td>
-                          <td className="px-4 py-3 text-right font-semibold text-emerald-700 tabular-nums">
-                            ${totalComision.toFixed(2)}
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
+              <div className="text-[11px] font-semibold uppercase tracking-[0.07em] text-[#7A8798]">
+                {k.label}
+              </div>
+              <div className="cifra mt-2.5 text-2xl font-semibold text-[#0B1220]">{k.valor}</div>
+              <div className="mt-1.5 flex items-center gap-1.5">
+                <span className="cifra text-[11.5px] font-semibold" style={{ color: k.deltaColor }}>
+                  {k.delta}
+                </span>
+                <span className="text-[11.5px] text-[#98A2B3]">{k.nota}</span>
+              </div>
             </div>
-          </CardContent>
-        </Card>
+          ))}
+        </div>
+      </div>
+
+      {/* Barras + top comisionistas */}
+      <div className="grid gap-4 lg:grid-cols-[1.55fr_1fr]">
+        <div className="rounded-xl border border-border bg-white px-5 pb-3.5 pt-[18px]">
+          <div className="mb-5 flex items-baseline justify-between">
+            <div>
+              <div className="text-sm font-semibold text-[#0B1220]">Comisión liquidada por mes</div>
+              <div className="mt-0.5 text-xs text-[#7A8798]">Últimos 6 meses</div>
+            </div>
+            <div className="cifra text-xs text-[#7A8798]">USD</div>
+          </div>
+          {barras.length > 0 ? (
+            <div className="flex h-[172px] items-end gap-3.5 pb-0.5">
+              {barras.map((b) => (
+                <div key={b.mes} className="flex h-full flex-1 flex-col items-center justify-end gap-2">
+                  <div className="cifra text-[11px] font-medium text-[#475467]">{b.etiqueta}</div>
+                  <div
+                    className="w-full rounded-t-md"
+                    style={{ height: b.altura, background: b.ultima ? '#0F766E' : '#D7DDE4' }}
+                  />
+                  <div className="text-[11.5px] text-[#7A8798]">{b.mes}</div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="flex h-[172px] items-center justify-center text-sm text-[#98A2B3]">
+              No hay datos suficientes
+            </div>
+          )}
+        </div>
+
+        <div className="rounded-xl border border-border bg-white px-5 py-[18px]">
+          <div className="mb-4 flex items-baseline justify-between">
+            <div className="text-sm font-semibold text-[#0B1220]">Top comisionistas</div>
+            <Link href="/comisionistas" className="text-xs font-medium">
+              Ver todos
+            </Link>
+          </div>
+          <div className="flex flex-col gap-[13px]">
+            {topComisionistas.length === 0 && (
+              <div className="text-sm text-[#98A2B3]">No hay datos suficientes</div>
+            )}
+            {topComisionistas.map((c) => (
+              <div key={c.nombre} className="flex flex-col gap-1.5">
+                <div className="flex items-baseline justify-between gap-2.5">
+                  <span className="truncate text-[13px] font-medium text-[#0B1220]">{c.nombre}</span>
+                  <span className="cifra text-[12.5px] font-semibold text-[#0B1220]">{c.monto}</span>
+                </div>
+                <div className="h-1.5 overflow-hidden rounded-[3px] bg-[#F0F2F5]">
+                  <div
+                    className="h-full rounded-[3px]"
+                    style={{ width: `${c.ancho}%`, background: c.color }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Facturas recientes + últimas liquidaciones */}
+      <div className="grid gap-4 lg:grid-cols-[1.55fr_1fr]">
+        <div className="overflow-hidden rounded-xl border border-border bg-white">
+          <div className="flex items-center justify-between border-b border-[#EDEFF2] px-5 pb-[13px] pt-[15px]">
+            <div className="text-sm font-semibold text-[#0B1220]">Facturas recientes</div>
+            <Link href="/ordenes" className="text-xs font-medium">
+              Ver todas
+            </Link>
+          </div>
+          <div className="overflow-x-auto">
+            <div className="min-w-[560px]">
+              <div className="th-tabla grid grid-cols-[130px_92px_1fr_108px_92px] gap-3 border-b border-[#EDEFF2] bg-[#FAFBFC] px-5 py-2.5">
+                <div>Factura</div>
+                <div>Fecha</div>
+                <div>Cliente</div>
+                <div className="text-right">Total</div>
+                <div className="text-right">Estado</div>
+              </div>
+              {recientes.length === 0 ? (
+                <div className="px-5 py-8 text-center text-sm text-[#98A2B3]">
+                  No hay facturas recientes
+                </div>
+              ) : (
+                recientes.map((o) => (
+                  <div
+                    key={o.id}
+                    className="grid grid-cols-[130px_92px_1fr_108px_92px] items-center gap-3 border-b border-[#F2F4F6] px-5 py-2.5 transition-colors hover:bg-[#FAFBFC]"
+                  >
+                    <div className="cifra truncate text-[12.5px] font-medium text-[#0B1220]">
+                      {o.numeroOrden}
+                    </div>
+                    <div className="cifra text-[12.5px] text-[#6B7684]">
+                      {new Date(o.fecha).toLocaleDateString('es-ES')}
+                    </div>
+                    <div className="truncate text-[13px] text-[#344054]">
+                      {o.cliente?.nombre || '—'}
+                    </div>
+                    <div className="cifra text-right text-[12.5px] font-medium text-[#0B1220]">
+                      {m(o.total)}
+                    </div>
+                    <div className="text-right">
+                      <ChipEstado estado={o.estado} />
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="overflow-hidden rounded-xl border border-border bg-white">
+          <div className="flex items-center justify-between border-b border-[#EDEFF2] px-5 pb-[13px] pt-[15px]">
+            <div className="text-sm font-semibold text-[#0B1220]">Últimas liquidaciones</div>
+            <Link href="/historial" className="text-xs font-medium">
+              Historial
+            </Link>
+          </div>
+          {ultimasLiquidaciones.length === 0 ? (
+            <div className="px-5 py-8 text-center text-sm text-[#98A2B3]">
+              No hay liquidaciones guardadas aún
+            </div>
+          ) : (
+            ultimasLiquidaciones.map((liq) => {
+              const total = liq.items.reduce(
+                (s, item) => s + calcularComisionTotalItem(item, comisionistas),
+                0
+              );
+              const personas = new Set(
+                liq.items.flatMap((i) => i.comisionistas.map((a) => a.comisionistaId))
+              ).size;
+              return (
+                <Link
+                  key={liq.id}
+                  href={`/historial/${liq.id}`}
+                  className="flex items-center justify-between gap-3 border-b border-[#F2F4F6] px-5 py-3 transition-colors hover:bg-[#FAFBFC] hover:no-underline"
+                >
+                  <div className="min-w-0">
+                    <div className="truncate text-[13px] font-medium text-[#0B1220]">{liq.nombre}</div>
+                    <div className="mt-0.5 text-[11.5px] text-[#7A8798]">
+                      {liq.items.length} registros · {personas} comisionistas · {liq.mes}
+                    </div>
+                  </div>
+                  <div className="cifra text-[13px] font-semibold text-primary">{m(total)}</div>
+                </Link>
+              );
+            })
+          )}
+        </div>
       </div>
     </div>
   );
