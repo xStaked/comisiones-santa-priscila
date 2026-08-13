@@ -80,7 +80,7 @@ export default function LiquidacionDetallePage() {
   const params = useParams();
   const id = params.id as string;
   const router = useRouter();
-  const { deleteLiquidacion, restoreLiquidacion } = useApp();
+  const { deleteLiquidacion, restoreLiquidacion, clientes } = useApp();
 
   const { data: rawLiquidacion } = useQuery({
     queryKey: ['liquidacion', id],
@@ -235,7 +235,7 @@ export default function LiquidacionDetallePage() {
   };
 
   const handleExportExcel = () => {
-    exportarExcel(liquidacion.items, comisionistas, liquidacion.nombre, undefined, [], buildComisionesSnapshot());
+    exportarExcel(liquidacion.items, comisionistas, liquidacion.nombre, undefined, [], buildComisionesSnapshot(), undefined, clientes);
     toast.success('Excel generado');
   };
 

@@ -52,7 +52,7 @@ function buildComisionistasFromSnapshot(items: any[]): Comisionista[] {
 const COLS = 'grid-cols-[minmax(0,1.7fr)_120px_100px_120px_130px_190px]';
 
 export function HistorialTab() {
-  const { liquidaciones, comisionistas, deleteLiquidacion } = useApp();
+  const { liquidaciones, comisionistas, deleteLiquidacion, clientes } = useApp();
   const [search, setSearch] = useState('');
   const [exportingId, setExportingId] = useState<string | null>(null);
 
@@ -91,7 +91,7 @@ export function HistorialTab() {
         exportarPDF(items, comisionistasSnap, liq.nombre, undefined, [], comisionesSnapshot);
         toast.success('PDF generado');
       } else {
-        exportarExcel(items, comisionistasSnap, liq.nombre, undefined, [], comisionesSnapshot);
+        exportarExcel(items, comisionistasSnap, liq.nombre, undefined, [], comisionesSnapshot, undefined, clientes);
         toast.success('Excel generado');
       }
     } catch (err: any) {
