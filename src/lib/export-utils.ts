@@ -555,13 +555,14 @@ export function exportarExcel(
   const nombrePorClienteId = new Map(clientes.map(c => [c.id, c.nombre]));
   const razonSocialDelItem = (item: OrdenItem) =>
     item.cliente?.nombre || (item.clienteId && nombrePorClienteId.get(item.clienteId)) || 'N/A';
-  // Un cliente sin grupo empresarial es su propio grupo: SANTA PRISCILA no
-  // pertenece a ningún grupo y debe salir en su hoja, no mezclada en "VARIOS".
-  // Solo cae a 'N/A' (→ VARIOS) el ítem que no tiene cliente identificado.
+  // Solo los grupos empresariales y SANTA PRISCILA tienen hoja propia; el resto
+  // de clientes sin grupo va a "VARIOS" (pedido del cliente, ago 2026).
   const grupoDelItem = (item: OrdenItem) =>
     (item.clienteId && grupoPorClienteId.get(item.clienteId)) ||
     (item.cliente?.nombre && grupoPorClienteNombre.get(normalizarTexto(item.cliente.nombre))) ||
-    razonSocialDelItem(item);
+    (normalizarTexto(razonSocialDelItem(item))?.includes('SANTA PRISCILA')
+      ? 'SANTA PRISCILA'
+      : 'N/A');
 
   // Una hoja por (grupo empresarial del cliente × razón social del proveedor):
   // "ACUARIOS DEL GOLFO - DINACUAMAR" y "ACUARIOS DEL GOLFO - ELIZABETH OCHOA"
