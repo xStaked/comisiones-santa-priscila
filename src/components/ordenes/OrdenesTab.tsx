@@ -67,7 +67,7 @@ type OrdenAgrupada = {
   fecha: string;
   numeroOrden: string;
   cliente: string;
-  fincas: string[];
+  proveedor: string;
   total: number;
   estado: EstadoOrden;
   fechaPago?: string | null;
@@ -87,19 +87,14 @@ function agruparOrdenes(
   ordenItems.forEach((item) => {
     const id = item.ordenId || `${item.fecha}-${item.numeroOrden}-${item.clienteId || ''}`;
     const existente = map.get(id);
-    const finca = item.fincaRel?.nombre || item.finca;
     const comisionistaIds = item.comisionistas.map(a => a.comisionistaId);
     if (existente) {
       const items = [...existente.items, item];
-      const fincas = finca && !existente.fincas.includes(finca)
-        ? [...existente.fincas, finca]
-        : existente.fincas;
       const nuevosComisionistaIds = comisionistaIds.filter((cid) => !existente.comisionistaIds.includes(cid));
       map.set(id, {
         ...existente,
         total: existente.total + item.total,
         items,
-        fincas,
         comisionistaIds: nuevosComisionistaIds.length > 0
           ? [...existente.comisionistaIds, ...nuevosComisionistaIds]
           : existente.comisionistaIds,
@@ -113,7 +108,7 @@ function agruparOrdenes(
       fecha: item.fecha,
       numeroOrden: item.numeroOrden,
       cliente: item.cliente?.nombre || '-',
-      fincas: finca ? [finca] : [],
+      proveedor: item.proveedor?.trim() || '',
       total: item.total,
       estado: item.estado || 'pendiente',
       fechaPago: item.fechaPago || null,
@@ -1319,10 +1314,8 @@ export function OrdenesTab() {
                       <div className="truncate text-[13px] text-[#0B1220]" title={orden.cliente}>
                         {orden.cliente}
                       </div>
-                      <div className="truncate text-[12.5px] text-[#6B7684]">
-                        {orden.fincas.length > 1
-                          ? `${orden.fincas.length} sectores`
-                          : orden.fincas[0] || '—'}
+                      <div className="truncate text-[12.5px] text-[#6B7684]" title={orden.proveedor}>
+                        {orden.proveedor || '—'}
                       </div>
                       <div className="cifra text-right text-[12.5px] text-[#6B7684]">
                         {orden.items.length}
