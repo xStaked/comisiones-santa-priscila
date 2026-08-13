@@ -32,11 +32,30 @@ import { toast } from 'sonner';
 
 const COLS = 'grid-cols-[34px_130px_92px_minmax(0,1.3fr)_minmax(0,1fr)_90px_108px_132px]';
 
+/** Valor del filtro para las facturas pagadas sin fecha de pago registrada (datos viejos). */
+const SIN_FECHA_PAGO = 'sin-fecha';
+
+/** Mes de pago del ítem en formato YYYY-MM. */
+const mesDePago = (item: { fechaPago?: string | null }) =>
+  item.fechaPago ? item.fechaPago.slice(0, 7) : SIN_FECHA_PAGO;
+
+/** '2026-06' → 'junio 2026' */
+function etiquetaMes(mes: string) {
+  if (mes === SIN_FECHA_PAGO) return 'Sin fecha de pago';
+  const [anio, m] = mes.split('-').map(Number);
+  const texto = new Date(anio, m - 1, 1).toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
+  return texto.charAt(0).toUpperCase() + texto.slice(1);
+}
+
 export function LiquidacionTab() {
   const { comisionistas, ordenItems, saveLiquidacion, tarifasClienteProducto, clientes, retenciones } = useApp();
   const [filterComisionista, setFilterComisionista] = useState('');
   const [filterFactura, setFilterFactura] = useState('');
+  // Mes de PAGO de la factura, no el de emisión: una liquidación de junio puede
+  // incluir facturas emitidas hace un año pero cobradas en junio.
+  const [filterMes, setFilterMes] = useState('');
   const [nombreLiquidacion, setNombreLiquidacion] = useState('');
+  const [mesLiquidacion, setMesLiquidacion] = useState('');
   const [previewOpen, setPreviewOpen] = useState(false);
   // A quién se le paga en esta liquidación. Vacío = nadie: hay que elegir explícitamente.
   const [comisionistasAPagar, setComisionistasAPagar] = useState<Set<string>>(new Set());
@@ -76,12 +95,19 @@ export function LiquidacionTab() {
     [ordenItems]
   );
 
+  // Meses de pago presentes en lo pendiente de liquidar, del más reciente al más viejo.
+  const mesesDisponibles = useMemo(() => {
+    const meses = new Set(ordenItemsPagados.map(mesDePago));
+    return Array.from(meses).sort().reverse();
+  }, [ordenItemsPagados]);
+
   const filteredItems = useMemo(() => {
     return ordenItemsPagados
       .filter(i => {
         const matchComisionista = !filterComisionista || i.comisionistas.some(a => a.comisionistaId === filterComisionista);
         const matchFactura = !filterFactura || i.numeroOrden.toLowerCase().includes(filterFactura.toLowerCase());
-        return matchComisionista && matchFactura;
+        const matchMes = !filterMes || mesDePago(i) === filterMes;
+        return matchComisionista && matchFactura && matchMes;
       })
       // Con filtro por persona, los totales y el guardado deben cubrir solo a esa persona.
       .map(i =>
@@ -89,7 +115,7 @@ export function LiquidacionTab() {
           ? { ...i, comisionistas: i.comisionistas.filter(a => a.comisionistaId === filterComisionista) }
           : i
       );
-  }, [ordenItemsPagados, filterComisionista, filterFactura]);
+  }, [ordenItemsPagados, filterComisionista, filterFactura, filterMes]);
 
   const cantidadOrdenes = useMemo(() => {
     const ids = new Set(
@@ -264,6 +290,10 @@ export function LiquidacionTab() {
       toast.error('Ingresa un nombre para la liquidación');
       return;
     }
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(mesLiquidacion)) {
+      toast.error('Selecciona el mes que estás liquidando');
+      return;
+    }
     // Si no hay nadie pendiente, se liquida igual: saca de la lista los ítems sin comisionista.
     if (resumenPorComisionista.length > 0 && comisionistasAPagar.size === 0) {
       toast.error('Selecciona al menos un comisionista a pagar');
@@ -287,18 +317,32 @@ export function LiquidacionTab() {
       !filterComisionista && comisionistasAPagar.size === resumenPorComisionista.length;
     saveLiquidacion(
       nombreLiquidacion,
+      mesLiquidacion,
       ids,
       todosLosPendientes ? undefined : Array.from(comisionistasAPagar)
     );
     setNombreLiquidacion('');
+    setMesLiquidacion('');
     setPreviewOpen(false);
   };
+
+  /** Mes de pago más frecuente entre lo seleccionado: el candidato obvio a liquidar. */
+  const mesSugerido = useMemo(() => {
+    const conteo = new Map<string, number>();
+    selectedFiltered.forEach(i => {
+      const m = mesDePago(i);
+      if (m !== SIN_FECHA_PAGO) conteo.set(m, (conteo.get(m) || 0) + 1);
+    });
+    const top = Array.from(conteo.entries()).sort((a, b) => b[1] - a[1])[0];
+    return top ? top[0] : new Date().toISOString().slice(0, 7);
+  }, [selectedFiltered]);
 
   const handlePreviewSave = () => {
     if (selectedFiltered.length === 0) {
       toast.error('Selecciona al menos una orden pagada para guardar');
       return;
     }
+    setMesLiquidacion(filterMes && filterMes !== SIN_FECHA_PAGO ? filterMes : mesSugerido);
     setNombreLiquidacion(`Liquidación ${new Date().toLocaleDateString('es-ES')}`);
     // El filtro de la barra superior solo preselecciona; la decisión se toma en el modal.
     setComisionistasAPagar(new Set(filterComisionista ? [filterComisionista] : []));
@@ -349,6 +393,25 @@ export function LiquidacionTab() {
               {comisionistas.map((c) => (
                 <SelectItem key={c.id} value={c.id}>
                   {c.nombre}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="flex h-9 items-center gap-2.5 rounded-[9px] border border-[#E0E4E9] bg-white px-3">
+          <span className="text-[11.5px] text-[#7A8798]">Mes de pago</span>
+          <Select value={filterMes} onValueChange={(value) => setFilterMes(value ?? '')}>
+            <SelectTrigger className="h-7 border-0 bg-transparent px-0 text-[12.5px] font-medium text-[#0B1220] shadow-none focus-visible:ring-0">
+              <SelectValue placeholder="Todos">
+                {filterMes ? etiquetaMes(filterMes) : 'Todos los meses'}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="">Todos los meses</SelectItem>
+              {mesesDisponibles.map((m) => (
+                <SelectItem key={m} value={m}>
+                  {etiquetaMes(m)}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -715,16 +778,29 @@ export function LiquidacionTab() {
               </div>
             </div>
 
-            <div className="space-y-2">
-              <Label className="text-[11.5px] font-semibold text-[#475467]">
-                Nombre de la liquidación
-              </Label>
-              <Input
-                placeholder="Ej: Liquidación Mayo 2026"
-                value={nombreLiquidacion}
-                onChange={(e) => setNombreLiquidacion(e.target.value)}
-                className="rounded-[9px]"
-              />
+            <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_190px]">
+              <div className="space-y-2">
+                <Label className="text-[11.5px] font-semibold text-[#475467]">
+                  Nombre de la liquidación
+                </Label>
+                <Input
+                  placeholder="Ej: Liquidación Mayo 2026"
+                  value={nombreLiquidacion}
+                  onChange={(e) => setNombreLiquidacion(e.target.value)}
+                  className="rounded-[9px]"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-[11.5px] font-semibold text-[#475467]">
+                  Mes que liquidas
+                </Label>
+                <Input
+                  type="month"
+                  value={mesLiquidacion}
+                  onChange={(e) => setMesLiquidacion(e.target.value)}
+                  className="rounded-[9px]"
+                />
+              </div>
             </div>
           </div>
 
@@ -736,7 +812,8 @@ export function LiquidacionTab() {
               onClick={handleSave}
               disabled={
                 (resumenPorComisionista.length > 0 && comisionistasAPagar.size === 0) ||
-                !nombreLiquidacion.trim()
+                !nombreLiquidacion.trim() ||
+                !/^\d{4}-(0[1-9]|1[0-2])$/.test(mesLiquidacion)
               }
               className="rounded-[9px]"
             >

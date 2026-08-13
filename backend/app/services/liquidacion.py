@@ -380,12 +380,17 @@ def crear_liquidacion(
     nombre: str,
     orden_item_ids: list[UUID],
     comisionista_ids: list[UUID] | None = None,
+    mes: str | None = None,
 ) -> tuple[Liquidacion, list[dict]]:
     """Liquida las asignaciones pendientes de los ítems indicados.
 
     La liquidación es POR PERSONA: si `comisionista_ids` viene, solo se liquidan
     las asignaciones de esos comisionistas. El resto queda pendiente y el ítem
     sigue en estado `pagada` hasta que todas sus asignaciones estén liquidadas.
+
+    `mes` (YYYY-MM) es el periodo que se liquida y lo elige el usuario: una
+    liquidación de junio puede contener facturas de cualquier fecha. La API lo
+    exige; acá cae al mes actual solo para llamadas internas que no lo pasan.
     """
     from sqlalchemy.orm import selectinload
 
@@ -449,7 +454,7 @@ def crear_liquidacion(
         )
 
     now = datetime.now()
-    mes = now.strftime("%Y-%m")
+    mes = mes or now.strftime("%Y-%m")
 
     # Una sola consulta para toda la liquidación, no una por ítem.
     periodos_retencion = cargar_periodos(db)

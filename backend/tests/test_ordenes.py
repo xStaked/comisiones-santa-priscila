@@ -227,7 +227,7 @@ def test_liquidacion_preserva_orden_id_en_snapshots(authenticated_client):
 
     liq_resp = authenticated_client.post(
         "/api/v1/liquidaciones/",
-        json={"nombre": "Liquidación agrupada", "orden_item_ids": item_ids},
+        json={"nombre": "Liquidación agrupada", "mes": "2026-06", "orden_item_ids": item_ids},
     )
     assert liq_resp.status_code == 201
 
@@ -270,7 +270,7 @@ def test_liquidacion_rechaza_orden_pendiente(authenticated_client):
     liq_resp = authenticated_client.post(
         "/api/v1/liquidaciones/",
         json={
-            "nombre": "Liquidación rechazada",
+            "nombre": "Liquidación rechazada", "mes": "2026-06",
             "orden_item_ids": [orden["items"][0]["id"]],
         },
     )
@@ -319,7 +319,7 @@ def test_liquidacion_permite_orden_pagada_y_marca_liquidada(authenticated_client
     liq_resp = authenticated_client.post(
         "/api/v1/liquidaciones/",
         json={
-            "nombre": "Liquidación permitida",
+            "nombre": "Liquidación permitida", "mes": "2026-06",
             "orden_item_ids": [item["id"] for item in orden["items"]],
         },
     )
@@ -476,7 +476,7 @@ def test_rechaza_cambiar_estado_grupal_si_tiene_items_liquidados(authenticated_c
     liq_resp = authenticated_client.post(
         "/api/v1/liquidaciones/",
         json={
-            "nombre": "Liquidación parcial",
+            "nombre": "Liquidación parcial", "mes": "2026-06",
             "orden_item_ids": [orden["items"][0]["id"]],
         },
     )
@@ -515,7 +515,7 @@ def test_rechaza_editar_y_eliminar_item_liquidado(authenticated_client):
 
     liq_resp = authenticated_client.post(
         "/api/v1/liquidaciones/",
-        json={"nombre": "Liquidación ítem", "orden_item_ids": [item["id"]]},
+        json={"nombre": "Liquidación ítem", "mes": "2026-06", "orden_item_ids": [item["id"]]},
     )
     assert liq_resp.status_code == 201
 
@@ -555,7 +555,7 @@ def test_rechaza_limpiar_ordenes_con_items_liquidados(authenticated_client):
 
     liq_resp = authenticated_client.post(
         "/api/v1/liquidaciones/",
-        json={"nombre": "Liquidación limpiar", "orden_item_ids": [item["id"]]},
+        json={"nombre": "Liquidación limpiar", "mes": "2026-06", "orden_item_ids": [item["id"]]},
     )
     assert liq_resp.status_code == 201
 
@@ -638,7 +638,7 @@ def test_rechaza_modificar_items_de_grupo_parcialmente_liquidado(authenticated_c
     liq_resp = authenticated_client.post(
         "/api/v1/liquidaciones/",
         json={
-            "nombre": "Liquidación parcial con hermano",
+            "nombre": "Liquidación parcial con hermano", "mes": "2026-06",
             "orden_item_ids": [item_liquidado["id"]],
         },
     )
@@ -722,7 +722,7 @@ def test_rechaza_asignar_comisionistas_a_grupo_con_items_liquidados(authenticate
     liq_resp = authenticated_client.post(
         "/api/v1/liquidaciones/",
         json={
-            "nombre": "Liquidación grupo parcial",
+            "nombre": "Liquidación grupo parcial", "mes": "2026-06",
             "orden_item_ids": [orden["items"][0]["id"]],
         },
     )
@@ -942,3 +942,78 @@ def test_fecha_pago_se_registra_y_se_limpia(authenticated_client):
         json={"estado": "pendiente"},
     )
     assert resp.json()["fecha_pago"] is None
+
+
+def test_liquidacion_guarda_el_mes_indicado(authenticated_client):
+    """El mes lo elige el usuario: una factura vieja puede liquidarse en junio."""
+    payload = {
+        "fecha": "2024-03-15",
+        "numero_orden": "ORD-LIQ-MES-001",
+        "origen": "manual",
+        "items": [
+            {
+                "finca": "Finca A",
+                "producto": "Camarón",
+                "cantidad": "10.00",
+                "unidad": "kg",
+                "precio_unitario": "5.00",
+                "total": "50.00",
+                "comisionista_ids": [],
+            }
+        ],
+    }
+    orden = authenticated_client.post("/api/v1/ordenes/", json=payload).json()
+    authenticated_client.put(
+        f"/api/v1/ordenes/grupos/{orden['id']}/estado",
+        json={"estado": "pagada", "fecha_pago": "2026-06-20"},
+    )
+
+    liq_resp = authenticated_client.post(
+        "/api/v1/liquidaciones/",
+        json={
+            "nombre": "Liquidación junio",
+            "mes": "2026-06",
+            "orden_item_ids": [orden["items"][0]["id"]],
+        },
+    )
+    assert liq_resp.status_code == 201
+    assert liq_resp.json()["mes"] == "2026-06"
+
+
+def test_liquidacion_rechaza_mes_invalido(authenticated_client):
+    payload = {
+        "fecha": "2024-03-15",
+        "numero_orden": "ORD-LIQ-MES-002",
+        "origen": "manual",
+        "items": [
+            {
+                "finca": "Finca A",
+                "producto": "Camarón",
+                "cantidad": "10.00",
+                "unidad": "kg",
+                "precio_unitario": "5.00",
+                "total": "50.00",
+                "comisionista_ids": [],
+            }
+        ],
+    }
+    orden = authenticated_client.post("/api/v1/ordenes/", json=payload).json()
+    authenticated_client.put(
+        f"/api/v1/ordenes/grupos/{orden['id']}/estado",
+        json={"estado": "pagada"},
+    )
+    item_ids = [orden["items"][0]["id"]]
+
+    for mes in ("junio", "2026-13", "2026-6", ""):
+        resp = authenticated_client.post(
+            "/api/v1/liquidaciones/",
+            json={"nombre": "X", "mes": mes, "orden_item_ids": item_ids},
+        )
+        assert resp.status_code == 422, mes
+
+    # Omitirlo también es error: el mes es obligatorio.
+    resp = authenticated_client.post(
+        "/api/v1/liquidaciones/",
+        json={"nombre": "X", "orden_item_ids": item_ids},
+    )
+    assert resp.status_code == 422

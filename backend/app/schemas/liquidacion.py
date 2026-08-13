@@ -5,7 +5,7 @@ from decimal import Decimal
 from typing import List, Optional
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class LiquidacionItemTarifaResponse(BaseModel):
@@ -49,6 +49,9 @@ class LiquidacionBase(BaseModel):
 
 class LiquidacionCreate(BaseModel):
     nombre: str
+    # Mes que se liquida, elegido por el usuario. No se deriva de la fecha de la
+    # factura: una liquidación de junio puede incluir facturas de hace un año.
+    mes: str = Field(pattern=r"^\d{4}-(0[1-9]|1[0-2])$")
     orden_item_ids: List[UUID]
     # Vacío o ausente = liquidar todas las asignaciones pendientes de esos ítems.
     comisionista_ids: Optional[List[UUID]] = None

@@ -62,7 +62,7 @@ interface AppContextType {
   removeComisionistaFromItem: (itemId: string, comisionistaId: string) => void;
 
   liquidaciones: Liquidacion[];
-  saveLiquidacion: (nombre: string, ordenItemIds?: string[], comisionistaIds?: string[]) => void;
+  saveLiquidacion: (nombre: string, mes: string, ordenItemIds?: string[], comisionistaIds?: string[]) => void;
   deleteLiquidacion: (id: string) => void;
   restoreLiquidacion: (id: string) => void;
   resetDemoData: () => void;
@@ -322,8 +322,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   // Mutations: Liquidaciones
   const createLiquidacionMutation = useMutation({
-    mutationFn: ({ nombre, ordenItemIds, comisionistaIds }: { nombre: string; ordenItemIds: string[]; comisionistaIds?: string[] }) =>
-      createLiquidacion({ nombre, ordenItemIds, comisionistaIds }),
+    mutationFn: ({ nombre, mes, ordenItemIds, comisionistaIds }: { nombre: string; mes: string; ordenItemIds: string[]; comisionistaIds?: string[] }) =>
+      createLiquidacion({ nombre, mes, ordenItemIds, comisionistaIds }),
     onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ['ordenes'] });
       queryClient.invalidateQueries({ queryKey: ['liquidaciones'] });
@@ -577,13 +577,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   );
 
   const saveLiquidacion = useCallback(
-    (nombre: string, ordenItemIds?: string[], comisionistaIds?: string[]) => {
+    (nombre: string, mes: string, ordenItemIds?: string[], comisionistaIds?: string[]) => {
       const ids = ordenItemIds ?? ordenItems.filter((o) => o.estado === 'pagada').map((o) => o.id);
       if (ids.length === 0) {
         toast.error('No hay órdenes pagadas para guardar');
         return;
       }
-      createLiquidacionMutation.mutate({ nombre, ordenItemIds: ids, comisionistaIds });
+      createLiquidacionMutation.mutate({ nombre, mes, ordenItemIds: ids, comisionistaIds });
     },
     [createLiquidacionMutation, ordenItems]
   );
