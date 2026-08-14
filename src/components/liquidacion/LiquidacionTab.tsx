@@ -183,7 +183,9 @@ export function LiquidacionTab() {
     [itemsConComision, excludedIds]
   );
 
-  // Agrupa los productos por orden (contiguos) para mostrar un solo checkbox por orden.
+  // Agrupa los productos por orden (contiguos) para mostrar un solo checkbox por orden,
+  // ordenados por número de factura ascendente (numeric: true por si algún número no
+  // viene con ceros a la izquierda).
   const gruposPorOrden = useMemo(() => {
     const map = new Map<string, typeof itemsConComision>();
     itemsConComision.forEach(item => {
@@ -191,7 +193,9 @@ export function LiquidacionTab() {
       const arr = map.get(k);
       if (arr) arr.push(item); else map.set(k, [item]);
     });
-    return Array.from(map.entries());
+    return Array.from(map.entries()).sort(([, a], [, b]) =>
+      a[0].numeroOrden.localeCompare(b[0].numeroOrden, 'es', { numeric: true })
+    );
   }, [itemsConComision]);
 
   const resumenPorComisionista = useMemo(() => {
