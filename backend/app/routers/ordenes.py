@@ -7,6 +7,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Body, Depends, HTTPException, status
 from pydantic import BaseModel
+from sqlalchemy import func
 from sqlalchemy.orm import Session, selectinload
 
 from app.database import get_db
@@ -58,6 +59,28 @@ def _canonicalizar_proveedor(db: Session, nombre: str | None) -> str | None:
     db.add(Proveedor(nombre=limpio))
     db.flush()
     return limpio
+
+
+def _rechazar_si_ya_cargada(db: Session, numero_orden: str, proveedor: str | None) -> None:
+    """Una factura/OC ya cargada no se vuelve a subir: sus ítems se sumarían otra
+    vez a las comisiones. La identidad es número + proveedor emisor (el proveedor
+    ya viene canonicalizado, así que las variantes tipográficas no la evaden).
+    """
+    numero = " ".join(numero_orden.split()).upper()
+    query = db.query(Orden.id).filter(func.upper(func.trim(Orden.numero_orden)) == numero)
+    if proveedor:
+        query = query.filter(Orden.proveedor == proveedor)
+    else:
+        query = query.filter(Orden.proveedor.is_(None))
+    if query.first() is None:
+        return
+    detalle = f"La factura/orden {numero_orden}"
+    if proveedor:
+        detalle += f" de {proveedor}"
+    raise HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail=f"{detalle} ya está cargada. Elimínala antes de volver a subirla.",
+    )
 
 
 class ComisionistaAsignacionBody(BaseModel):
@@ -177,6 +200,7 @@ def crear_ordenes(
                 clave = (item.fecha, item.numero_orden, proveedor)
                 orden = ordenes_por_clave.get(clave)
                 if not orden:
+                    _rechazar_si_ya_cargada(db, item.numero_orden, proveedor)
                     orden = Orden(
                         fecha=item.fecha,
                         numero_orden=item.numero_orden,
@@ -197,11 +221,13 @@ def crear_ordenes(
             return resultados
 
         orden_data = OrdenCreate.model_validate(payload)
+        proveedor = _canonicalizar_proveedor(db, orden_data.proveedor)
+        _rechazar_si_ya_cargada(db, orden_data.numero_orden, proveedor)
         orden = Orden(
             fecha=orden_data.fecha,
             numero_orden=orden_data.numero_orden,
             cliente_id=orden_data.cliente_id,
-            proveedor=_canonicalizar_proveedor(db, orden_data.proveedor),
+            proveedor=proveedor,
             semana=orden_data.semana,
             archivo_nombre=orden_data.archivo_nombre,
             origen=orden_data.origen,
@@ -233,6 +259,9 @@ def crear_ordenes(
         db.commit()
         db.refresh(orden)
         return _serializar_orden(orden)
+    except HTTPException:
+        db.rollback()
+        raise
     except Exception as exc:
         db.rollback()
         raise HTTPException(

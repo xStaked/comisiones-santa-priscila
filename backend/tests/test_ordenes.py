@@ -59,6 +59,34 @@ def test_create_orden_inicia_pendiente(authenticated_client):
     assert data[0]["estado"] == "pendiente"
 
 
+def test_no_permite_subir_la_misma_factura_dos_veces(authenticated_client):
+    """Subir dos veces la misma factura duplicaba los ítems y las comisiones."""
+    payload = [{
+        "fecha": str(date.today()),
+        "numero_orden": "001-002-000002243",
+        "finca": "Finca Test",
+        "producto": "Camarón",
+        "cantidad": "100.00",
+        "unidad": "kg",
+        "precio_unitario": "5.50",
+        "total": "550.00",
+        "proveedor": "PLUMONT S.A.",
+        "comisionista_ids": [],
+    }]
+
+    assert authenticated_client.post("/api/v1/ordenes/", json=payload).status_code == 201
+
+    # Mismo número con otra tipografía: sigue siendo la misma factura.
+    payload[0]["numero_orden"] = " 001-002-000002243 "
+    repetida = authenticated_client.post("/api/v1/ordenes/", json=payload)
+    assert repetida.status_code == 409
+    assert "001-002-000002243" in repetida.json()["detail"]
+
+    # Otro proveedor con el mismo número sí es una factura distinta.
+    payload[0]["proveedor"] = "INTEDECAM S.A."
+    assert authenticated_client.post("/api/v1/ordenes/", json=payload).status_code == 201
+
+
 def test_list_ordenes_planas_no_serializa_relaciones_ciclicas(authenticated_client):
     payload = [{
         "fecha": str(date.today()),

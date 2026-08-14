@@ -293,6 +293,13 @@ export function OrdenesTab() {
   const [uploadType, setUploadType] = useState<'pdf' | 'imagen'>('pdf');
   const [pdfClienteId, setPdfClienteId] = useState<string>('');
 
+  // Aviso antes de confirmar: el backend rechaza la factura repetida, pero verla
+  // marcada en la vista previa evita que se caiga el lote entero.
+  const numerosCargados = useMemo(
+    () => new Set(ordenItems.map(o => o.numeroOrden.trim().toUpperCase())),
+    [ordenItems]
+  );
+
   const initialFecha = useMemo(() => new Date().toISOString().slice(0, 10), []);
 
   const [manualHeader, setManualHeader] = useState({
@@ -978,6 +985,9 @@ export function OrdenesTab() {
                             </div>
                           </div>
                           <div className="flex items-center gap-2">
+                            {numerosCargados.has(preview.numeroOrden.trim().toUpperCase()) && (
+                              <span className="rounded-full bg-[#FEF2F2] px-2.5 py-1 text-xs font-medium text-[#B91C1C]">Ya cargada</span>
+                            )}
                             <Chip>{preview.items.length} productos</Chip>
                             <Button variant="ghost" size="sm" onClick={() => removePdfPreview(preview.fileName)} className="rounded-lg text-[#7A8798] hover:text-[#B91C1C]">
                               <X className="h-4 w-4" />
