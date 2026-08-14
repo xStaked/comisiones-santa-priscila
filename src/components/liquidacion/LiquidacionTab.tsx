@@ -30,7 +30,8 @@ import {
 } from '@/components/ui/dc';
 import { toast } from 'sonner';
 
-const COLS = 'grid-cols-[34px_130px_92px_minmax(0,1.3fr)_minmax(0,1fr)_90px_108px_132px]';
+// El número de factura completo ("001-002-000002243") no entra en menos de 190px.
+const COLS = 'grid-cols-[34px_190px_92px_minmax(0,1.3fr)_minmax(0,1fr)_90px_108px_132px]';
 
 /** Valor del filtro para las facturas pagadas sin fecha de pago registrada (datos viejos). */
 const SIN_FECHA_PAGO = 'sin-fecha';
@@ -441,7 +442,7 @@ export function LiquidacionTab() {
       {/* Tabla de facturas pagadas — cabecera oscura del prototipo */}
       <Panel>
         <div className="overflow-x-auto">
-          <div className="min-w-[1040px]">
+          <div className="min-w-[1100px]">
             <div className={`grid ${COLS} items-center gap-2.5 bg-[#0B1220] px-4 py-[11px] text-[10.5px] font-semibold uppercase tracking-[0.07em] text-[#8FA0B4]`}>
               <div>
                 <input
