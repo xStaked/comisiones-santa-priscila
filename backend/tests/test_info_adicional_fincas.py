@@ -219,6 +219,40 @@ def test_un_solo_item_y_un_solo_sector_aunque_la_cantidad_no_cruce():
     assert orden.items[0].finca == "GOLFO"
 
 
+def test_varios_items_y_un_solo_sector_aunque_la_cantidad_no_cruce():
+    """EO 2090: un solo sector y 3 ítems; la glosa cuenta canecas y sacos."""
+    orden = OrdenValidada(
+        fecha="2026-06-18",
+        numeroOrden="001-002-000002090",
+        proveedor="OCHOA RECALDE ELIZABETH MERCEDES",
+        semana="25",
+        items=[
+            OrdenItemValidado(
+                fecha="2026-06-18",
+                numeroOrden="001-002-000002090",
+                finca="-",
+                producto=producto,
+                cantidad=Decimal(cantidad),
+                unidad=unidad,
+                precioUnitario=Decimal("1"),
+                total=Decimal(cantidad),
+            )
+            for cantidad, producto, unidad in [
+                (880, "CITRIUS", "litros"),
+                (900, "CITRIUS", "litros"),
+                (34200, "ECU - CALCINIT ACUÍCOLA", "kg"),
+            ]
+        ],
+    )
+    asignar_fincas_desde_info_adicional(
+        "VENTA DE PRODUCTOS SEG. F/ # 2090 O/C # 96264 - SEMANA \n"
+        "25  SANTA PRISCILA S.A. - GOLFO. 89 CANECAS DE 20LITS DE \n"
+        "CITRIUS Y 1368 SACOS DE 25KG DE CALCINIT.\nKilogramo\ns\n34.200,00\n",
+        orden,
+    )
+    assert [i.finca for i in orden.items] == ["GOLFO"] * 3
+
+
 def test_glosa_con_sector_antes_de_la_cantidad():
     orden = _orden_ochoa()
     asignar_fincas_desde_info_adicional(TEXTO_FACTURA_OCHOA, orden)

@@ -231,8 +231,12 @@ def asignar_fincas_desde_info_adicional(texto_pdf: str, orden: OrdenValidada) ->
             libres.remove(indice)
             pendientes.remove(entrada)
 
-    # Un solo ítem y un solo sector: la glosa cuenta envases donde la tabla
-    # cuenta kilos ("GOLFO (600 SACOS DE 25KG)" contra 15.000 kg). Sin cantidad
-    # que cruzar, pero tampoco hay ambigüedad.
-    if len(libres) == 1 and len({finca for finca, _, _ in pendientes}) == 1:
-        orden.items[libres[0]].finca = pendientes[0][0]
+    # La glosa nombra un solo sector: todo ítem que no cruzó por cantidad va
+    # ahí. Cruzar es imposible cuando la glosa cuenta envases y la tabla kilos
+    # ("89 CANECAS DE 20LITS" contra 880 y 900 litros; "600 SACOS DE 25KG"
+    # contra 15.000 kg), pero con un solo sector nombrado no hay ambigüedad.
+    fincas = {finca for finca, _, _ in entradas}
+    if len(fincas) == 1:
+        (finca,) = fincas
+        for indice in libres:
+            orden.items[indice].finca = finca
