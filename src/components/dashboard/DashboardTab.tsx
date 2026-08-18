@@ -4,7 +4,6 @@ import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useApp } from '@/context/AppContext';
-import { calcularComisionTotalItem } from '@/lib/export-utils';
 import { fetchGlobalStats, fetchTendencias, fetchPorComisionista } from '@/lib/api';
 import type { EstadoOrden } from '@/types';
 
@@ -293,10 +292,7 @@ export function DashboardTab() {
             </div>
           ) : (
             ultimasLiquidaciones.map((liq) => {
-              const total = liq.items.reduce(
-                (s, item) => s + calcularComisionTotalItem(item, comisionistas),
-                0
-              );
+              const total = liq.totalComision;
               const personas = new Set(
                 liq.items.flatMap((i) => i.comisionistas.map((a) => a.comisionistaId))
               ).size;

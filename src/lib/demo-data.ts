@@ -84,6 +84,7 @@ export const demoLiquidaciones: Liquidacion[] = [
     mes: '2026-03',
     nombre: 'Liquidación Marzo 2026',
     fechaCreacion: '2026-03-25T10:30:00.000Z',
+    totalComision: 0,
     items: [
       makeOrden('2026-03-02', 'OC-2026-0451', 0, 2500, 'kg', 8.5, ['com-001']),
       makeOrden('2026-03-02', 'OC-2026-0451', 1, 1800, 'kg', 7.9, ['com-001', 'com-002']),
@@ -100,6 +101,7 @@ export const demoLiquidaciones: Liquidacion[] = [
     mes: '2026-03',
     nombre: 'Liquidación 2da Quincena Marzo',
     fechaCreacion: '2026-03-31T14:15:00.000Z',
+    totalComision: 0,
     items: [
       makeOrden('2026-03-20', 'OC-2026-0483', 0, 3100, 'kg', 8.6, ['com-001', 'com-003']),
       makeOrden('2026-03-22', 'OC-2026-0488', 2, 2200, 'kg', 6.8, ['com-003']),
@@ -110,6 +112,7 @@ export const demoLiquidaciones: Liquidacion[] = [
     mes: '2026-04',
     nombre: 'Liquidación Abril 2026',
     fechaCreacion: '2026-04-28T09:00:00.000Z',
+    totalComision: 0,
     items: [
       makeOrden('2026-04-03', 'OC-2026-0501', 1, 2600, 'kg', 7.95, ['com-002']),
       makeOrden('2026-04-05', 'OC-2026-0505', 3, 1700, 'kg', 9.15, ['com-004']),

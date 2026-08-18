@@ -214,6 +214,18 @@ function normalizarLiquidacionConItems(data: any): Liquidacion {
     mes: data.mes,
     fechaCreacion: data.fechaCreacion,
     items: (data.items || []).map(snapshotItemToOrdenItem),
+    // snapshotItemToOrdenItem descarta `tarifas`, que es donde vive la comisión ya
+    // calculada. Recalcularla después da 0: quien la recibe no tiene a mano las
+    // tarifas específicas del comisionista y la jerarquía no cae a las globales.
+    totalComision: (data.items || []).reduce(
+      (suma: number, item: { tarifas?: { comisionCalculada?: number | string }[] }) =>
+        suma +
+        (item.tarifas || []).reduce(
+          (sub, t) => sub + (Number(t.comisionCalculada) || 0),
+          0
+        ),
+      0
+    ),
   };
 }
 

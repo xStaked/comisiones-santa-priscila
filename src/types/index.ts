@@ -78,6 +78,8 @@ export interface Liquidacion {
   id: string;
   mes: string;
   items: OrdenItem[];
+  /** Comisión total del snapshot. No se recalcula: ver normalizarLiquidacionConItems. */
+  totalComision: number;
   fechaCreacion: string;
   nombre: string;
 }

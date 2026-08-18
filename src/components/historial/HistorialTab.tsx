@@ -4,7 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { Calendar, FileText, FileSpreadsheet, Trash2, Eye, Loader2 } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
-import { exportarPDF, exportarExcel, getTarifaLabel, calcularComisionTotalItem } from '@/lib/export-utils';
+import { exportarPDF, exportarExcel, getTarifaLabel } from '@/lib/export-utils';
 import { fetchLiquidacion } from '@/lib/api';
 import { OrdenItem, Comisionista } from '@/types';
 import { Aviso, Buscador, Chip, Panel, Vacio, fechaCorta, money } from '@/components/ui/dc';
@@ -52,7 +52,7 @@ function buildComisionistasFromSnapshot(items: any[]): Comisionista[] {
 const COLS = 'grid-cols-[minmax(0,1.7fr)_120px_100px_120px_130px_190px]';
 
 export function HistorialTab() {
-  const { liquidaciones, comisionistas, deleteLiquidacion, clientes } = useApp();
+  const { liquidaciones, deleteLiquidacion, clientes } = useApp();
   const [search, setSearch] = useState('');
   const [exportingId, setExportingId] = useState<string | null>(null);
 
@@ -141,10 +141,7 @@ export function HistorialTab() {
 
             {filtered.map((liq) => {
               const exportando = exportingId === liq.id;
-              const total = liq.items.reduce(
-                (s, item) => s + calcularComisionTotalItem(item, comisionistas),
-                0
-              );
+              const total = liq.totalComision;
               const personas = new Set(
                 liq.items.flatMap((i) => i.comisionistas.map((a) => a.comisionistaId))
               ).size;
