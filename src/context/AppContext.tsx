@@ -44,6 +44,10 @@ import {
 import { setPeriodosRetencion } from '@/lib/export-utils';
 
 interface AppContextType {
+  /** Primera carga de los catálogos. Hasta que termine, las pantallas no pueden
+   *  distinguir "todavía no llegó" de "no hay nada". */
+  cargando: boolean;
+
   comisionistas: Comisionista[];
   addComisionista: (c: Omit<Comisionista, 'id'>) => void;
   updateComisionista: (id: string, c: Partial<Comisionista>) => void;
@@ -146,6 +150,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     queryKey: ['retenciones'],
     queryFn: fetchRetenciones,
   });
+
+  // isLoading (no isFetching): un refetch de fondo no debe tapar la pantalla.
+  const cargando = [
+    comisionistasQuery,
+    ordenesQuery,
+    liquidacionesQuery,
+    clientesQuery,
+    productosQuery,
+    tarifasClienteProductoQuery,
+    retencionesQuery,
+  ].some(q => q.isLoading);
 
   const comisionistas: Comisionista[] = comisionistasQuery.data ?? [];
   const ordenItems: OrdenItem[] = ordenesQuery.data ?? [];
@@ -687,6 +702,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         updateOrdenItem,
         updateEstadoOrden,
         updateEstadoOrdenesMasivo,
+        cargando,
         deleteOrdenItem,
         deleteOrdenItems,
         clearOrdenItems,

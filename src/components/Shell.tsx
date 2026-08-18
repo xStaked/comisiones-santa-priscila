@@ -7,6 +7,8 @@ import { Header, useSinLiquidar } from './Header';
 import { AuthGuard } from './AuthGuard';
 import { gruposNav, esActiva } from './nav';
 import { useAuth } from '@/context/AuthContext';
+import { useApp } from '@/context/AppContext';
+import { Loader2 } from 'lucide-react';
 
 function Sidebar() {
   const pathname = usePathname();
@@ -100,6 +102,21 @@ function Sidebar() {
   );
 }
 
+/** Sin esto cada pantalla muestra su "no hay nada" mientras carga, que es
+ *  indistinguible de no tener datos.
+ *  ponytail: espera a las 7 queries juntas. Si alguna se vuelve lenta (ordenes
+ *  cuando crezca), conviene un loader por pantalla en vez de este global. */
+function Contenido({ children }: { children: React.ReactNode }) {
+  const { cargando } = useApp();
+  if (!cargando) return <>{children}</>;
+  return (
+    <div className="flex min-h-[320px] flex-col items-center justify-center gap-3 text-[#98A2B3]">
+      <Loader2 className="size-7 animate-spin" />
+      <span className="text-[13px]">Cargando datos…</span>
+    </div>
+  );
+}
+
 export function Shell({ children }: { children: React.ReactNode }) {
   return (
     <AuthGuard>
@@ -107,7 +124,9 @@ export function Shell({ children }: { children: React.ReactNode }) {
         <Sidebar />
         <main className="flex min-w-0 flex-1 flex-col">
           <Header />
-          <div className="flex-1 px-5 py-6 lg:px-[30px]">{children}</div>
+          <div className="flex-1 px-5 py-6 lg:px-[30px]">
+            <Contenido>{children}</Contenido>
+          </div>
         </main>
       </div>
     </AuthGuard>
