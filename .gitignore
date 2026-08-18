@@ -49,3 +49,6 @@ next-env.d.ts
 # Archivos de análisis
 *.md
 COMISIONES EXTERNAS RESUMEN.pdf
+
+# Config local de Claude Code: contiene rutas y credenciales de la maquina
+.claude/settings.local.json
