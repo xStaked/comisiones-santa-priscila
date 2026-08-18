@@ -5,6 +5,7 @@ import { FileText, FileSpreadsheet, Save, Calculator, ChevronRight } from 'lucid
 import { useQueryClient } from '@tanstack/react-query';
 import * as XLSX from 'xlsx';
 import { useApp } from '@/context/AppContext';
+import { useLocalStorage } from '@/hooks/useLocalStorage';
 import { exportarPDF, exportarExcel, calcularDetalleComision, getCantidadParaTarifaKg } from '@/lib/export-utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -40,6 +41,13 @@ const SIN_FECHA_PAGO = 'sin-fecha';
 const mesDePago = (item: { fechaPago?: string | null }) =>
   item.fechaPago ? item.fechaPago.slice(0, 7) : SIN_FECHA_PAGO;
 
+/** Mes anterior al actual en YYYY-MM: en agosto se liquida julio. */
+const MES_ANTERIOR = (() => {
+  const hoy = new Date();
+  const d = new Date(hoy.getFullYear(), hoy.getMonth() - 1, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+})();
+
 /** '2026-06' → 'junio 2026' */
 function etiquetaMes(mes: string) {
   if (mes === SIN_FECHA_PAGO) return 'Sin fecha de pago';
@@ -54,7 +62,11 @@ export function LiquidacionTab() {
   const [filterFactura, setFilterFactura] = useState('');
   // Mes de PAGO de la factura, no el de emisión: una liquidación de junio puede
   // incluir facturas emitidas hace un año pero cobradas en junio.
-  const [filterMes, setFilterMes] = useState('');
+  // La elección se recuerda entre sesiones; sin nada guardado arranca en el mes anterior.
+  const [mesGuardado, setFilterMes] = useLocalStorage('liquidacion:mes-pago', MES_ANTERIOR);
+  // ponytail: un mes guardado más viejo que el default ya pasó, así que el default rueda solo
+  // al cambiar de mes. Contra: volver a un mes viejo no se recuerda al recargar.
+  const filterMes = mesGuardado && mesGuardado < MES_ANTERIOR ? MES_ANTERIOR : mesGuardado;
   const [nombreLiquidacion, setNombreLiquidacion] = useState('');
   const [mesLiquidacion, setMesLiquidacion] = useState('');
   const [previewOpen, setPreviewOpen] = useState(false);
