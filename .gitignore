@@ -52,3 +52,4 @@ COMISIONES EXTERNAS RESUMEN.pdf
 
 # Config local de Claude Code: contiene rutas y credenciales de la maquina
 .claude/settings.local.json
+.claude/skills/

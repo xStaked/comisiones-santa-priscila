@@ -64,9 +64,6 @@ export function LiquidacionTab() {
   // incluir facturas emitidas hace un año pero cobradas en junio.
   // La elección se recuerda entre sesiones; sin nada guardado arranca en el mes anterior.
   const [mesGuardado, setFilterMes] = useLocalStorage('liquidacion:mes-pago', MES_ANTERIOR);
-  // ponytail: un mes guardado más viejo que el default ya pasó, así que el default rueda solo
-  // al cambiar de mes. Contra: volver a un mes viejo no se recuerda al recargar.
-  const filterMes = mesGuardado && mesGuardado < MES_ANTERIOR ? MES_ANTERIOR : mesGuardado;
   const [nombreLiquidacion, setNombreLiquidacion] = useState('');
   const [mesLiquidacion, setMesLiquidacion] = useState('');
   const [previewOpen, setPreviewOpen] = useState(false);
@@ -113,6 +110,13 @@ export function LiquidacionTab() {
     const meses = new Set(ordenItemsPagados.map(mesDePago));
     return Array.from(meses).sort().reverse();
   }, [ordenItemsPagados]);
+
+  // ponytail: un mes guardado más viejo que el default ya pasó, así que el default rueda solo
+  // al cambiar de mes. Contra: volver a un mes viejo no se recuerda al recargar.
+  const mesPreferido = mesGuardado && mesGuardado < MES_ANTERIOR ? MES_ANTERIOR : mesGuardado;
+  // Un mes sin facturas pendientes dejaría la pantalla vacía sin decir por qué: mostrar todo.
+  const filterMes =
+    !mesPreferido || mesesDisponibles.includes(mesPreferido) ? mesPreferido : '';
 
   const filteredItems = useMemo(() => {
     return ordenItemsPagados
