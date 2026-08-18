@@ -155,6 +155,9 @@ def listar_ordenes(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    # Los hermanos de la orden solo hacen falta al agrupar; cargarlos siempre
+    # trae la tabla de ítems dos veces en cada arranque de la app.
+    orden_opt = selectinload(OrdenItem.orden)
     query = (
         db.query(OrdenItem)
         .options(
@@ -162,7 +165,7 @@ def listar_ordenes(
             selectinload(OrdenItem.cliente),
             selectinload(OrdenItem.producto_obj),
             selectinload(OrdenItem.finca_obj),
-            selectinload(OrdenItem.orden).selectinload(Orden.items),
+            orden_opt.selectinload(Orden.items) if agrupadas else orden_opt,
         )
         # Se eliminan físicamente; no hay soft-delete
     )

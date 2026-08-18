@@ -83,6 +83,7 @@ def por_finca(db: Session = Depends(get_db), current_user: User = Depends(get_cu
             selectinload(OrdenItem.cliente),
             selectinload(OrdenItem.producto_obj),
             selectinload(OrdenItem.finca_obj),
+            selectinload(OrdenItem.orden),
         )
         .all()
     )
@@ -128,6 +129,7 @@ def por_producto(db: Session = Depends(get_db), current_user: User = Depends(get
             selectinload(OrdenItem.cliente),
             selectinload(OrdenItem.producto_obj),
             selectinload(OrdenItem.finca_obj),
+            selectinload(OrdenItem.orden),
         )
         .all()
     )
@@ -181,6 +183,7 @@ def por_comisionista(db: Session = Depends(get_db), current_user: User = Depends
                 selectinload(OrdenItem.cliente),
                 selectinload(OrdenItem.producto_obj),
                 selectinload(OrdenItem.finca_obj),
+                selectinload(OrdenItem.orden),
             )
             .all()
         )
@@ -218,6 +221,7 @@ def por_cliente(db: Session = Depends(get_db), current_user: User = Depends(get_
             selectinload(OrdenItem.cliente),
             selectinload(OrdenItem.producto_obj),
             selectinload(OrdenItem.finca_obj),
+            selectinload(OrdenItem.orden),
         )
         .all()
     )
@@ -290,6 +294,7 @@ def global_stats(db: Session = Depends(get_db), current_user: User = Depends(get
             selectinload(OrdenItem.cliente),
             selectinload(OrdenItem.producto_obj),
             selectinload(OrdenItem.finca_obj),
+            selectinload(OrdenItem.orden),
         )
         .all()
     )
@@ -345,6 +350,7 @@ def tendencias(db: Session = Depends(get_db), current_user: User = Depends(get_c
             selectinload(OrdenItem.cliente),
             selectinload(OrdenItem.producto_obj),
             selectinload(OrdenItem.finca_obj),
+            selectinload(OrdenItem.orden),
         )
         .all()
     )

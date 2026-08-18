@@ -7,13 +7,12 @@ from uuid import UUID
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
-from app.models.cliente import Finca
 from app.models.comisionista import Tarifa, TipoTarifa
 from app.models.liquidacion import Liquidacion, LiquidacionItem, LiquidacionItemTarifa
 from app.models.orden import Asignacion, EstadoOrden, Orden, OrdenItem
-from app.models.producto import Producto
 from app.models.retencion import Retencion
 from app.models.tarifa_cliente_producto import TarifaClienteProducto
+from app.services import catalogo_cache
 from app.services.catalog_normalization import (
     _normalizar_texto,
     es_proveedor_comodin,
@@ -108,7 +107,32 @@ def _vigente_en(fecha: date):
 def _buscar_tarifa_especifica(
     db: Session, orden_item: OrdenItem, comisionista_id: UUID
 ) -> TarifaClienteProducto | None:
-    """Busca tarifa específica considerando Cliente, Producto, Finca y Proveedor."""
+    """Busca tarifa específica considerando Cliente, Producto, Finca y Proveedor.
+
+    Memoizada por sesión: la búsqueda son hasta 6 consultas y los reportes la
+    llaman una vez por cada par (ítem, comisionista). Muchas facturas comparten
+    la misma combinación, así que el memo colapsa casi todas.
+    """
+    memo = catalogo_cache.tarifa_especifica_memo(db)
+    clave = (
+        comisionista_id,
+        orden_item.cliente_id,
+        orden_item.producto_id,
+        orden_item.finca_id,
+        orden_item.producto,
+        orden_item.finca,
+        orden_item.sector,
+        _fecha_efectiva(orden_item),
+        orden_item.orden.proveedor if orden_item.orden else None,
+    )
+    if clave not in memo:
+        memo[clave] = _consultar_tarifa_especifica(db, orden_item, comisionista_id)
+    return memo[clave]
+
+
+def _consultar_tarifa_especifica(
+    db: Session, orden_item: OrdenItem, comisionista_id: UUID
+) -> TarifaClienteProducto | None:
     cliente_id = orden_item.cliente_id
     producto_id = orden_item.producto_id
     finca_id = orden_item.finca_id
@@ -121,7 +145,7 @@ def _buscar_tarifa_especifica(
         producto = next(
             (
                 producto
-                for producto in db.query(Producto).all()
+                for producto in catalogo_cache.productos(db)
                 if normalizar_nombre_producto(producto.nombre) == nombre_producto
             ),
             None,
@@ -134,13 +158,10 @@ def _buscar_tarifa_especifica(
         else orden_item.sector
     )
     if not finca_id and nombre_finca_orden:
-        fincas_query = db.query(Finca)
-        if cliente_id:
-            fincas_query = fincas_query.filter(Finca.cliente_id == cliente_id)
         nombre_finca = normalizar_nombre_finca(nombre_finca_orden)
         fincas = [
             finca
-            for finca in fincas_query.all()
+            for finca in catalogo_cache.fincas_de_cliente(db, cliente_id)
             if normalizar_nombre_finca(finca.nombre) == nombre_finca
         ]
         if len(fincas) == 1:
@@ -150,7 +171,7 @@ def _buscar_tarifa_especifica(
     if not cliente_id or not producto_id:
         return None
 
-    producto_obj = next((p for p in db.query(Producto).all() if p.id == producto_id), None)
+    producto_obj = catalogo_cache.producto_por_id(db, producto_id)
     producto_ids = (
         obtener_productos_equivalentes(db, producto_obj)
         if producto_obj
