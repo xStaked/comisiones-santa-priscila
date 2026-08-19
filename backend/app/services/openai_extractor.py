@@ -89,6 +89,13 @@ datos internos del comprador ("vendedor : Juan Perez", "RUC Proveedor: ...")
 que son el ejecutivo o el codigo del comprador, no la razon social de quien
 emite. El proveedor sale siempre del encabezado, nunca de esos rotulos.
 
+Campo "finca" (el sector del cliente): las facturas no traen columna de finca,
+el sector va escrito dentro de la descripcion del item o en la glosa
+("O/C # 95933 - SEMANA 24 SECTOR GOLFO", "CHANDUY. 100 LITS DE CITRIUS"). Sacalo
+de ahi y ponelo en el "finca" del item, con el nombre solo: sin la palabra
+SECTOR, sin la semana, sin el numero de orden, sin cantidades ni envases. Si la
+glosa nombra varios sectores, cada item lleva el suyo.
+
 Campo "unidad": nombra un envase (tachos, sacos, canecas) SOLO si el documento
 dice explicitamente que la cantidad esta contada en esos envases. Las facturas no
 traen columna de unidad: su cantidad esta en kilos (o litros para los liquidos),
