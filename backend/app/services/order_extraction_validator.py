@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 
@@ -56,6 +57,43 @@ def _decimal_positivo(valor: Decimal, campo: str) -> Decimal:
     return numero
 
 
+def _numero_desde_texto(texto: str) -> Decimal | None:
+    """Convierte el numero tal cual lo imprime el documento ("22.500,00").
+
+    La IA lo leia como 22,5 —tomaba el punto de miles por decimal— y la comision
+    salia 1000 veces menor sin que nada lo notara: cantidad x precio seguia
+    cuadrando con el total, porque el error era parejo en los tres numeros.
+    Transcrito, el numero si es interpretable sin ambiguedad: el ULTIMO separador
+    es el decimal y los anteriores son de miles. La unica duda real es un
+    separador solitario; si parte exactamente tres digitos es de miles
+    ("22.500"), que es como escriben las cantidades estas facturas.
+    """
+    limpio = re.sub(r"[^\d.,]", "", texto or "")
+    if not re.search(r"\d", limpio):
+        return None
+
+    separadores = [c for c in limpio if c in ".,"]
+    if separadores:
+        ultimo = limpio.rindex(separadores[-1])
+        decimales = len(limpio) - ultimo - 1
+        es_miles = len(set(separadores)) == 1 and (
+            len(separadores) > 1 or decimales == 3
+        )
+        entero = re.sub(r"[.,]", "", limpio if es_miles else limpio[:ultimo])
+        limpio = entero if es_miles else f"{entero}.{limpio[ultimo + 1:]}"
+
+    try:
+        return Decimal(limpio)
+    except InvalidOperation:
+        return None
+
+
+def _decimal_de_item(texto: str, valor: Decimal, campo: str) -> Decimal:
+    """El numero transcrito manda; el campo numerico es el respaldo."""
+    desde_texto = _numero_desde_texto(texto)
+    return _decimal_positivo(valor if desde_texto is None else desde_texto, campo)
+
+
 def _normalizar_unidad(valor: str) -> str:
     unidad = valor.strip().lower()
     return UNIDADES_NORMALIZADAS.get(unidad, unidad or "unidades")
@@ -75,9 +113,11 @@ def validar_orden_extraida(orden: OrdenExtraidaIA) -> OrdenValidada:
         if not producto:
             raise ValueError("Cada item debe tener producto")
 
-        cantidad = _decimal_positivo(item.cantidad, "cantidad")
-        precio_unitario = _decimal_positivo(item.precioUnitario, "precioUnitario")
-        total = _decimal_positivo(item.total, "total")
+        cantidad = _decimal_de_item(item.cantidadTexto, item.cantidad, "cantidad")
+        precio_unitario = _decimal_de_item(
+            item.precioUnitarioTexto, item.precioUnitario, "precioUnitario"
+        )
+        total = _decimal_de_item(item.totalTexto, item.total, "total")
 
         total_calculado = cantidad * precio_unitario
         tolerancia = max(Decimal("0.05"), total * Decimal("0.02"))

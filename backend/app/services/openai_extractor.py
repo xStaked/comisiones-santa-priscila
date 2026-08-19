@@ -31,6 +31,9 @@ ORDEN_SCHEMA = {
                     "unidad": {"type": "string"},
                     "precioUnitario": {"type": "number"},
                     "total": {"type": "number"},
+                    "cantidadTexto": {"type": "string"},
+                    "precioUnitarioTexto": {"type": "string"},
+                    "totalTexto": {"type": "string"},
                     "finca": {"type": ["string", "null"]},
                     "confidence": {"type": ["number", "null"]},
                 },
@@ -40,6 +43,9 @@ ORDEN_SCHEMA = {
                     "unidad",
                     "precioUnitario",
                     "total",
+                    "cantidadTexto",
+                    "precioUnitarioTexto",
+                    "totalTexto",
                     "finca",
                     "confidence",
                 ],
@@ -63,7 +69,13 @@ PROMPT_EXTRACCION = """
 Extrae una orden de compra acuicola desde el texto o imagen proporcionada.
 Devuelve solo datos visibles en el documento. No inventes campos ausentes.
 Usa formato de fecha YYYY-MM-DD cuando sea posible.
-Convierte separadores de miles y decimales a numeros JSON.
+Los campos "cantidadTexto", "precioUnitarioTexto" y "totalTexto" son la
+transcripcion LITERAL del numero como aparece impreso, con sus puntos y comas y
+sin convertir nada ("22.500,00", "1,180000"). No los normalices: de ahi sale el
+valor real. Para los campos numericos: el separador decimal es el ULTIMO que
+aparece en el numero y los anteriores son de miles, sea cual sea el formato del
+documento ("22.500,00" son veintidos mil quinientos, no 22,5; "1,234.56" son mil
+doscientos treinta y cuatro).
 Si una finca o cliente aparece en encabezado, aplicalo a los items salvo que el item indique otro valor.
 
 Roles: "proveedor" es quien EMITE el documento (el RUC y la razon social del

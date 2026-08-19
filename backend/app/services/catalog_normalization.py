@@ -24,7 +24,7 @@ def normalizar_nombre_finca(nombre: str) -> str:
     tokens = [
         token
         for token in _normalizar_texto(nombre).split()
-        if token not in {"ADM", "ADMINISTRACION"}
+        if token not in {"ADM", "ADMINISTRACION", "SECTOR", "SECTORES"}
     ]
     return " ".join("GOLFO" if token == "GOLDO" else token for token in tokens)
 

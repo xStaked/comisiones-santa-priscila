@@ -48,3 +48,13 @@ def test_normaliza_pastillas_en_plural_como_en_las_facturas():
     # ...ni entre sí: PASTILLA a secas != PASTILLA ALIMENTADOR != PASTILLA TH.
     assert n("ECU BACILLUS SUELO PASTILLA") != n("ECU BACILLUS SUELO PASTILLA ALIMENTADOR")
     assert n("ECU BACILLUS SUELO PASTILLA") != n("ECU-BACILLUS SUELO PASTILLA TH")
+
+
+def test_normalizar_nombre_finca_ignora_la_palabra_sector():
+    """La glosa de la factura escribe "SECTOR GOLFO"; el catálogo lo tiene como
+    "GOLFO ADMINISTRACION"."""
+    from app.services.catalog_normalization import normalizar_nombre_finca
+
+    assert normalizar_nombre_finca("SECTOR GOLFO") == normalizar_nombre_finca(
+        "GOLFO ADMINISTRACION"
+    )

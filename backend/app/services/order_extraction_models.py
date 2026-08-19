@@ -20,6 +20,11 @@ class OrdenItemExtraidoIA(BaseModel):
     unidad: str
     precioUnitario: Decimal
     total: Decimal
+    # El número transcrito tal cual del documento ("22.500,00"). La conversión a
+    # Decimal la hace el validador, no la IA: ver _numero_desde_texto().
+    cantidadTexto: str = ""
+    precioUnitarioTexto: str = ""
+    totalTexto: str = ""
     finca: Optional[str] = None
     confidence: Optional[float] = None
 

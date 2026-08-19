@@ -37,7 +37,7 @@ export function normalizarRazonSocial(valor?: string): string {
 export function normalizarNombreFinca(valor?: string): string | undefined {
   return normalizarTexto(valor)
     ?.split(' ')
-    .filter((token) => token !== 'ADM' && token !== 'ADMINISTRACION')
+    .filter((token) => !['ADM', 'ADMINISTRACION', 'SECTOR', 'SECTORES'].includes(token))
     .map((token) => (token === 'GOLDO' ? 'GOLFO' : token))
     .join(' ');
 }
