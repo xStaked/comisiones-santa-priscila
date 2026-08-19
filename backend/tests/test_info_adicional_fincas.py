@@ -3,6 +3,33 @@ from decimal import Decimal
 from app.services.info_adicional_fincas import asignar_fincas_desde_info_adicional
 from app.services.order_extraction_models import OrdenItemValidado, OrdenValidada
 
+# Los sectores tal como están dados de alta (app/commands/seed_catalogos.py).
+# El parser ancla en esta lista: lo que no está acá no se escribe como finca.
+SECTORES = [
+    "AFRICA",
+    "ASIA",
+    "BAJEN A",
+    "BAJEN B",
+    "CALIFORNIA A",
+    "CALIFORNIA B",
+    "CORVINERO A",
+    "CORVINERO B",
+    "CORVINERO C",
+    "CHANDUY",
+    "CHURUTE",
+    "DAULAR",
+    "DAULAR CURAZAO",
+    "GOLFO",
+    "KOREA",
+    "PAÑAMAO",
+    "SABANA JAMAICA",
+    "SABANA SINGAPUR",
+    "TAURA A",
+    "TAURA B",
+    "TAURA C",
+    "TAURA D",
+]
+
 
 # Bloque tal cual lo devuelve PyMuPDF para "DIN 001-002-000002257 SP.pdf":
 # el PDF corta "PASTILLAS" a la mitad entre celdas (PASTIL / LAS TH).
@@ -85,7 +112,7 @@ def _orden() -> OrdenValidada:
 
 def test_asigna_finca_a_todos_los_items():
     orden = _orden()
-    asignar_fincas_desde_info_adicional(TEXTO_FACTURA, orden)
+    asignar_fincas_desde_info_adicional(TEXTO_FACTURA, orden, SECTORES)
 
     assert all(item.finca != "-" for item in orden.items)
 
@@ -95,8 +122,8 @@ def test_asigna_finca_a_todos_los_items():
 
     # Los dos sectores que la IA se saltaba, incluido el partido a la mitad.
     assert por_finca["ASIA"] == [(200, LINEAS[5][1])]
-    assert sorted(c for c, _ in por_finca["TAURA ADM C"]) == [600]
-    assert sorted(c for c, _ in por_finca["TAURA ADM D"]) == [100, 300]
+    assert sorted(c for c, _ in por_finca["TAURA C"]) == [600]
+    assert sorted(c for c, _ in por_finca["TAURA D"]) == [100, 300]
 
     # Familias distintas con la misma cantidad no se cruzan.
     assert sorted(por_finca["DAULAR"]) == sorted(
@@ -112,6 +139,7 @@ def test_factura_sin_sectores_no_toca_nada():
         "VENTA DE PRODUCTOS SEG. F/ # 2043 O/C # 0001365 DE 32 CANECAS DE 20LITS.\n"
         "Formas de pago\n",
         orden,
+        SECTORES,
     )
     assert all(item.finca == "-" for item in orden.items)
 
@@ -186,8 +214,9 @@ def test_glosa_sin_dos_puntos_y_pegada_al_encabezado():
         "PAST. TH. CALIFORNIA ADM A 90KG PAST. TH. GOLFO : 100KG ECUB. PAST. GRANDES.\n"
         "Formas de pago\n",
         orden,
+        SECTORES,
     )
-    assert [i.finca for i in orden.items] == ["AFRICA", "CALIFORNIA ADM A", "GOLFO"]
+    assert [i.finca for i in orden.items] == ["AFRICA", "CALIFORNIA A", "GOLFO"]
 
 
 def test_un_solo_item_y_un_solo_sector_aunque_la_cantidad_no_cruce():
@@ -215,6 +244,7 @@ def test_un_solo_item_y_un_solo_sector_aunque_la_cantidad_no_cruce():
         "21 A SANTA PRISCILA  - GOLFO  (600 SACOS DE 25KG DE\n"
         "CALCINIT A $ 26,50 CADA SACO).\nKilogramo\ns\n15.000,00\n",
         orden,
+        SECTORES,
     )
     assert orden.items[0].finca == "GOLFO"
 
@@ -249,18 +279,19 @@ def test_varios_items_y_un_solo_sector_aunque_la_cantidad_no_cruce():
         "25  SANTA PRISCILA S.A. - GOLFO. 89 CANECAS DE 20LITS DE \n"
         "CITRIUS Y 1368 SACOS DE 25KG DE CALCINIT.\nKilogramo\ns\n34.200,00\n",
         orden,
+        SECTORES,
     )
     assert [i.finca for i in orden.items] == ["GOLFO"] * 3
 
 
 def test_glosa_con_sector_antes_de_la_cantidad():
     orden = _orden_ochoa()
-    asignar_fincas_desde_info_adicional(TEXTO_FACTURA_OCHOA, orden)
+    asignar_fincas_desde_info_adicional(TEXTO_FACTURA_OCHOA, orden, SECTORES)
 
     assert [(int(i.cantidad), i.finca) for i in orden.items] == [
         (100, "CHANDUY"),
         (300, "GOLFO"),
-        (800, "TAURA ADM D"),
+        (800, "TAURA D"),
     ]
 
 
@@ -294,6 +325,7 @@ def test_glosa_que_antepone_la_palabra_sector():
         "25KG DE CALCINIT A $ 29,50 C/SACO).\n"
         "Kilogramo\ns\n22.500,00\n1,180000\n0,00\n26.550,00\nSubtotal:\n",
         orden,
+        SECTORES,
     )
 
     assert [i.finca for i in orden.items] == ["GOLFO"]
@@ -325,6 +357,163 @@ def test_glosa_transcrita_por_la_ia_en_una_sola_linea():
         "VENTA DE PRODUCTOS SEG. F/ # 2083 SANTA PRISCILA S.A. O/C # 95933 - "
         "SEMANA 24 SECTOR GOLFO (900 SACOS DE 25KG DE CALCINIT A $ 29,50 C/SACO).",
         orden,
+        SECTORES,
     )
 
     assert [i.finca for i in orden.items] == ["GOLFO"]
+
+
+def test_glosa_sin_guion_antes_del_sector():
+    """EO 2081: como la 2083 pero sin el " - " tras el número de O/C. Sin guion
+    la cola de la frase arrastra el "O/C", que la normalización parte en dos
+    letras sueltas ("O" y "C"): el sector salía "C GOLFO" y no casaba con la
+    finca del catálogo."""
+    orden = OrdenValidada(
+        fecha="2026-06-08",
+        numeroOrden="001-002-000002081",
+        proveedor="OCHOA RECALDE ELIZABETH MERCEDES",
+        cliente="INDUSTRIAL PESQUERA SANTA PRISCILA S.A.",
+        semana="23",
+        items=[
+            OrdenItemValidado(
+                fecha="2026-06-08",
+                numeroOrden="001-002-000002081",
+                finca="-",
+                producto="ECU - CALCINIT ACUÍCOLA",
+                cantidad=Decimal("21250"),
+                unidad="kg",
+                precioUnitario=Decimal("1.18"),
+                total=Decimal("25075"),
+            )
+        ],
+    )
+    asignar_fincas_desde_info_adicional(
+        "VENTA DE PRODUCTOS SEG. F/ # 2081 SANTA PRISCILA S.A. O/C # 95644 "
+        "SEMANA 23 SECTOR GOLFO (850 SACOS DE 25KG DE CALCINIT A $29.50 C/SACO)",
+        orden,
+        SECTORES,
+    )
+
+    assert [i.finca for i in orden.items] == ["GOLFO"]
+
+
+def _orden_de_un_item(cantidad: str, producto: str = "ECU - CALCINIT ACUÍCOLA") -> OrdenValidada:
+    return OrdenValidada(
+        fecha="2026-06-08",
+        numeroOrden="001-002-000002100",
+        proveedor="OCHOA RECALDE ELIZABETH MERCEDES",
+        semana="23",
+        items=[
+            OrdenItemValidado(
+                fecha="2026-06-08",
+                numeroOrden="001-002-000002100",
+                finca="-",
+                producto=producto,
+                cantidad=Decimal(cantidad),
+                unidad="kg",
+                precioUnitario=Decimal("1"),
+                total=Decimal(cantidad),
+            )
+        ],
+    )
+
+
+def test_sector_fuera_del_catalogo_no_se_inventa():
+    """La garantía del anclaje: si el sector no está dado de alta, el ítem sale
+    sin finca. Antes el parser escribía cualquier palabra que sobreviviera a la
+    poda y el sector quedaba igual sin resolver, pero sin dejar rastro de por
+    qué."""
+    orden = _orden_de_un_item("2500")
+    asignar_fincas_desde_info_adicional(
+        "VENTA DE PRODUCTOS SEG. F/ # 2100 O/C # 96500 SEMANA 26 SECTOR PLAYAS "
+        "(100 SACOS DE 25KG DE CALCINIT).",
+        orden,
+        SECTORES,
+    )
+    assert orden.items[0].finca == "-"
+
+
+def test_sin_catalogo_no_toca_nada():
+    orden = _orden_de_un_item("2500")
+    asignar_fincas_desde_info_adicional(
+        "VENTA DE PRODUCTOS SEG. F/ # 2100 SEMANA 26 SECTOR GOLFO (100 SACOS).",
+        orden,
+        [],
+    )
+    assert orden.items[0].finca == "-"
+
+
+def test_factura_a_cliente_sin_sectores():
+    """EO 2067 a ROSSCAMARONERA: la glosa no nombra ningún sector porque el
+    cliente no los tiene. No debe salir finca de ningún lado."""
+    orden = _orden_de_un_item("10", producto="ECU-LACTICAS INNOVATE")
+    asignar_fincas_desde_info_adicional(
+        "VENTA DE PRODUCTOS SEG. F/ # 2067 O/C # 26-00386 DE ROSSCAMARONERA S.A. "
+        "(10KG ECULACTICAS INNOVATE).",
+        orden,
+        SECTORES,
+    )
+    assert orden.items[0].finca == "-"
+
+
+def test_dos_sectores_nombrados_no_reparte_a_ciegas():
+    """Si la glosa nombra dos sectores y solo uno trae cantidad, el ítem que no
+    cruza se queda sin finca: mandarlo al único que rindió sería inventar."""
+    orden = OrdenValidada(
+        fecha="2026-06-25",
+        numeroOrden="001-002-000002100",
+        proveedor="OCHOA RECALDE ELIZABETH MERCEDES",
+        semana="26",
+        items=[
+            OrdenItemValidado(
+                fecha="2026-06-25",
+                numeroOrden="001-002-000002100",
+                finca="-",
+                producto="CITRIUS",
+                cantidad=Decimal(cantidad),
+                unidad="litros",
+                precioUnitario=Decimal("5.5"),
+                total=Decimal(cantidad) * Decimal("5.5"),
+            )
+            for cantidad in (100, 500)
+        ],
+    )
+    asignar_fincas_desde_info_adicional(
+        "VENTA DE PRODUCTOS SEG. F/ # 2100 O/C # 96500 SEMANA 26 SECTORES "
+        "GOLFO Y CHANDUY. 100 LITS DE CITRIUS.",
+        orden,
+        SECTORES,
+    )
+    assert [i.finca for i in orden.items] == ["CHANDUY", "-"]
+
+
+def test_el_envase_de_la_glosa_no_entra_como_cantidad():
+    """'1368 SACOS DE 25KG' son 1368 sacos, no un pedido de 25. Con dos sectores
+    nombrados no hay red de seguridad: si los 25 entran como cantidad, cruzan
+    con cualquier ítem chico y le clavan el sector equivocado."""
+    orden = OrdenValidada(
+        fecha="2026-06-25",
+        numeroOrden="001-002-000002101",
+        proveedor="OCHOA RECALDE ELIZABETH MERCEDES",
+        semana="26",
+        items=[
+            OrdenItemValidado(
+                fecha="2026-06-25",
+                numeroOrden="001-002-000002101",
+                finca="-",
+                producto=producto,
+                cantidad=Decimal(cantidad),
+                unidad="kg",
+                precioUnitario=Decimal("1"),
+                total=Decimal(cantidad),
+            )
+            for cantidad, producto in [(25, "ECU-BACILLUS (salud)"), (600, "ECU - CALCINIT ACUÍCOLA")]
+        ],
+    )
+    asignar_fincas_desde_info_adicional(
+        "VENTA DE PRODUCTOS SEG. F/ # 2101 O/C # 96501 SEMANA 26 GOLFO "
+        "(600 SACOS DE 25KG DE CALCINIT). CHANDUY. 25KG ECUBACILLUS SALUD.",
+        orden,
+        SECTORES,
+    )
+    assert [i.finca for i in orden.items] == ["CHANDUY", "GOLFO"]

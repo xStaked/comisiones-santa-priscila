@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect, useMemo } from 'react';
-import { Plus, Trash2, Pencil, UserCheck, Calculator, FileUp, Check, X, ChevronDown, ChevronRight, ChevronLeft, Calendar, ArrowUpDown } from 'lucide-react';
+import { Plus, Trash2, Pencil, UserCheck, Calculator, FileUp, Check, X, ChevronDown, ChevronRight, ChevronLeft, Calendar, ArrowUpDown, AlertTriangle } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { EstadoOrden, OrdenItem } from '@/types';
 import { Button } from '@/components/ui/button';
@@ -75,7 +75,14 @@ type OrdenAgrupada = {
   items: OrdenItem[];
 };
 
-type OrdenItemExtraido = Omit<OrdenItem, 'id'> & { id?: string };
+// `problemas` solo existe en la vista previa: el backend explica ahí por qué un
+// ítem no se puede cargar (producto sin registrar, cliente sin identificar,
+// sin comisionistas). Vacío = se puede confirmar.
+type ItemPrevisualizado = OrdenItem & { problemas?: string[] };
+type OrdenItemExtraido = Omit<ItemPrevisualizado, 'id'> & { id?: string };
+
+const tieneProblemas = (preview: { items: ItemPrevisualizado[] }) =>
+  preview.items.some(item => (item.problemas?.length ?? 0) > 0);
 
 function agruparOrdenes(
   ordenItems: OrdenItem[],
@@ -287,7 +294,7 @@ export function OrdenesTab() {
     numeroOrden: string;
     proveedor: string;
     semana: string;
-    items: OrdenItem[];
+    items: ItemPrevisualizado[];
   }[]>([]);
   const [isProcessingPDF, setIsProcessingPDF] = useState(false);
   const [uploadType, setUploadType] = useState<'pdf' | 'imagen'>('pdf');
@@ -295,6 +302,15 @@ export function OrdenesTab() {
 
   // Aviso antes de confirmar: el backend rechaza la factura repetida, pero verla
   // marcada en la vista previa evita que se caiga el lote entero.
+  const itemsConfirmables = useMemo(
+    () => pdfPreviews.filter(p => !tieneProblemas(p)).reduce((n, p) => n + p.items.length, 0),
+    [pdfPreviews]
+  );
+  const facturasBloqueadas = useMemo(
+    () => pdfPreviews.filter(tieneProblemas).length,
+    [pdfPreviews]
+  );
+
   const numerosCargados = useMemo(
     () => new Set(ordenItems.map(o => o.numeroOrden.trim().toUpperCase())),
     [ordenItems]
@@ -595,17 +611,31 @@ export function OrdenesTab() {
   };
 
   const handleConfirmPDF = () => {
-    const itemsConCliente = pdfPreviews.flatMap(preview =>
+    // Una factura con ítems sin resolver no entra. Cargarla igual deja datos que
+    // nunca van a generar comisión y el faltante recién aparece cuando no cuadra
+    // la liquidación; las bloqueadas se quedan a la vista con su motivo.
+    const [bloqueadas, confirmables] = [
+      pdfPreviews.filter(tieneProblemas),
+      pdfPreviews.filter(preview => !tieneProblemas(preview)),
+    ];
+    const itemsConCliente = confirmables.flatMap(preview =>
       preview.items.map(item => ({
         ...item,
         clienteId: pdfClienteId || item.clienteId,
         proveedor: preview.proveedor || item.proveedor,
       }))
     );
+
+    if (bloqueadas.length > 0) {
+      toast.error(
+        `${bloqueadas.length} factura(s) no se cargaron: tienen datos sin registrar. Revisá el detalle en rojo.`
+      );
+    }
     if (itemsConCliente.length === 0) return;
+
     addOrdenItems(itemsConCliente);
-    setPdfPreviews([]);
-    setPdfClienteId('');
+    setPdfPreviews(bloqueadas);
+    if (bloqueadas.length === 0) setPdfClienteId('');
   };
 
   const handleDiscardPDF = () => {
@@ -988,6 +1018,9 @@ export function OrdenesTab() {
                             {numerosCargados.has(preview.numeroOrden.trim().toUpperCase()) && (
                               <span className="rounded-full bg-[#FEF2F2] px-2.5 py-1 text-xs font-medium text-[#B91C1C]">Ya cargada</span>
                             )}
+                            {tieneProblemas(preview) && (
+                              <span className="rounded-full bg-[#FEF2F2] px-2.5 py-1 text-xs font-medium text-[#B91C1C]">No se puede cargar</span>
+                            )}
                             <Chip>{preview.items.length} productos</Chip>
                             <Button variant="ghost" size="sm" onClick={() => removePdfPreview(preview.fileName)} className="rounded-lg text-[#7A8798] hover:text-[#B91C1C]">
                               <X className="h-4 w-4" />
@@ -1009,9 +1042,17 @@ export function OrdenesTab() {
                           </thead>
                           <tbody className="divide-y divide-[#F2F4F6]">
                             {preview.items.map(item => (
-                              <tr key={item.id} className="hover:bg-[#FAFBFC] transition-colors">
+                              <tr key={item.id} className={`transition-colors ${item.problemas?.length ? 'bg-[#FEF2F2]' : 'hover:bg-[#FAFBFC]'}`}>
                                 <td className="px-3 py-2 text-[#344054]">{item.finca}</td>
-                                <td className="px-3 py-2 text-[#0B1220] font-medium">{item.producto}</td>
+                                <td className="px-3 py-2 text-[#0B1220] font-medium">
+                                  {item.producto}
+                                  {(item.problemas ?? []).map(problema => (
+                                    <span key={problema} className="mt-1 flex items-start gap-1.5 text-xs font-normal text-[#B91C1C]">
+                                      <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-px" />
+                                      {problema}
+                                    </span>
+                                  ))}
+                                </td>
                                 <td className="px-3 py-2 text-right text-[#344054]">{item.cantidad.toLocaleString('es-ES')} {item.unidad}</td>
                                 <td className="px-3 py-2 text-right text-[#344054]">${item.precioUnitario.toFixed(2)}</td>
                                 <td className="px-3 py-2 text-right font-medium text-[#0B1220]">${item.total.toFixed(2)}</td>
@@ -1030,14 +1071,23 @@ export function OrdenesTab() {
                     </div>
                   )}
 
-                  <div className="flex justify-end gap-2">
+                  <div className="flex items-center justify-end gap-2">
+                    {facturasBloqueadas > 0 && (
+                      <p className="mr-auto flex items-start gap-1.5 text-xs text-[#B91C1C]">
+                        <AlertTriangle className="h-4 w-4 shrink-0 mt-px" />
+                        <span>
+                          {facturasBloqueadas} factura(s) con datos sin registrar. Dalos de alta y volvé a subirlas:
+                          si entran así, sus ítems no van a generar comisión.
+                        </span>
+                      </p>
+                    )}
                     <Button variant="outline" onClick={handleDiscardPDF} className="rounded-xl border-border">
                       <X className="h-4 w-4 mr-2" />
                       Descartar todo
                     </Button>
-                    <Button onClick={handleConfirmPDF} disabled={isProcessingPDF} className="btn-primary-dark rounded-xl">
+                    <Button onClick={handleConfirmPDF} disabled={isProcessingPDF || itemsConfirmables === 0} className="btn-primary-dark rounded-xl">
                       <Check className="h-4 w-4 mr-2" />
-                      Confirmar y Agregar ({pdfPreviews.reduce((n, p) => n + p.items.length, 0)})
+                      Confirmar y Agregar ({itemsConfirmables})
                     </Button>
                   </div>
                 </div>

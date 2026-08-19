@@ -31,6 +31,9 @@ class ItemExtraido(BaseModel):
     precioUnitario: Decimal
     total: Decimal
     comisionistas: list[Any] = []
+    # Motivos por los que el ítem no se puede cargar (producto sin registrar,
+    # cliente sin identificar, sin comisionistas). Vacío = se puede confirmar.
+    problemas: list[str] = []
 
 
 class ExtraccionPDFResponse(BaseModel):

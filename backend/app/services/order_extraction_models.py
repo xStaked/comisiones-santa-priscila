@@ -58,6 +58,9 @@ class OrdenItemValidado(BaseModel):
     fincaId: Optional[str] = None
     clienteId: Optional[str] = None
     productoId: Optional[str] = None
+    # Motivos por los que el ítem no se puede cargar, en castellano y listos
+    # para mostrar. Solo viven en la vista previa: no se persisten.
+    problemas: list[str] = Field(default_factory=list)
 
 
 class OrdenValidada(BaseModel):

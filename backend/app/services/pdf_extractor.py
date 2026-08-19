@@ -7,6 +7,7 @@ import fitz
 
 from app.config import settings
 from app.services.ai_extractor import obtener_extractor_ia
+from app.services.catalogo_cache import nombres_de_fincas
 from app.services.info_adicional_fincas import asignar_fincas_desde_info_adicional
 from app.services.order_extraction_models import EntradaExtraccion, OrdenValidada
 from app.services.order_extraction_normalizer import normalizar_orden_extraida
@@ -42,6 +43,7 @@ def _orden_validada_a_respuesta(orden: OrdenValidada) -> dict[str, Any]:
                 "precioUnitario": item.precioUnitario,
                 "total": item.total,
                 "comisionistas": item.comisionistas,
+                "problemas": item.problemas,
             }
             for item in orden.items
         ],
@@ -75,11 +77,12 @@ def _extraer_con_ia(
         )
     )
     orden_validada = validar_orden_extraida(orden_ia)
-    asignar_fincas_desde_info_adicional(texto, orden_validada)
+    sectores = nombres_de_fincas(db)
+    asignar_fincas_desde_info_adicional(texto, orden_validada, sectores)
     if all(item.finca in ("", "-") for item in orden_validada.items):
         # El texto del PDF no rindio (celdas partidas raro, glosa fuera del
         # bloque esperado): queda la transcripcion de la IA.
-        asignar_fincas_desde_info_adicional(orden_ia.glosa, orden_validada)
+        asignar_fincas_desde_info_adicional(orden_ia.glosa, orden_validada, sectores)
     orden_normalizada = normalizar_orden_extraida(db, orden_validada, cliente_id=cliente_id)
     respuesta = _orden_validada_a_respuesta(orden_normalizada)
 

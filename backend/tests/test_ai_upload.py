@@ -299,3 +299,186 @@ def test_endpoint_pdf_recorta_mensaje_de_error_largo(monkeypatch, authenticated_
     detail = response.json()["detail"]
     assert detail == f"Error al procesar el PDF: {'x' * 147} [recortado]"
     assert mensaje_largo not in detail
+
+
+def _extractor_fake(producto: str, finca: str = "EL MORRO"):
+    class ExtractorFake:
+        def extraer_orden(self, _entrada):
+            return OrdenExtraidaIA(
+                fecha="14/05/2026",
+                numeroOrden="2199",
+                proveedor="DINACUAMAR",
+                cliente="FILACAS SA",
+                finca=finca,
+                semana="",
+                items=[
+                    OrdenItemExtraidoIA(
+                        producto=producto,
+                        cantidad=Decimal("20.00"),
+                        unidad="KILOGRAMOS",
+                        precioUnitario=Decimal("65.0000"),
+                        total=Decimal("1300.0000"),
+                    )
+                ],
+            )
+
+    return ExtractorFake()
+
+
+def _catalogo_completo(db_session):
+    """Cliente + sector + producto + comisionista con tarifa: el caso sano."""
+    cliente = Cliente(nombre="FILACAS SA", tipo="grupo")
+    finca = Finca(nombre="EL MORRO", cliente=cliente)
+    producto = Producto(nombre="ECUBACILLUS TH", unidad_comision="kg")
+    comisionista = Comisionista(nombre="COMISIONISTA UNO")
+    db_session.add_all([cliente, finca, producto, comisionista])
+    db_session.flush()
+    db_session.add(
+        TarifaClienteProducto(
+            comisionista_id=comisionista.id,
+            cliente_id=cliente.id,
+            producto_id=producto.id,
+            finca_id=finca.id,
+            tipo=TipoTarifa.fijo_kg,
+            valor=Decimal("1"),
+        )
+    )
+    db_session.commit()
+    return cliente
+
+
+def test_item_sano_no_reporta_problemas(monkeypatch, db_session):
+    cliente = _catalogo_completo(db_session)
+    monkeypatch.setattr("app.services.pdf_extractor.settings.AI_EXTRACTION_ENABLED", True)
+    monkeypatch.setattr(
+        "app.services.ocr_extractor.obtener_extractor_configurado",
+        lambda: _extractor_fake("ECUBACILLUS TH"),
+    )
+
+    resultado = extraer_orden_de_imagen(
+        b"imagen", nombre_archivo="orden.png", db=db_session, cliente_id=str(cliente.id)
+    )
+
+    assert resultado["items"][0]["problemas"] == []
+
+
+def test_producto_sin_registrar_bloquea_con_su_nombre(monkeypatch, db_session):
+    """EO 2067: "ECU-LACTICAS INNOVATE" no está en el catálogo. Entraba igual y
+    quedaba sin tarifa posible; el faltante recién se veía en la liquidación."""
+    cliente = _catalogo_completo(db_session)
+    monkeypatch.setattr("app.services.pdf_extractor.settings.AI_EXTRACTION_ENABLED", True)
+    monkeypatch.setattr(
+        "app.services.ocr_extractor.obtener_extractor_configurado",
+        lambda: _extractor_fake("ECU-LACTICAS INNOVATE"),
+    )
+
+    resultado = extraer_orden_de_imagen(
+        b"imagen", nombre_archivo="orden.png", db=db_session, cliente_id=str(cliente.id)
+    )
+
+    problemas = resultado["items"][0]["problemas"]
+    assert any("ECU-LACTICAS INNOVATE" in p and "no está registrado" in p for p in problemas)
+
+
+def test_sector_no_reconocido_explica_por_que_no_hay_comisionistas(monkeypatch, db_session):
+    """El cliente tiene sectores pero el de la factura no es ninguno: el motivo
+    real de "Sin asignar" es el sector, no la falta de tarifa."""
+    cliente = _catalogo_completo(db_session)
+    monkeypatch.setattr("app.services.pdf_extractor.settings.AI_EXTRACTION_ENABLED", True)
+    monkeypatch.setattr(
+        "app.services.ocr_extractor.obtener_extractor_configurado",
+        lambda: _extractor_fake("ECUBACILLUS TH", finca="SECTOR INEXISTENTE"),
+    )
+
+    resultado = extraer_orden_de_imagen(
+        b"imagen", nombre_archivo="orden.png", db=db_session, cliente_id=str(cliente.id)
+    )
+
+    problemas = resultado["items"][0]["problemas"]
+    assert resultado["items"][0]["comisionistas"] == []
+    assert any("sector" in p.lower() for p in problemas)
+
+
+def test_cliente_sin_identificar_bloquea(monkeypatch, db_session):
+    producto = Producto(nombre="ECUBACILLUS TH", unidad_comision="kg")
+    db_session.add(producto)
+    db_session.commit()
+
+    monkeypatch.setattr("app.services.pdf_extractor.settings.AI_EXTRACTION_ENABLED", True)
+    monkeypatch.setattr(
+        "app.services.ocr_extractor.obtener_extractor_configurado",
+        lambda: _extractor_fake("ECUBACILLUS TH"),
+    )
+
+    resultado = extraer_orden_de_imagen(b"imagen", nombre_archivo="orden.png", db=db_session)
+
+    assert any("cliente" in p.lower() for p in resultado["items"][0]["problemas"])
+
+
+def test_factura_2081_de_punta_a_punta(monkeypatch, db_session):
+    """El caso que reportó la clienta: sube la imagen de la EO 2081 y el sector
+    sale "-". La glosa dice "SEMANA 23 SECTOR GOLFO" sin guion antes de SEMANA;
+    el parser ahora ancla en los sectores del catálogo, así que la puntuación
+    deja de importar. Con sector resuelto vuelven los comisionistas y el ítem
+    entra sin problemas."""
+    cliente = Cliente(nombre="Santa Priscila", tipo="grupo")
+    golfo = Finca(nombre="GOLFO", cliente=cliente)
+    producto = Producto(nombre="CALCINIT", unidad_comision="kg")
+    comisionista = Comisionista(nombre="COMISIONISTA UNO")
+    db_session.add_all([cliente, golfo, producto, comisionista])
+    db_session.flush()
+    db_session.add(
+        TarifaClienteProducto(
+            comisionista_id=comisionista.id,
+            cliente_id=cliente.id,
+            producto_id=producto.id,
+            finca_id=golfo.id,
+            tipo=TipoTarifa.fijo_kg,
+            valor=Decimal("1"),
+        )
+    )
+    db_session.commit()
+
+    class ExtractorFactura2081:
+        def extraer_orden(self, _entrada):
+            return OrdenExtraidaIA(
+                fecha="2026-06-08",
+                numeroOrden="001-002-000002081",
+                proveedor="OCHOA RECALDE ELIZABETH MERCEDES",
+                cliente="INDUSTRIAL PESQUERA SANTA PRISCILA S.A.",
+                finca="",
+                semana="23",
+                glosa=(
+                    "VENTA DE PRODUCTOS SEG. F/ # 2081 SANTA PRISCILA S.A. "
+                    "O/C # 95644 SEMANA 23 SECTOR GOLFO (850 SACOS DE 25KG DE "
+                    "CALCINIT A $29.50 C/SACO)"
+                ),
+                items=[
+                    OrdenItemExtraidoIA(
+                        producto="ECU - CALCINIT ACUÍCOLA",
+                        cantidad=Decimal("21250.00"),
+                        unidad="Kilogramos",
+                        precioUnitario=Decimal("1.180000"),
+                        total=Decimal("25075.00"),
+                    )
+                ],
+            )
+
+    monkeypatch.setattr("app.services.pdf_extractor.settings.AI_EXTRACTION_ENABLED", True)
+    monkeypatch.setattr(
+        "app.services.ocr_extractor.obtener_extractor_configurado",
+        lambda: ExtractorFactura2081(),
+    )
+
+    resultado = extraer_orden_de_imagen(
+        b"imagen",
+        nombre_archivo="WhatsApp Image 2026-08-19 at 14.34.15.jpeg",
+        db=db_session,
+        cliente_id=str(cliente.id),
+    )
+
+    item = resultado["items"][0]
+    assert item["finca"] == "GOLFO"
+    assert item["fincaId"] == str(golfo.id)
+    assert item["comisionistas"] == [{"comisionistaId": str(comisionista.id)}]
+    assert item["problemas"] == []

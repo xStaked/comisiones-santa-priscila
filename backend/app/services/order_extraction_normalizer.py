@@ -236,5 +236,48 @@ def normalizar_orden_extraida(db: Session | None, orden: OrdenValidada, cliente_
             orden.proveedor or "",
             orden.fecha,
         )
+        item.problemas = _problemas_del_item(item, item_cliente, producto, finca)
 
     return orden
+
+
+def _problemas_del_item(
+    item,
+    cliente: Cliente | None,
+    producto: Producto | None,
+    finca: Finca | None,
+) -> list[str]:
+    """Por qué este ítem no se puede cargar, dicho para que la clienta lo pueda
+    arreglar sola.
+
+    Un ítem sin producto, sin cliente o sin comisionistas nunca va a generar
+    comisión: entra a la base, no falla nada y el faltante recién aparece
+    cuando no cuadra la liquidación. Vale más frenarlo en la vista previa
+    diciendo qué hay que dar de alta.
+    """
+    problemas: list[str] = []
+
+    if not producto:
+        problemas.append(
+            f'El producto "{item.producto}" no está registrado. '
+            "Dalo de alta en Productos (o agregalo como alias de uno existente)."
+        )
+    if not cliente:
+        problemas.append(
+            "No se pudo identificar al cliente de la factura. "
+            "Elegilo en el selector de arriba o dalo de alta en Clientes."
+        )
+    if not item.comisionistas:
+        # El motivo más frecuente no es que falte la tarifa, sino que el sector
+        # no se resolvió: Santa Priscila asigna comisionistas por sector.
+        if cliente and cliente.fincas and not finca:
+            problemas.append(
+                f'No se reconoció el sector "{item.finca}" entre los de {cliente.nombre}. '
+                "Sin sector no se pueden asignar comisionistas."
+            )
+        else:
+            problemas.append(
+                "Ningún comisionista tiene tarifa configurada para este producto."
+            )
+
+    return problemas

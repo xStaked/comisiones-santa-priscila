@@ -67,3 +67,15 @@ def equivalentes_memo(db: Session) -> dict[UUID, list[UUID]]:
 
 def tarifa_especifica_memo(db: Session) -> dict:
     return db.info.setdefault("_cat_tarifa_especifica", {})
+
+
+def nombres_de_fincas(db: Session | None) -> list[str]:
+    """Los sectores del catálogo, para anclar la lectura de la glosa.
+
+    ponytail: van los de todos los clientes. Hoy solo Santa Priscila tiene
+    sectores y `_buscar_finca` igual filtra por cliente al resolver; si otro
+    cliente carga sectores con nombres genéricos, acotar por cliente_id acá.
+    """
+    if db is None:
+        return []
+    return [finca.nombre for finca in fincas_de_cliente(db, None)]

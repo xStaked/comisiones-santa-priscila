@@ -9,6 +9,7 @@ import numpy as np
 from PIL import Image, ImageEnhance
 
 from app.config import settings
+from app.services.catalogo_cache import nombres_de_fincas
 from app.services.info_adicional_fincas import asignar_fincas_desde_info_adicional
 from app.services.order_extraction_models import EntradaExtraccion
 from app.services.order_extraction_normalizer import normalizar_orden_extraida
@@ -74,7 +75,9 @@ def extraer_orden_de_imagen(
             )
         )
         orden_validada = validar_orden_extraida(orden_ia)
-        asignar_fincas_desde_info_adicional(orden_ia.glosa, orden_validada)
+        asignar_fincas_desde_info_adicional(
+            orden_ia.glosa, orden_validada, nombres_de_fincas(db)
+        )
         orden_normalizada = normalizar_orden_extraida(db, orden_validada, cliente_id=cliente_id)
         return _orden_validada_a_respuesta(orden_normalizada)
 
