@@ -33,6 +33,10 @@ class OrdenExtraidaIA(BaseModel):
     fecha: str
     numeroOrden: str
     proveedor: str = ""
+    # Texto descriptivo de los items tal cual esta impreso. Es la unica forma de
+    # que la ruta de imagen alcance el parser de sectores: no hay texto que
+    # extraer del archivo, asi que lo transcribe la IA.
+    glosa: str = ""
     cliente: str = ""
     finca: str = ""
     semana: str = ""

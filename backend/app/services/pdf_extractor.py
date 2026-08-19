@@ -76,6 +76,10 @@ def _extraer_con_ia(
     )
     orden_validada = validar_orden_extraida(orden_ia)
     asignar_fincas_desde_info_adicional(texto, orden_validada)
+    if all(item.finca in ("", "-") for item in orden_validada.items):
+        # El texto del PDF no rindio (celdas partidas raro, glosa fuera del
+        # bloque esperado): queda la transcripcion de la IA.
+        asignar_fincas_desde_info_adicional(orden_ia.glosa, orden_validada)
     orden_normalizada = normalizar_orden_extraida(db, orden_validada, cliente_id=cliente_id)
     respuesta = _orden_validada_a_respuesta(orden_normalizada)
 

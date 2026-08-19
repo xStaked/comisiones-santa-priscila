@@ -16,6 +16,7 @@ ORDEN_SCHEMA = {
         "fecha": {"type": "string"},
         "numeroOrden": {"type": "string"},
         "proveedor": {"type": "string"},
+        "glosa": {"type": "string"},
         "cliente": {"type": "string"},
         "finca": {"type": "string"},
         "semana": {"type": "string"},
@@ -56,6 +57,7 @@ ORDEN_SCHEMA = {
         "fecha",
         "numeroOrden",
         "proveedor",
+        "glosa",
         "cliente",
         "finca",
         "semana",
@@ -95,6 +97,11 @@ el sector va escrito dentro de la descripcion del item o en la glosa
 de ahi y ponelo en el "finca" del item, con el nombre solo: sin la palabra
 SECTOR, sin la semana, sin el numero de orden, sin cantidades ni envases. Si la
 glosa nombra varios sectores, cada item lleva el suyo.
+
+Campo "glosa": la transcripcion LITERAL del texto descriptivo que acompania a
+los items —el que empieza en "VENTA DE PRODUCTOS" y nombra sectores, cantidades
+y envases— completo y en el mismo orden, sin resumirlo ni reordenarlo. De ahi
+se leen los sectores; si lo recortas, se pierden.
 
 Campo "unidad": nombra un envase (tachos, sacos, canecas) SOLO si el documento
 dice explicitamente que la cantidad esta contada en esos envases. Las facturas no
