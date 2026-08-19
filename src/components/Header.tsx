@@ -5,14 +5,24 @@ import { usePathname } from 'next/navigation';
 import { itemActivo } from './nav';
 import { useApp } from '@/context/AppContext';
 
-/** Registros pagados que aún tienen alguna asignación sin liquidar. */
+/**
+ * Facturas pagadas pendientes de liquidar. Se cuentan facturas, no ítems: una
+ * factura con 8 líneas es 1 pendiente. Mismo criterio que LiquidacionTab
+ * (sin asignaciones = liquidable con comisión 0).
+ */
 export function useSinLiquidar() {
   const { ordenItems } = useApp();
   return useMemo(
     () =>
-      ordenItems.filter(
-        (o) => o.estado === 'pagada' && o.comisionistas.some((a) => !a.liquidacionId)
-      ).length,
+      new Set(
+        ordenItems
+          .filter(
+            (o) =>
+              o.estado === 'pagada' &&
+              (o.comisionistas.length === 0 || o.comisionistas.some((a) => !a.liquidacionId))
+          )
+          .map((o) => o.ordenId || `${o.fecha}-${o.numeroOrden}-${o.clienteId || ''}`)
+      ).size,
     [ordenItems]
   );
 }
@@ -25,10 +35,10 @@ function useSubtitulo(href: string | undefined, porDefecto: string) {
   switch (href) {
     case '/ordenes': {
       const facturas = new Set(ordenItems.map((o) => o.numeroOrden)).size;
-      return `${facturas} facturas cargadas · ${sinLiquidar} registros sin liquidar`;
+      return `${facturas} facturas cargadas · ${sinLiquidar} sin liquidar`;
     }
     case '/liquidacion':
-      return `${sinLiquidar} registros pagados sin liquidar`;
+      return `${sinLiquidar} facturas pagadas sin liquidar`;
     case '/historial':
       return `${liquidaciones.length} liquidaciones guardadas`;
     case '/clientes':
