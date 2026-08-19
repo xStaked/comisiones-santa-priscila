@@ -78,6 +78,13 @@ valor real. Para los campos numericos: el separador decimal es el ULTIMO que
 aparece en el numero y los anteriores son de miles, sea cual sea el formato del
 documento ("22.500,00" son veintidos mil quinientos, no 22,5; "1,234.56" son mil
 doscientos treinta y cuatro).
+Campo "numeroOrden": el numero propio del documento, el del encabezado. En una
+factura del SRI es el rotulado "FACTURA N." y va completo con sus tres bloques
+("FACTURA N. 001-002-000002083" -> "001-002-000002083"). NUNCA uses el "O/C # ..."
+que aparece dentro de la descripcion o la glosa: ese es el numero de orden interno
+del comprador, se repite en varias facturas y no identifica a esta. En una orden
+de compra si es su propio numero de orden.
+
 Si una finca o cliente aparece en encabezado, aplicalo a los items salvo que el item indique otro valor.
 
 Roles: "proveedor" es quien EMITE el documento (el RUC y la razon social del
