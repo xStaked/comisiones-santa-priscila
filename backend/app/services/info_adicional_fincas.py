@@ -30,6 +30,8 @@ RUIDO = {
     "SEG",
     "OC",
     "SEMANA",
+    "SECTOR",
+    "SECTORES",
     "SACO",
     "SACOS",
     "CANECA",

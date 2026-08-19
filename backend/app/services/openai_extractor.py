@@ -66,11 +66,16 @@ Usa formato de fecha YYYY-MM-DD cuando sea posible.
 Convierte separadores de miles y decimales a numeros JSON.
 Si una finca o cliente aparece en encabezado, aplicalo a los items salvo que el item indique otro valor.
 
-Roles: "proveedor" es quien EMITE el documento (el vendedor: el RUC y la razon
-social del encabezado) y "cliente" es quien lo RECIBE (el comprador: el bloque
-con Nombres/Razon Social + RUC del adquirente, en las facturas del SRI). El
-emisor puede ser una persona natural, no una empresa; da igual, sigue siendo el
-proveedor. Nunca pongas el emisor como cliente.
+Roles: "proveedor" es quien EMITE el documento (el RUC y la razon social del
+encabezado, arriba de todo) y "cliente" es quien lo RECIBE (el comprador: el
+bloque con Nombres/Razon Social + RUC del adquirente, en las facturas del SRI).
+El emisor puede ser una persona natural, no una empresa; da igual, sigue siendo
+el proveedor. Nunca pongas el emisor como cliente.
+
+El bloque "INFORMACION ADICIONAL" no decide el proveedor: ahi el emisor copia
+datos internos del comprador ("vendedor : Juan Perez", "RUC Proveedor: ...")
+que son el ejecutivo o el codigo del comprador, no la razon social de quien
+emite. El proveedor sale siempre del encabezado, nunca de esos rotulos.
 
 Campo "unidad": nombra un envase (tachos, sacos, canecas) SOLO si el documento
 dice explicitamente que la cantidad esta contada en esos envases. Las facturas no

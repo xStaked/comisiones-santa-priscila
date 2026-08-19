@@ -262,3 +262,38 @@ def test_glosa_con_sector_antes_de_la_cantidad():
         (300, "GOLFO"),
         (800, "TAURA ADM D"),
     ]
+
+
+def test_glosa_que_antepone_la_palabra_sector():
+    """EO 2083: la glosa dice "SECTOR GOLFO". Sin podar "SECTOR" el nombre no
+    casa con la finca del catálogo: el ítem queda sin sector y, por rebote, sin
+    comisionistas (Santa Priscila exige finca para asignarlos)."""
+    orden = OrdenValidada(
+        fecha="2026-06-11",
+        numeroOrden="001-002-000002083",
+        proveedor="OCHOA RECALDE ELIZABETH MERCEDES",
+        cliente="INDUSTRIAL PESQUERA SANTA PRISCILA S.A.",
+        semana="24",
+        items=[
+            OrdenItemValidado(
+                fecha="2026-06-11",
+                numeroOrden="001-002-000002083",
+                finca="-",
+                producto="ECU - CALCINIT ACUÍCOLA",
+                cantidad=Decimal("22500"),
+                unidad="kg",
+                precioUnitario=Decimal("1.18"),
+                total=Decimal("26550"),
+            )
+        ],
+    )
+    asignar_fincas_desde_info_adicional(
+        "P000000009\nECU - CALCINIT ACUÍCOLA\n"
+        "VENTA DE PRODUCTOS SEG. F/ # 2083 SANTA PRISCILA S.A.\n"
+        "O/C # 95933 - SEMANA 24 SECTOR GOLFO (900 SACOS DE\n"
+        "25KG DE CALCINIT A $ 29,50 C/SACO).\n"
+        "Kilogramo\ns\n22.500,00\n1,180000\n0,00\n26.550,00\nSubtotal:\n",
+        orden,
+    )
+
+    assert [i.finca for i in orden.items] == ["GOLFO"]
