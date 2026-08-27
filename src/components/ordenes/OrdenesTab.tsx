@@ -309,12 +309,19 @@ export function OrdenesTab() {
   const [uploadType, setUploadType] = useState<'pdf' | 'imagen'>('pdf');
   const [pdfClienteId, setPdfClienteId] = useState<string>('');
 
+  const numerosCargados = useMemo(
+    () => new Set(ordenItems.map(o => o.numeroOrden.trim().toUpperCase())),
+    [ordenItems]
+  );
+
   // Aviso antes de confirmar: el backend rechaza la factura repetida, pero verla
   // marcada en la vista previa evita que se caiga el lote entero.
-  // Solo previews sin errores son confirmables; las advertencias (corregidas) sí se pueden confirmar.
+  // Solo previews sin errores y no ya cargadas son confirmables; las advertencias (corregidas) sí se pueden confirmar.
+  const esYaCargada = (preview: { numeroOrden: string }) =>
+    numerosCargados.has(preview.numeroOrden.trim().toUpperCase());
   const itemsConfirmables = useMemo(
-    () => pdfPreviews.filter(p => !tieneProblemas(p)).reduce((n, p) => n + p.items.length, 0),
-    [pdfPreviews]
+    () => pdfPreviews.filter(p => !tieneProblemas(p) && !esYaCargada(p)).reduce((n, p) => n + p.items.length, 0),
+    [pdfPreviews, numerosCargados]
   );
   const itemsConAdvertencia = useMemo(
     () => pdfPreviews.flatMap(p => p.items).filter(i => estadoItem(i) === 'advertencia').length,
@@ -324,14 +331,13 @@ export function OrdenesTab() {
     () => pdfPreviews.filter(tieneProblemas).length,
     [pdfPreviews]
   );
-  const facturasConAdvertencia = useMemo(
-    () => pdfPreviews.filter(p => tieneAdvertencias(p) && !tieneProblemas(p)).length,
-    [pdfPreviews]
+  const facturasYaCargadas = useMemo(
+    () => pdfPreviews.filter(p => esYaCargada(p)).length,
+    [pdfPreviews, numerosCargados]
   );
-
-  const numerosCargados = useMemo(
-    () => new Set(ordenItems.map(o => o.numeroOrden.trim().toUpperCase())),
-    [ordenItems]
+  const facturasConAdvertencia = useMemo(
+    () => pdfPreviews.filter(p => tieneAdvertencias(p) && !tieneProblemas(p) && !esYaCargada(p)).length,
+    [pdfPreviews, numerosCargados]
   );
 
   const initialFecha = useMemo(() => new Date().toISOString().slice(0, 10), []);
@@ -629,12 +635,14 @@ export function OrdenesTab() {
   };
 
   const handleConfirmPDF = () => {
-    // Una factura con ítems sin resolver no entra. Cargarla igual deja datos que
+    // Una factura con ítems sin resolver o ya cargada no entra. Cargarla igual deja datos que
     // nunca van a generar comisión y el faltante recién aparece cuando no cuadra
     // la liquidación; las bloqueadas se quedan a la vista con su motivo.
+    const esYaCargadaLocal = (preview: { numeroOrden: string }) =>
+      numerosCargados.has(preview.numeroOrden.trim().toUpperCase());
     const [bloqueadas, confirmables] = [
-      pdfPreviews.filter(tieneProblemas),
-      pdfPreviews.filter(preview => !tieneProblemas(preview)),
+      pdfPreviews.filter(p => tieneProblemas(p) || esYaCargadaLocal(p)),
+      pdfPreviews.filter(preview => !tieneProblemas(preview) && !esYaCargadaLocal(preview)),
     ];
     const itemsConCliente = confirmables.flatMap(preview =>
       preview.items.map(item => ({
@@ -1038,12 +1046,13 @@ export function OrdenesTab() {
                             )}
                             {tieneProblemas(preview) ? (
                               <span className="rounded-full bg-[#FEF2F2] px-2.5 py-1 text-xs font-medium text-[#B91C1C]">No se puede cargar</span>
-                            ) : tieneAdvertencias(preview) ? (
-                              <span className="rounded-full bg-[#FEF3E2] px-2.5 py-1 text-xs font-medium text-[#9A5B0B]">Corregido automáticamente</span>
                             ) : (
                               <span className="rounded-full bg-[#E6F2F0] px-2.5 py-1 text-xs font-medium text-[#0B5E56]">Listo</span>
                             )}
-                            <Chip>{preview.items.length} productos</Chip>
+                            {(() => {
+                              const corregidos = preview.items.filter(i => estadoItem(i) === 'advertencia').length;
+                              return <Chip>{preview.items.length} productos{corregidos > 0 ? ` · ${corregidos} corregido${corregidos>1?'s':''}` : ''}</Chip>;
+                            })()}
                             <Button variant="ghost" size="sm" onClick={() => removePdfPreview(preview.fileName)} className="rounded-lg text-[#7A8798] hover:text-[#B91C1C]">
                               <X className="h-4 w-4" />
                             </Button>
@@ -1066,21 +1075,23 @@ export function OrdenesTab() {
                           <tbody className="divide-y divide-[#F2F4F6]">
                             {preview.items.map(item => {
                               const est = estadoItem(item);
+                              const advText = (item.advertencias ?? []).join(' | ');
                               return (
-                              <tr key={item.id} className={`transition-colors ${est === 'error' ? 'bg-[#FEF2F2]' : est === 'advertencia' ? 'bg-[#FEF3E2]/60' : 'hover:bg-[#FAFBFC]'}`}>
-                                <td className="px-3 py-2 text-[#344054]">{item.finca}</td>
+                              <tr key={item.id} className={`transition-colors ${est === 'error' ? 'bg-[#FEF2F2]' : est === 'advertencia' ? 'border-l-4 border-l-amber-400 bg-white hover:bg-[#FFFBEB]' : 'hover:bg-[#FAFBFC]'}`}>
+                                <td className={`px-3 py-2 text-[#344054] ${est==='advertencia' ? 'pl-[8px]' : ''}`}>{item.finca}</td>
                                 <td className="px-3 py-2 text-[#0B1220] font-medium">
-                                  {item.producto}
+                                  <span className="inline-flex items-start gap-1.5">
+                                    <span>{item.producto}</span>
+                                    {est === 'advertencia' && advText && (
+                                      <span title={advText} className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#FEF3E2] text-[#9A5B0B]">
+                                        <AlertTriangle className="h-3 w-3" />
+                                      </span>
+                                    )}
+                                  </span>
                                   {(item.problemas ?? []).map(problema => (
                                     <span key={problema} className="mt-1 flex items-start gap-1.5 text-xs font-normal text-[#B91C1C]">
                                       <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-px" />
                                       {problema}
-                                    </span>
-                                  ))}
-                                  {(item.advertencias ?? []).map(adv => (
-                                    <span key={adv} className="mt-1 flex items-start gap-1.5 text-xs font-normal text-[#9A5B0B]">
-                                      <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-px" />
-                                      {adv}
                                     </span>
                                   ))}
                                 </td>
@@ -1091,7 +1102,7 @@ export function OrdenesTab() {
                                   {est === 'error' ? (
                                     <span className="inline-flex items-center rounded-full bg-[#FEF2F2] px-2.5 py-0.5 text-xs font-medium text-[#B91C1C]" title={(item.problemas ?? []).join(' | ')}>Error</span>
                                   ) : est === 'advertencia' ? (
-                                    <span className="inline-flex items-center rounded-full bg-[#FEF3E2] px-2.5 py-0.5 text-xs font-medium text-[#9A5B0B]" title={(item.advertencias ?? []).join(' | ')}>Corregido</span>
+                                    <span className="inline-flex items-center rounded-full bg-[#FEF3E2] px-2.5 py-0.5 text-xs font-medium text-[#9A5B0B]" title={advText}>Corregido</span>
                                   ) : (
                                     <span className="inline-flex items-center rounded-full bg-[#E6F2F0] px-2.5 py-0.5 text-xs font-medium text-[#0B5E56]">OK</span>
                                   )}
@@ -1112,7 +1123,13 @@ export function OrdenesTab() {
                   )}
 
                   <div className="flex flex-wrap items-center justify-end gap-2">
-                    <div className="mr-auto flex flex-col gap-1.5">
+                    <div className="mr-auto flex flex-col gap-1.5 max-w-[380px]">
+                      {facturasYaCargadas > 0 && (
+                        <p className="flex items-start gap-1.5 text-xs text-[#B91C1C]">
+                          <AlertTriangle className="h-4 w-4 shrink-0 mt-px" />
+                          <span>{facturasYaCargadas} factura(s) ya cargada(s). Elimínala antes de volver a subirla.</span>
+                        </p>
+                      )}
                       {facturasBloqueadas > 0 && (
                         <p className="flex items-start gap-1.5 text-xs text-[#B91C1C]">
                           <AlertTriangle className="h-4 w-4 shrink-0 mt-px" />
@@ -1126,11 +1143,11 @@ export function OrdenesTab() {
                         <p className="flex items-start gap-1.5 text-xs text-[#9A5B0B]">
                           <AlertTriangle className="h-4 w-4 shrink-0 mt-px" />
                           <span>
-                            {itemsConAdvertencia} ítem(s) en {facturasConAdvertencia} factura(s) fueron corregidos automáticamente por typo (sector/producto). Revisar columna Estado.
+                            {itemsConAdvertencia} ítem(s) en {facturasConAdvertencia} factura(s) con typo corregido automáticamente. Ver columna Estado.
                           </span>
                         </p>
                       )}
-                      {facturasBloqueadas === 0 && facturasConAdvertencia === 0 && pdfPreviews.length > 0 && (
+                      {facturasBloqueadas === 0 && facturasYaCargadas === 0 && facturasConAdvertencia === 0 && pdfPreviews.length > 0 && (
                         <p className="text-xs text-[#0B5E56]">{itemsConfirmables} ítems listos para confirmar.</p>
                       )}
                     </div>
