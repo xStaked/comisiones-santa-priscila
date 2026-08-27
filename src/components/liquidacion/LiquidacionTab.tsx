@@ -6,7 +6,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import * as XLSX from 'xlsx';
 import { useApp } from '@/context/AppContext';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
-import { exportarPDF, exportarExcel, calcularDetalleComision, getCantidadParaTarifaKg } from '@/lib/export-utils';
+import { exportarPDF, exportarExcel, calcularDetalleComision, getCantidadParaTarifaKg, sectorDeItem } from '@/lib/export-utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -60,6 +60,7 @@ export function LiquidacionTab() {
   const { comisionistas, ordenItems, saveLiquidacion, tarifasClienteProducto, clientes, retenciones } = useApp();
   const [filterComisionista, setFilterComisionista] = useState('');
   const [filterFactura, setFilterFactura] = useState('');
+  const [filterSector, setFilterSector] = useState('');
   // Mes de PAGO de la factura, no el de emisión: una liquidación de junio puede
   // incluir facturas emitidas hace un año pero cobradas en junio.
   // La elección se recuerda entre sesiones; sin nada guardado arranca en el mes anterior.
@@ -111,6 +112,16 @@ export function LiquidacionTab() {
     return Array.from(meses).sort().reverse();
   }, [ordenItemsPagados]);
 
+  // Sectores disponibles entre lo pendiente (para auditoría)
+  const sectoresDisponibles = useMemo(() => {
+    const set = new Set<string>();
+    ordenItemsPagados.forEach(i => {
+      const s = sectorDeItem(i as any);
+      if (s && s !== '-' && s !== 'N/A') set.add(s);
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b, 'es'));
+  }, [ordenItemsPagados]);
+
   // ponytail: un mes guardado más viejo que el default ya pasó, así que el default rueda solo
   // al cambiar de mes. Contra: volver a un mes viejo no se recuerda al recargar.
   const mesPreferido = mesGuardado && mesGuardado < MES_ANTERIOR ? MES_ANTERIOR : mesGuardado;
@@ -124,7 +135,8 @@ export function LiquidacionTab() {
         const matchComisionista = !filterComisionista || i.comisionistas.some(a => a.comisionistaId === filterComisionista);
         const matchFactura = !filterFactura || i.numeroOrden.toLowerCase().includes(filterFactura.toLowerCase());
         const matchMes = !filterMes || mesDePago(i) === filterMes;
-        return matchComisionista && matchFactura && matchMes;
+        const matchSector = !filterSector || sectorDeItem(i as any) === filterSector;
+        return matchComisionista && matchFactura && matchMes && matchSector;
       })
       // Con filtro por persona, los totales y el guardado deben cubrir solo a esa persona.
       .map(i =>
@@ -132,7 +144,7 @@ export function LiquidacionTab() {
           ? { ...i, comisionistas: i.comisionistas.filter(a => a.comisionistaId === filterComisionista) }
           : i
       );
-  }, [ordenItemsPagados, filterComisionista, filterFactura, filterMes]);
+  }, [ordenItemsPagados, filterComisionista, filterFactura, filterMes, filterSector]);
 
   const cantidadOrdenes = useMemo(() => {
     const ids = new Set(
@@ -200,8 +212,7 @@ export function LiquidacionTab() {
   );
 
   // Agrupa los productos por orden (contiguos) para mostrar un solo checkbox por orden,
-  // ordenados por número de factura ascendente (numeric: true por si algún número no
-  // viene con ceros a la izquierda).
+  // ordenados por fecha → sector → factura para facilitar la auditoría.
   const gruposPorOrden = useMemo(() => {
     const map = new Map<string, typeof itemsConComision>();
     itemsConComision.forEach(item => {
@@ -209,9 +220,15 @@ export function LiquidacionTab() {
       const arr = map.get(k);
       if (arr) arr.push(item); else map.set(k, [item]);
     });
-    return Array.from(map.entries()).sort(([, a], [, b]) =>
-      a[0].numeroOrden.localeCompare(b[0].numeroOrden, 'es', { numeric: true })
-    );
+    return Array.from(map.entries()).sort(([, a], [, b]) => {
+      const fa = a[0].fecha;
+      const fb = b[0].fecha;
+      if (fa !== fb) return fa.localeCompare(fb);
+      const sa = sectorDeItem(a[0] as any);
+      const sb = sectorDeItem(b[0] as any);
+      if (sa !== sb) return sa.localeCompare(sb, 'es');
+      return a[0].numeroOrden.localeCompare(b[0].numeroOrden, 'es', { numeric: true });
+    });
   }, [itemsConComision]);
 
   const resumenPorComisionista = useMemo(() => {
@@ -433,6 +450,25 @@ export function LiquidacionTab() {
               {mesesDisponibles.map((m) => (
                 <SelectItem key={m} value={m}>
                   {etiquetaMes(m)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="flex h-9 items-center gap-2.5 rounded-[9px] border border-[#E0E4E9] bg-white px-3">
+          <span className="text-[11.5px] text-[#7A8798]">Sector</span>
+          <Select value={filterSector} onValueChange={(value) => setFilterSector(value ?? '')}>
+            <SelectTrigger className="h-7 border-0 bg-transparent px-0 text-[12.5px] font-medium text-[#0B1220] shadow-none focus-visible:ring-0">
+              <SelectValue placeholder="Todos">
+                {filterSector || 'Todos los sectores'}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="">Todos los sectores</SelectItem>
+              {sectoresDisponibles.map((s) => (
+                <SelectItem key={s} value={s}>
+                  {s}
                 </SelectItem>
               ))}
             </SelectContent>

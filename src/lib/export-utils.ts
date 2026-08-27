@@ -56,6 +56,19 @@ export function getCantidadParaTarifaKg(item: OrdenItem): number {
 }
 
 /**
+ * Sector / finca canónico del ítem para ordenar y filtrar. `fincaRel.nombre`
+ * es el catálogo normalizado; `sector`/`finca` son los textos crudos del
+ * documento.
+ */
+export function sectorDeItem(item: OrdenItem): string {
+  return (item.fincaRel?.nombre || item.sector || item.finca || '').trim();
+}
+
+function sectorParaOrden(a: OrdenItem, b: OrdenItem): number {
+  return sectorDeItem(a).localeCompare(sectorDeItem(b), 'es');
+}
+
+/**
  * Cantidad del ítem en envases: la unidad en la que se expresa una tarifa
  * fijo_unidad ($/saco de CALCINIT, $/tacho de NATUXTRACT, $/litro de MORTAL).
  */
@@ -407,7 +420,10 @@ export function exportarPDF(
 
     meses.forEach(mesKey => {
       const itemsDelGrupo = [...mesesMap.get(mesKey)!].sort(
-        (a, b) => a.fecha.localeCompare(b.fecha) || a.numeroOrden.localeCompare(b.numeroOrden)
+        (a, b) =>
+          a.fecha.localeCompare(b.fecha) ||
+          sectorParaOrden(a, b) ||
+          a.numeroOrden.localeCompare(b.numeroOrden)
       );
       const [anio, mes] = mesKey.split('-');
       const nombreMes = nombresMes[parseInt(mes) - 1];
@@ -433,7 +449,7 @@ export function exportarPDF(
       doc.text(`Comisionista: ${comNombre} del 1 al ${ultimoDia} de ${nombreMes} ${anio}`, pageWidth / 2, yPos, { align: 'center' });
       yPos += 6;
 
-      // Preparar body de la tabla — orden cronológico (más vieja → más reciente)
+      // Preparar body de la tabla — orden cronológico y por sector (para auditoría)
       const body = itemsDelGrupo.map(item => {
         let comision = 0;
         let tarifasLabel = '-';
@@ -455,7 +471,7 @@ export function exportarPDF(
           tarifasLabel,
           `$ ${comision.toFixed(2).replace('.', ',')}`,
           item.estado || 'pagada',
-          item.sector || item.finca || '-',
+          sectorDeItem(item) || '-',
         ];
       });
 
@@ -651,7 +667,10 @@ export function exportarExcel(
 
       meses.forEach(mesKey => {
         const itemsDelGrupo = [...mesesMap.get(mesKey)!].sort(
-          (a, b) => a.fecha.localeCompare(b.fecha) || a.numeroOrden.localeCompare(b.numeroOrden)
+          (a, b) =>
+            a.fecha.localeCompare(b.fecha) ||
+            sectorParaOrden(a, b) ||
+            a.numeroOrden.localeCompare(b.numeroOrden)
         );
         const [anio, mes] = mesKey.split('-');
         const nombreMes = nombresMes[parseInt(mes) - 1];
@@ -664,7 +683,7 @@ export function exportarExcel(
         data.push(['Fecha', 'Factura', 'Nombre', 'Cantidad', 'Tipo Comisión', 'Valor de Comisión', 'Estado', 'Sector', 'Grupo', 'Razón social']);
 
         let totalGrupo = 0;
-        // Orden cronológico (más vieja → más reciente) dentro de cada tabla
+        // Orden cronológico y por sector (para auditoría) dentro de cada tabla
         itemsDelGrupo.forEach(item => {
           let comision = 0;
           let tarifasLabel = '-';
@@ -689,7 +708,7 @@ export function exportarExcel(
             tarifasLabel,
             `$ ${comision.toFixed(2).replace('.', ',')}`,
             item.estado || 'pagada',
-            item.sector || item.finca || 'N/A',
+            sectorDeItem(item) || 'N/A',
             grupoDelItem(item),
             razonSocialDelItem(item),
           ];
@@ -723,12 +742,15 @@ export function exportarExcel(
     totalGeneral += totalProveedor;
   });
 
-  // Ordenar RESUMEN GENERAL cronológicamente (más vieja → más reciente)
+  // Ordenar RESUMEN GENERAL por fecha → sector → factura (auditoría)
   {
     const encabezado = resumen.slice(0, 3);
     const filas = resumen.slice(3);
     filas.sort(
-      (a, b) => String(a[0]).localeCompare(String(b[0])) || String(a[1]).localeCompare(String(b[1]))
+      (a, b) =>
+        String(a[0]).localeCompare(String(b[0])) ||
+        String(a[7]).localeCompare(String(b[7]), 'es') ||
+        String(a[1]).localeCompare(String(b[1]))
     );
     resumen.length = 0;
     resumen.push(...encabezado, ...filas);
@@ -750,6 +772,15 @@ export function exportarExcel(
     { wch: 18 },
     { wch: 30 },
   ];
+  // Filtros nativos de Excel sobre Fecha y Sector (y resto) + congelar cabecera
+  // para facilitar la auditoría sin reordenar manualmente.
+  if (resumen.length > 3) {
+    const lastDataRow = resumen.length - 2; // sin contar fila vacía + total
+    // Fila 3 (índice 2) es la cabecera: A3:K<lastDataRow>
+    wsResumen['!autofilter'] = { ref: `A3:K${lastDataRow}` };
+  }
+  // Congelar filas de título para que la cabecera quede visible al scrollear
+  (wsResumen as any)['!freeze'] = { xSplit: 0, ySplit: 3, topLeftCell: 'A4', activePane: 'bottomRight', state: 'frozen' } as any;
   XLSX.utils.book_append_sheet(wb, wsResumen, 'RESUMEN GENERAL');
   wb.SheetNames.unshift(wb.SheetNames.pop()!); // ponytail: book_append_sheet solo agrega al final
 
