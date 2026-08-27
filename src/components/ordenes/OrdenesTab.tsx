@@ -75,14 +75,23 @@ type OrdenAgrupada = {
   items: OrdenItem[];
 };
 
-// `problemas` solo existe en la vista previa: el backend explica ahí por qué un
-// ítem no se puede cargar (producto sin registrar, cliente sin identificar,
-// sin comisionistas). Vacío = se puede confirmar.
-type ItemPrevisualizado = OrdenItem & { problemas?: string[] };
+// `problemas`/`advertencias`/`estado` solo existen en la vista previa: el backend
+// explica ahí por qué un ítem no se puede cargar o si fue corregido difusamente.
+// estado: ok | advertencia (corregido automáticamente) | error (bloquea carga)
+type ItemPrevisualizado = OrdenItem & {
+  problemas?: string[];
+  advertencias?: string[];
+  estado?: 'ok' | 'advertencia' | 'error';
+  correccion?: { campo: string; original: string; sugerido: string; similitud: number } | null;
+};
 type OrdenItemExtraido = Omit<ItemPrevisualizado, 'id'> & { id?: string };
 
 const tieneProblemas = (preview: { items: ItemPrevisualizado[] }) =>
   preview.items.some(item => (item.problemas?.length ?? 0) > 0);
+const tieneAdvertencias = (preview: { items: ItemPrevisualizado[] }) =>
+  preview.items.some(item => (item.advertencias?.length ?? 0) > 0);
+const estadoItem = (item: ItemPrevisualizado): 'ok' | 'advertencia' | 'error' =>
+  (item.estado as any) || ((item.problemas?.length ?? 0) > 0 ? 'error' : (item.advertencias?.length ?? 0) > 0 ? 'advertencia' : 'ok');
 
 function agruparOrdenes(
   ordenItems: OrdenItem[],
@@ -302,12 +311,21 @@ export function OrdenesTab() {
 
   // Aviso antes de confirmar: el backend rechaza la factura repetida, pero verla
   // marcada en la vista previa evita que se caiga el lote entero.
+  // Solo previews sin errores son confirmables; las advertencias (corregidas) sí se pueden confirmar.
   const itemsConfirmables = useMemo(
     () => pdfPreviews.filter(p => !tieneProblemas(p)).reduce((n, p) => n + p.items.length, 0),
     [pdfPreviews]
   );
+  const itemsConAdvertencia = useMemo(
+    () => pdfPreviews.flatMap(p => p.items).filter(i => estadoItem(i) === 'advertencia').length,
+    [pdfPreviews]
+  );
   const facturasBloqueadas = useMemo(
     () => pdfPreviews.filter(tieneProblemas).length,
+    [pdfPreviews]
+  );
+  const facturasConAdvertencia = useMemo(
+    () => pdfPreviews.filter(p => tieneAdvertencias(p) && !tieneProblemas(p)).length,
     [pdfPreviews]
   );
 
@@ -1018,8 +1036,12 @@ export function OrdenesTab() {
                             {numerosCargados.has(preview.numeroOrden.trim().toUpperCase()) && (
                               <span className="rounded-full bg-[#FEF2F2] px-2.5 py-1 text-xs font-medium text-[#B91C1C]">Ya cargada</span>
                             )}
-                            {tieneProblemas(preview) && (
+                            {tieneProblemas(preview) ? (
                               <span className="rounded-full bg-[#FEF2F2] px-2.5 py-1 text-xs font-medium text-[#B91C1C]">No se puede cargar</span>
+                            ) : tieneAdvertencias(preview) ? (
+                              <span className="rounded-full bg-[#FEF3E2] px-2.5 py-1 text-xs font-medium text-[#9A5B0B]">Corregido automáticamente</span>
+                            ) : (
+                              <span className="rounded-full bg-[#E6F2F0] px-2.5 py-1 text-xs font-medium text-[#0B5E56]">Listo</span>
                             )}
                             <Chip>{preview.items.length} productos</Chip>
                             <Button variant="ghost" size="sm" onClick={() => removePdfPreview(preview.fileName)} className="rounded-lg text-[#7A8798] hover:text-[#B91C1C]">
@@ -1038,11 +1060,14 @@ export function OrdenesTab() {
                               <th className="text-right px-3 py-2 font-medium text-[#475467]">Cantidad</th>
                               <th className="text-right px-3 py-2 font-medium text-[#475467]">Precio Unit.</th>
                               <th className="text-right px-3 py-2 font-medium text-[#475467]">Total</th>
+                              <th className="text-center px-3 py-2 font-medium text-[#475467] w-[120px]">Estado</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-[#F2F4F6]">
-                            {preview.items.map(item => (
-                              <tr key={item.id} className={`transition-colors ${item.problemas?.length ? 'bg-[#FEF2F2]' : 'hover:bg-[#FAFBFC]'}`}>
+                            {preview.items.map(item => {
+                              const est = estadoItem(item);
+                              return (
+                              <tr key={item.id} className={`transition-colors ${est === 'error' ? 'bg-[#FEF2F2]' : est === 'advertencia' ? 'bg-[#FEF3E2]/60' : 'hover:bg-[#FAFBFC]'}`}>
                                 <td className="px-3 py-2 text-[#344054]">{item.finca}</td>
                                 <td className="px-3 py-2 text-[#0B1220] font-medium">
                                   {item.producto}
@@ -1052,12 +1077,27 @@ export function OrdenesTab() {
                                       {problema}
                                     </span>
                                   ))}
+                                  {(item.advertencias ?? []).map(adv => (
+                                    <span key={adv} className="mt-1 flex items-start gap-1.5 text-xs font-normal text-[#9A5B0B]">
+                                      <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-px" />
+                                      {adv}
+                                    </span>
+                                  ))}
                                 </td>
                                 <td className="px-3 py-2 text-right text-[#344054]">{item.cantidad.toLocaleString('es-ES')} {item.unidad}</td>
                                 <td className="px-3 py-2 text-right text-[#344054]">${item.precioUnitario.toFixed(2)}</td>
                                 <td className="px-3 py-2 text-right font-medium text-[#0B1220]">${item.total.toFixed(2)}</td>
+                                <td className="px-3 py-2 text-center">
+                                  {est === 'error' ? (
+                                    <span className="inline-flex items-center rounded-full bg-[#FEF2F2] px-2.5 py-0.5 text-xs font-medium text-[#B91C1C]" title={(item.problemas ?? []).join(' | ')}>Error</span>
+                                  ) : est === 'advertencia' ? (
+                                    <span className="inline-flex items-center rounded-full bg-[#FEF3E2] px-2.5 py-0.5 text-xs font-medium text-[#9A5B0B]" title={(item.advertencias ?? []).join(' | ')}>Corregido</span>
+                                  ) : (
+                                    <span className="inline-flex items-center rounded-full bg-[#E6F2F0] px-2.5 py-0.5 text-xs font-medium text-[#0B5E56]">OK</span>
+                                  )}
+                                </td>
                               </tr>
-                            ))}
+                            );})}
                           </tbody>
                         </table>
                       </div>
@@ -1071,16 +1111,29 @@ export function OrdenesTab() {
                     </div>
                   )}
 
-                  <div className="flex items-center justify-end gap-2">
-                    {facturasBloqueadas > 0 && (
-                      <p className="mr-auto flex items-start gap-1.5 text-xs text-[#B91C1C]">
-                        <AlertTriangle className="h-4 w-4 shrink-0 mt-px" />
-                        <span>
-                          {facturasBloqueadas} factura(s) con datos sin registrar. Dalos de alta y volvé a subirlas:
-                          si entran así, sus ítems no van a generar comisión.
-                        </span>
-                      </p>
-                    )}
+                  <div className="flex flex-wrap items-center justify-end gap-2">
+                    <div className="mr-auto flex flex-col gap-1.5">
+                      {facturasBloqueadas > 0 && (
+                        <p className="flex items-start gap-1.5 text-xs text-[#B91C1C]">
+                          <AlertTriangle className="h-4 w-4 shrink-0 mt-px" />
+                          <span>
+                            {facturasBloqueadas} factura(s) con datos sin registrar. Dalos de alta y volvé a subirlas:
+                            si entran así, sus ítems no van a generar comisión.
+                          </span>
+                        </p>
+                      )}
+                      {facturasConAdvertencia > 0 && itemsConAdvertencia > 0 && (
+                        <p className="flex items-start gap-1.5 text-xs text-[#9A5B0B]">
+                          <AlertTriangle className="h-4 w-4 shrink-0 mt-px" />
+                          <span>
+                            {itemsConAdvertencia} ítem(s) en {facturasConAdvertencia} factura(s) fueron corregidos automáticamente por typo (sector/producto). Revisar columna Estado.
+                          </span>
+                        </p>
+                      )}
+                      {facturasBloqueadas === 0 && facturasConAdvertencia === 0 && pdfPreviews.length > 0 && (
+                        <p className="text-xs text-[#0B5E56]">{itemsConfirmables} ítems listos para confirmar.</p>
+                      )}
+                    </div>
                     <Button variant="outline" onClick={handleDiscardPDF} className="rounded-xl border-border">
                       <X className="h-4 w-4 mr-2" />
                       Descartar todo

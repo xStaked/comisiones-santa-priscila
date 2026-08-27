@@ -74,33 +74,78 @@ def _buscar_cliente(db: Session, nombre: str) -> Cliente | None:
 
 
 def _buscar_finca(db: Session, nombre: str, cliente: Cliente | None) -> Finca | None:
+    finca, _ = _buscar_finca_con_fuzzy(db, nombre, cliente)
+    return finca
+
+
+def _buscar_finca_con_fuzzy(
+    db: Session, nombre: str, cliente: Cliente | None
+) -> tuple[Finca | None, dict | None]:
+    """Retorna (finca, info_fuzzy) donde info_fuzzy es None si fue match exacto."""
     limpio = _limpiar(nombre)
     if not limpio or limpio == "-":
-        return None
-    fincas = db.query(Finca)
+        return None, None
+    fincas_q = db.query(Finca)
     if cliente:
-        fincas = fincas.filter(Finca.cliente_id == cliente.id)
+        fincas_q = fincas_q.filter(Finca.cliente_id == cliente.id)
+    fincas = fincas_q.all()
 
     nombre_normalizado = normalizar_nombre_finca(limpio)
     coincidencias = [
         finca
-        for finca in fincas.all()
+        for finca in fincas
         if normalizar_nombre_finca(finca.nombre) == nombre_normalizado
     ]
-    if len(coincidencias) != 1:
-        return None
-    return coincidencias[0]
+    if len(coincidencias) == 1:
+        return coincidencias[0], None
+    if len(coincidencias) > 1:
+        # Ambiguo: hay dos fincas con mismo nombre en catálogo (ej. EL MORRO en dos clientes sin cliente identificado)
+        return None, None
+
+    # Fallback difuso: corrige typos como "CALIFRONIA" → "CALIFORNIA"
+    # Solo si no hubo match exacto único
+    try:
+        from app.services.fuzzy_matching import buscar_finca_cercana
+
+        finca_cercana, r, _ = buscar_finca_cercana(limpio, fincas)
+        if finca_cercana is not None and r >= 0.80:
+            # Evitar corregir cuando el mejor sigue siendo ambiguo (dos fincas empatadas a mismo ratio)
+            # Contar cuántos candidatos empatan al mejor ratio
+            from app.services.fuzzy_matching import ratio as ratio_fn
+
+            objetivo_norm = normalizar_nombre_finca(limpio) or ""
+            candidatos_empatados = 0
+            for f in fincas:
+                rr = ratio_fn(objetivo_norm, normalizar_nombre_finca(f.nombre) or "")
+                if abs(rr - r) < 1e-9:
+                    candidatos_empatados += 1
+            if candidatos_empatados > 1:
+                return None, None
+            return finca_cercana, {
+                "original": limpio,
+                "sugerido": finca_cercana.nombre,
+                "ratio": r,
+                "campo": "finca",
+            }
+    except Exception:
+        pass
+    return None, None
 
 
 def _buscar_producto(db: Session, nombre: str) -> Producto | None:
+    prod, _ = _buscar_producto_con_fuzzy(db, nombre)
+    return prod
+
+
+def _buscar_producto_con_fuzzy(db: Session, nombre: str) -> tuple[Producto | None, dict | None]:
     limpio = _limpiar(nombre)
     if not limpio:
-        return None
+        return None, None
     nombre_normalizado = normalizar_nombre_producto(limpio)
     # 1. Buscar por nombre exacto
     producto = db.query(Producto).filter(func.lower(Producto.nombre) == limpio.lower()).first()
     if producto:
-        return producto
+        return producto, None
     # 2. Buscar por nombre normalizado
     producto = next(
         (
@@ -111,7 +156,7 @@ def _buscar_producto(db: Session, nombre: str) -> Producto | None:
         None,
     )
     if producto:
-        return producto
+        return producto, None
     # 3. Buscar por alias exacto
     alias = (
         db.query(ProductoAlias)
@@ -119,11 +164,11 @@ def _buscar_producto(db: Session, nombre: str) -> Producto | None:
         .first()
     )
     if alias:
-        return alias.producto
+        return alias.producto, None
     # 4. Buscar por alias normalizado
     for alias_row in db.query(ProductoAlias).all():
         if normalizar_nombre_producto(alias_row.alias) == nombre_normalizado:
-            return alias_row.producto
+            return alias_row.producto, None
     # 5. Buscar por alias contenido (el alias del producto está contenido en el texto extraído)
     alias_contenido = (
         db.query(ProductoAlias)
@@ -131,8 +176,24 @@ def _buscar_producto(db: Session, nombre: str) -> Producto | None:
         .first()
     )
     if alias_contenido:
-        return alias_contenido.producto
-    return None
+        return alias_contenido.producto, None
+
+    # 6. Fallback difuso
+    try:
+        from app.services.fuzzy_matching import buscar_producto_cercano
+
+        productos = db.query(Producto).all()
+        prod_cercano, r, _ = buscar_producto_cercano(limpio, productos)
+        if prod_cercano is not None and r >= 0.85:
+            return prod_cercano, {
+                "original": limpio,
+                "sugerido": prod_cercano.nombre,
+                "ratio": r,
+                "campo": "producto",
+            }
+    except Exception:
+        pass
+    return None, None
 
 
 def _buscar_comisionistas_aplicables(
@@ -209,8 +270,43 @@ def normalizar_orden_extraida(db: Session | None, orden: OrdenValidada, cliente_
 
     for item in orden.items:
         item_cliente = cliente or _buscar_cliente(db, item.clienteTexto)
-        finca = _buscar_finca(db, item.finca or orden.finca, item_cliente)
-        producto = _buscar_producto(db, item.producto)
+        # Guardar texto original para mensaje de corrección / problema
+        finca_texto_original = item.finca or orden.finca or ""
+        producto_texto_original = item.producto or ""
+
+        finca, finca_fuzzy = _buscar_finca_con_fuzzy(db, finca_texto_original, item_cliente)
+        producto, prod_fuzzy = _buscar_producto_con_fuzzy(db, producto_texto_original)
+
+        # Advertencias por corrección difusa (preservar las que ya vienen de la glosa)
+        advertencias: list[str] = list(getattr(item, "advertencias", []) or [])
+        correccion = getattr(item, "correccion", None)
+        if finca_fuzzy:
+            pct = int(round(finca_fuzzy["ratio"] * 100))
+            advertencias.append(
+                f'Sector corregido automáticamente: "{finca_fuzzy["original"]}" → "{finca_fuzzy["sugerido"]}" (similitud {pct}%). Verificar.'
+            )
+            correccion = {
+                "campo": "finca",
+                "original": finca_fuzzy["original"],
+                "sugerido": finca_fuzzy["sugerido"],
+                "similitud": round(finca_fuzzy["ratio"], 3),
+            }
+        if prod_fuzzy:
+            pct = int(round(prod_fuzzy["ratio"] * 100))
+            advertencias.append(
+                f'Producto corregido automáticamente: "{prod_fuzzy["original"]}" → "{prod_fuzzy["sugerido"]}" (similitud {pct}%).'
+            )
+            # si ya había corrección de finca, guardar solo la última o combinar
+            if correccion is None:
+                correccion = {
+                    "campo": "producto",
+                    "original": prod_fuzzy["original"],
+                    "sugerido": prod_fuzzy["sugerido"],
+                    "similitud": round(prod_fuzzy["ratio"], 3),
+                }
+            else:
+                # múltiples correcciones: guardar lista en advertencias, correccion principal finca
+                pass
 
         if item_cliente:
             item.clienteId = str(item_cliente.id)
@@ -223,11 +319,17 @@ def normalizar_orden_extraida(db: Session | None, orden: OrdenValidada, cliente_
             # El sector viene en la descripción de la factura (una dirección, p. ej.
             # "GUAYAS / DURAN / ..."). Si no coincide con un sector registrado, no lo
             # inventamos: mejor dejarlo vacío que mostrar un sector inexistente.
+            # El texto original se usa solo para el mensaje de error (ver _problemas_del_item).
             item.fincaId = None
             item.finca = "-"
         if producto:
             item.productoId = str(producto.id)
             item.producto = producto.nombre
+        else:
+            # Preservar texto original si no se resolvió
+            item.producto = producto_texto_original
+            item.productoId = None
+
         item.comisionistas = _buscar_comisionistas_aplicables(
             db,
             item_cliente or (finca.cliente if finca else None),
@@ -236,7 +338,20 @@ def normalizar_orden_extraida(db: Session | None, orden: OrdenValidada, cliente_
             orden.proveedor or "",
             orden.fecha,
         )
-        item.problemas = _problemas_del_item(item, item_cliente, producto, finca)
+        # El problema de sector debe mostrar el texto original intentado, no "-"
+        # si no hubo corrección.
+        item.problemas = _problemas_del_item(
+            item, item_cliente, producto, finca, finca_texto_original=finca_texto_original
+        )
+        item.advertencias = advertencias
+        item.correccion = correccion
+        # Estado derivado para columna de la vista previa
+        if item.problemas:
+            item.estado = "error"
+        elif advertencias:
+            item.estado = "advertencia"
+        else:
+            item.estado = "ok"
 
     return orden
 
@@ -246,6 +361,7 @@ def _problemas_del_item(
     cliente: Cliente | None,
     producto: Producto | None,
     finca: Finca | None,
+    finca_texto_original: str | None = None,
 ) -> list[str]:
     """Por qué este ítem no se puede cargar, dicho para que la clienta lo pueda
     arreglar sola.
@@ -271,8 +387,13 @@ def _problemas_del_item(
         # El motivo más frecuente no es que falte la tarifa, sino que el sector
         # no se resolvió: Santa Priscila asigna comisionistas por sector.
         if cliente and cliente.fincas and not finca:
+            sector_mostrado = (
+                finca_texto_original
+                if finca_texto_original and finca_texto_original != "-"
+                else item.finca
+            )
             problemas.append(
-                f'No se reconoció el sector "{item.finca}" entre los de {cliente.nombre}. '
+                f'No se reconoció el sector "{sector_mostrado}" entre los de {cliente.nombre}. '
                 "Sin sector no se pueden asignar comisionistas."
             )
         else:

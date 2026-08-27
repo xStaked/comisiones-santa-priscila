@@ -7,6 +7,9 @@ import {
   normalizarNombreFinca,
   normalizarNombreProducto,
   normalizarRazonSocial,
+  ratioDifflib,
+  UMBRAL_FINCA,
+  UMBRAL_PRODUCTO,
 } from './normalization';
 
 // Paridad obligatoria con backend/app/services/liquidacion.py.
@@ -172,7 +175,10 @@ export function encontrarTarifaEspecifica(
     if (tarifa.productoId && item.productoId && tarifa.productoId === item.productoId) return true;
     const nt = normalizarNombreProducto(nombreRelacion(tarifa.producto));
     const ni = normalizarNombreProducto(item.productoRel?.nombre || item.producto);
-    return !!nt && !!ni && nt === ni;
+    if (!!nt && !!ni && nt === ni) return true;
+    // Fallback difuso para typos en facturas ya emitidas (ej. "ECU BACILUS" → "ECU BACILLUS")
+    if (!!nt && !!ni && ratioDifflib(nt, ni) >= UMBRAL_PRODUCTO) return true;
+    return false;
   };
 
   const coincideFinca = (tarifa: TarifaClienteProducto) => {
@@ -180,7 +186,10 @@ export function encontrarTarifaEspecifica(
     if (tarifa.fincaId && item.fincaId && tarifa.fincaId === item.fincaId) return true;
     const nt = normalizarNombreFinca(nombreRelacion(tarifa.finca));
     const ni = normalizarNombreFinca(nombreFincaItem);
-    return !!nt && !!ni && nt === ni;
+    if (!!nt && !!ni && nt === ni) return true;
+    // Fallback difuso para typos de sector (ej. "CALIFRONIA" → "CALIFORNIA", "califromia" → "california")
+    if (!!nt && !!ni && ratioDifflib(nt, ni) >= UMBRAL_FINCA) return true;
+    return false;
   };
 
   const tarifaAplicaParaProveedor = (tarifa: TarifaClienteProducto) => {
@@ -397,7 +406,9 @@ export function exportarPDF(
     const meses = Array.from(mesesMap.keys()).sort();
 
     meses.forEach(mesKey => {
-      const itemsDelGrupo = mesesMap.get(mesKey)!;
+      const itemsDelGrupo = [...mesesMap.get(mesKey)!].sort(
+        (a, b) => a.fecha.localeCompare(b.fecha) || a.numeroOrden.localeCompare(b.numeroOrden)
+      );
       const [anio, mes] = mesKey.split('-');
       const nombreMes = nombresMes[parseInt(mes) - 1];
       const ultimoDia = getUltimoDiaMes(parseInt(mes), parseInt(anio));
@@ -422,7 +433,7 @@ export function exportarPDF(
       doc.text(`Comisionista: ${comNombre} del 1 al ${ultimoDia} de ${nombreMes} ${anio}`, pageWidth / 2, yPos, { align: 'center' });
       yPos += 6;
 
-      // Preparar body de la tabla
+      // Preparar body de la tabla — orden cronológico (más vieja → más reciente)
       const body = itemsDelGrupo.map(item => {
         let comision = 0;
         let tarifasLabel = '-';
@@ -639,7 +650,9 @@ export function exportarExcel(
       const meses = Array.from(mesesMap.keys()).sort();
 
       meses.forEach(mesKey => {
-        const itemsDelGrupo = mesesMap.get(mesKey)!;
+        const itemsDelGrupo = [...mesesMap.get(mesKey)!].sort(
+          (a, b) => a.fecha.localeCompare(b.fecha) || a.numeroOrden.localeCompare(b.numeroOrden)
+        );
         const [anio, mes] = mesKey.split('-');
         const nombreMes = nombresMes[parseInt(mes) - 1];
         const ultimoDia = getUltimoDiaMes(parseInt(mes), parseInt(anio));
@@ -651,6 +664,7 @@ export function exportarExcel(
         data.push(['Fecha', 'Factura', 'Nombre', 'Cantidad', 'Tipo Comisión', 'Valor de Comisión', 'Estado', 'Sector', 'Grupo', 'Razón social']);
 
         let totalGrupo = 0;
+        // Orden cronológico (más vieja → más reciente) dentro de cada tabla
         itemsDelGrupo.forEach(item => {
           let comision = 0;
           let tarifasLabel = '-';
@@ -708,6 +722,17 @@ export function exportarExcel(
     XLSX.utils.book_append_sheet(wb, ws, nombreHojaValido(`${nombreGrupo} ${nombreProveedor}`, nombresHojaUsados));
     totalGeneral += totalProveedor;
   });
+
+  // Ordenar RESUMEN GENERAL cronológicamente (más vieja → más reciente)
+  {
+    const encabezado = resumen.slice(0, 3);
+    const filas = resumen.slice(3);
+    filas.sort(
+      (a, b) => String(a[0]).localeCompare(String(b[0])) || String(a[1]).localeCompare(String(b[1]))
+    );
+    resumen.length = 0;
+    resumen.push(...encabezado, ...filas);
+  }
 
   resumen.push([]);
   resumen.push(['', '', '', '', 'TOTAL GENERAL', `$ ${totalGeneral.toFixed(2).replace('.', ',')}`, '', '', '', '', '']);

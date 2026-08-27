@@ -44,6 +44,9 @@ def _orden_validada_a_respuesta(orden: OrdenValidada) -> dict[str, Any]:
                 "total": item.total,
                 "comisionistas": item.comisionistas,
                 "problemas": item.problemas,
+                "advertencias": getattr(item, "advertencias", []) or [],
+                "estado": getattr(item, "estado", "ok") or "ok",
+                "correccion": getattr(item, "correccion", None),
             }
             for item in orden.items
         ],

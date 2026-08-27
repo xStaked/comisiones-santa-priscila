@@ -61,6 +61,13 @@ class OrdenItemValidado(BaseModel):
     # Motivos por los que el ítem no se puede cargar, en castellano y listos
     # para mostrar. Solo viven en la vista previa: no se persisten.
     problemas: list[str] = Field(default_factory=list)
+    # Advertencias no bloqueantes (ej. corrección difusa aplicada). Se muestran
+    # en amarillo y no impiden confirmar, pero explican el ajuste automático.
+    advertencias: list[str] = Field(default_factory=list)
+    # Estado derivado para la columna de la vista previa: ok | advertencia | error
+    estado: str = "ok"
+    # Si hubo corrección difusa, detalle para tooltip/auditoría
+    correccion: Optional[dict] = None
 
 
 class OrdenValidada(BaseModel):

@@ -86,42 +86,98 @@ def _bloque_glosa(texto_pdf: str) -> str:
     return " ".join(partes)
 
 
-def _menciones(bloque: str, catalogo: dict[tuple[str, ...], str]) -> list[tuple[str, int, int]]:
+def _menciones(
+    bloque: str, catalogo: dict[tuple[str, ...], str]
+) -> list[tuple[str, int, int, bool, str, float]]:
     """Los sectores del catálogo que aparecen en la glosa, con su posición.
 
     `normalizar_nombre_finca` es el mismo criterio con el que después se busca
     la finca en la base: descarta ADM y SECTOR y arregla GOLDO, así que
     "TAURA ADM D" en la glosa casa con "TAURA D" del catálogo.
+
+    Retorna (nombre_catalogo, start, end, es_fuzzy, texto_original, ratio)
+    con soporte difuso para typos como CALIFRONIA → CALIFORNIA.
     """
+    import difflib
+
     tokens = [
-        (clave, palabra.start(), palabra.end())
+        (clave, palabra.start(), palabra.end(), palabra.group())
         for palabra in re.finditer(r"[^\W_]+", bloque)
         if (clave := normalizar_nombre_finca(palabra.group()))
     ]
     largo_max = max((len(clave) for clave in catalogo), default=0)
 
-    menciones: list[tuple[str, int, int]] = []
+    menciones: list[tuple[str, int, int, bool, str, float]] = []
     indice = 0
     while indice < len(tokens):
         # De más largo a más corto: "DAULAR CURAZAO" antes que "DAULAR".
+        encontrado = False
         for largo in range(min(largo_max, len(tokens) - indice), 0, -1):
-            nombre = catalogo.get(tuple(t[0] for t in tokens[indice : indice + largo]))
+            clave_ventana = tuple(t[0] for t in tokens[indice : indice + largo])
+            nombre = catalogo.get(clave_ventana)
             if nombre:
-                menciones.append((nombre, tokens[indice][1], tokens[indice + largo - 1][2]))
+                menciones.append(
+                    (nombre, tokens[indice][1], tokens[indice + largo - 1][2], False, "", 1.0)
+                )
                 indice += largo
+                encontrado = True
                 break
-        else:
+            # Fallback difuso solo entre claves del mismo largo (evita confundir CALIFORNIA A con CALIFORNIA B)
+            umbral_largo = 0.80 if largo == 1 else 0.80 if largo == 2 else 0.85
+            texto_ventana_norm = " ".join(clave_ventana)
+            mejor = None
+            mejor_ratio = 0.0
+            mejor_nombre = None
+            mejor_clave = None
+            texto_original_ventana = " ".join(t[3] for t in tokens[indice : indice + largo])
+            for clave_cat, nombre_cat in catalogo.items():
+                if len(clave_cat) != largo:
+                    continue
+                candidato_norm = " ".join(clave_cat)
+                r = difflib.SequenceMatcher(None, texto_ventana_norm, candidato_norm).ratio()
+                if r > mejor_ratio:
+                    mejor_ratio = r
+                    mejor = candidato_norm
+                    mejor_nombre = nombre_cat
+                    mejor_clave = clave_cat
+            # Para ventanas multi-token, exigir que cada token sea razonablemente similar
+            # Evita falso positivo "TH CALIFORNIA" → "CALIFORNIA A" (ratio global 0.80 pero tokens "TH"≠"CALIFORNIA")
+            if mejor_nombre and mejor_ratio >= umbral_largo:
+                if largo > 1 and mejor_clave is not None:
+                    tokens_ok = True
+                    for tok_vent, tok_cat in zip(clave_ventana, mejor_clave):
+                        rr_tok = difflib.SequenceMatcher(None, tok_vent, tok_cat).ratio()
+                        if rr_tok < 0.60:
+                            tokens_ok = False
+                            break
+                    if not tokens_ok:
+                        # No es un typo plausible, seguir buscando otra longitud o avanzar
+                        continue
+                menciones.append(
+                    (
+                        mejor_nombre,
+                        tokens[indice][1],
+                        tokens[indice + largo - 1][2],
+                        True,
+                        texto_original_ventana,
+                        mejor_ratio,
+                    )
+                )
+                indice += largo
+                encontrado = True
+                break
+        if not encontrado:
             indice += 1
     return menciones
 
 
 def _entradas(
-    bloque: str, menciones: list[tuple[str, int, int]]
+    bloque: str, menciones: list[tuple[str, int, int, bool, str, float]]
 ) -> list[tuple[str, Decimal, str]]:
     """(sector, cantidad, familia) por cada cantidad nombrada en su tramo."""
     entradas: list[tuple[str, Decimal, str]] = []
 
-    for orden_mencion, (nombre, _, fin) in enumerate(menciones):
+    for orden_mencion, (nombre, _, fin, *_resto) in enumerate(menciones):
         siguiente = (
             menciones[orden_mencion + 1][1]
             if orden_mencion + 1 < len(menciones)
@@ -177,6 +233,13 @@ def asignar_fincas_desde_info_adicional(
     libres = list(range(len(orden.items)))
     pendientes = list(entradas)
 
+    # Mapear finca -> info de si vino por fuzzy (para advertencias)
+    fuzzy_por_finca: dict[str, tuple[str, float]] = {}
+    for nombre, _s, _e, es_fuzzy, texto_orig, r in menciones:
+        if es_fuzzy:
+            # guardar solo el primer original por finca (evita duplicar)
+            fuzzy_por_finca.setdefault(nombre, (texto_orig, r))
+
     # Primero cantidad + familia; lo que sobre, solo por cantidad (la glosa a
     # veces abrevia "PASTILLAS" donde la tabla dice "PASTILLAS TH").
     for exigir_familia in (True, False):
@@ -197,6 +260,21 @@ def asignar_fincas_desde_info_adicional(
             if indice is None:
                 continue
             orden.items[indice].finca = finca
+            # Si esta finca vino de corrección difusa, registrar advertencia
+            if finca in fuzzy_por_finca:
+                orig, rr = fuzzy_por_finca[finca]
+                msg = f'Sector en glosa corregido automáticamente: "{orig}" → "{finca}" (similitud {int(round(rr*100))}%).'
+                if msg not in getattr(orden.items[indice], "advertencias", []):
+                    if not hasattr(orden.items[indice], "advertencias") or orden.items[indice].advertencias is None:
+                        orden.items[indice].advertencias = []
+                    orden.items[indice].advertencias.append(msg)
+                    if not getattr(orden.items[indice], "correccion", None):
+                        orden.items[indice].correccion = {
+                            "campo": "finca",
+                            "original": orig,
+                            "sugerido": finca,
+                            "similitud": round(rr, 3),
+                        }
             libres.remove(indice)
             pendientes.remove(entrada)
 
@@ -207,8 +285,15 @@ def asignar_fincas_desde_info_adicional(
     # Se mira lo NOMBRADO, no lo que rindió cantidades: si la glosa menciona
     # dos sectores y solo uno traía cantidad, repartir todo al otro sería
     # inventar.
-    nombrados = {nombre for nombre, _, _ in menciones}
+    nombrados = {nombre for nombre, _, _, *_r in menciones}
     if len(nombrados) == 1:
-        (finca,) = nombrados
+        (finca,) = tuple(nombrados)
         for indice in libres:
             orden.items[indice].finca = finca
+            if finca in fuzzy_por_finca:
+                orig, rr = fuzzy_por_finca[finca]
+                msg = f'Sector en glosa corregido automáticamente: "{orig}" → "{finca}" (similitud {int(round(rr*100))}%).'
+                if msg not in getattr(orden.items[indice], "advertencias", []):
+                    if not hasattr(orden.items[indice], "advertencias") or orden.items[indice].advertencias is None:
+                        orden.items[indice].advertencias = []
+                    orden.items[indice].advertencias.append(msg)

@@ -34,6 +34,11 @@ class ItemExtraido(BaseModel):
     # Motivos por los que el ítem no se puede cargar (producto sin registrar,
     # cliente sin identificar, sin comisionistas). Vacío = se puede confirmar.
     problemas: list[str] = []
+    # Advertencias no bloqueantes (corrección difusa). Se muestran en amarillo.
+    advertencias: list[str] = []
+    # Estado derivado para columna de la vista previa: ok | advertencia | error
+    estado: str = "ok"
+    correccion: Optional[dict] = None
 
 
 class ExtraccionPDFResponse(BaseModel):

@@ -150,7 +150,21 @@ def _consultar_tarifa_especifica(
             ),
             None,
         )
-        producto_id = producto.id if producto else None
+        if producto:
+            producto_id = producto.id
+        else:
+            # Fallback difuso para typo de producto en factura ya emitida
+            try:
+                from app.services.fuzzy_matching import buscar_producto_cercano
+
+                prod_cercano, r_prod, _ = buscar_producto_cercano(
+                    orden_item.producto, catalogo_cache.productos(db)
+                )
+                if prod_cercano and r_prod >= 0.85:
+                    producto_id = prod_cercano.id
+                    producto = prod_cercano
+            except Exception:
+                pass
 
     nombre_finca_orden = (
         orden_item.finca
@@ -167,6 +181,19 @@ def _consultar_tarifa_especifica(
         if len(fincas) == 1:
             finca_id = fincas[0].id
             cliente_id = cliente_id or fincas[0].cliente_id
+        elif not fincas:
+            # Fallback difuso para typo de sector
+            try:
+                from app.services.fuzzy_matching import buscar_finca_cercana
+
+                finca_cercana, r_finca, _ = buscar_finca_cercana(
+                    nombre_finca_orden, catalogo_cache.fincas_de_cliente(db, cliente_id)
+                )
+                if finca_cercana and r_finca >= 0.80:
+                    finca_id = finca_cercana.id
+                    cliente_id = cliente_id or finca_cercana.cliente_id
+            except Exception:
+                pass
 
     if not cliente_id or not producto_id:
         return None
@@ -280,6 +307,54 @@ def _consultar_tarifa_especifica(
             if t.finca and normalizar_nombre_finca(t.finca.nombre) == nombre_finca and _tarifa_aplica_para_proveedor(t):
                 return t
 
+    # 4b. Fallback difuso para typos en facturas ya emitidas (CALIFRONIA → CALIFORNIA)
+    if not finca_id and nombre_finca_orden:
+        try:
+            from app.services.fuzzy_matching import UMBRAL_FINCA, ratio as ratio_fuzzy
+
+            nombre_finca_norm = normalizar_nombre_finca(nombre_finca_orden) or ""
+            if nombre_finca_norm:
+                # Reutilizar tarifas con finca ya consultadas o consultar de nuevo
+                tarifas_fuzzy = (
+                    db.query(TarifaClienteProducto)
+                    .filter(
+                        TarifaClienteProducto.comisionista_id == comisionista_id,
+                        TarifaClienteProducto.cliente_id == cliente_id,
+                        TarifaClienteProducto.producto_id.in_(producto_ids),
+                        TarifaClienteProducto.finca_id.isnot(None),
+                        TarifaClienteProducto.activo.is_(True),
+                        _vigente_en(_fecha_efectiva(orden_item)),
+                    )
+                    .all()
+                )
+                mejor = None
+                mejor_r = 0.0
+                # Priorizar con proveedor específico que coincida
+                for t in tarifas_fuzzy:
+                    if not t.finca:
+                        continue
+                    r = ratio_fuzzy(nombre_finca_norm, normalizar_nombre_finca(t.finca.nombre) or "")
+                    if r >= UMBRAL_FINCA and r > mejor_r and _tarifa_aplica_para_proveedor(t):
+                        mejor_r = r
+                        mejor = t
+                if mejor:
+                    return mejor
+                # Luego wildcard
+                for t in tarifas_fuzzy:
+                    if not t.finca:
+                        continue
+                    r = ratio_fuzzy(nombre_finca_norm, normalizar_nombre_finca(t.finca.nombre) or "")
+                    if r >= UMBRAL_FINCA and r > mejor_r:
+                        # solo wildcard (sin proveedor) — ya filtrado arriba, buscar segundo pase
+                        if t.proveedor and not es_proveedor_comodin(t.proveedor):
+                            continue
+                        mejor_r = r
+                        mejor = t
+                if mejor:
+                    return mejor
+        except Exception:
+            pass
+
     # 5. Sin finca (finca_id IS NULL) + proveedor específico
     tarifa = (
         db.query(TarifaClienteProducto)
@@ -319,6 +394,34 @@ def _consultar_tarifa_especifica(
     )
     if tarifa and _tarifa_aplica_para_proveedor(tarifa):
         return tarifa
+
+    # 7. Producto difuso (typo en nombre de producto)
+    if not producto_id and orden_item.producto:
+        try:
+            from app.services.fuzzy_matching import UMBRAL_PRODUCTO, ratio as ratio_prod
+
+            nombre_prod_norm = normalizar_nombre_producto(orden_item.producto) or ""
+            if nombre_prod_norm:
+                productos = catalogo_cache.productos(db)
+                # buscar producto cercano ya hace fallback difuso, reintentar con tarifa
+                for prod_cand in productos:
+                    if ratio_prod(nombre_prod_norm, normalizar_nombre_producto(prod_cand.nombre) or "") >= UMBRAL_PRODUCTO:
+                        prod_ids_alt = obtener_productos_equivalentes(db, prod_cand)
+                        tarifa_alt = (
+                            db.query(TarifaClienteProducto)
+                            .filter(
+                                TarifaClienteProducto.comisionista_id == comisionista_id,
+                                TarifaClienteProducto.cliente_id == cliente_id,
+                                TarifaClienteProducto.producto_id.in_(prod_ids_alt),
+                                TarifaClienteProducto.activo.is_(True),
+                                _vigente_en(_fecha_efectiva(orden_item)),
+                            )
+                            .first()
+                        )
+                        if tarifa_alt and _tarifa_aplica_para_proveedor(tarifa_alt):
+                            return tarifa_alt
+        except Exception:
+            pass
     return None
 
 

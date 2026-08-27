@@ -42,6 +42,103 @@ export function normalizarNombreFinca(valor?: string): string | undefined {
     .join(' ');
 }
 
+// Umbrales difusos — mantener sincronizados con backend/app/services/fuzzy_matching.py
+export const UMBRAL_FINCA = 0.80;
+export const UMBRAL_PRODUCTO = 0.85;
+export const UMBRAL_CLIENTE = 0.85;
+
+// Ratio difflib SequenceMatcher (paridad con Python). 2*M / T donde M = chars coincidentes en bloques contiguos.
+export function ratioDifflib(a: string, b: string): number {
+  if (!a || !b) return 0;
+  if (a === b) return 1;
+  const getMatchingBlocks = (s1: string, s2: string): number => {
+    // DP para longest common substring entre s1 y s2
+    const m = s1.length;
+    const n = s2.length;
+    // encontrar el bloque más largo
+    let maxLen = 0;
+    let aStart = 0;
+    let bStart = 0;
+    const dp: number[][] = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0));
+    for (let i = 1; i <= m; i++) {
+      for (let j = 1; j <= n; j++) {
+        if (s1[i - 1] === s2[j - 1]) {
+          dp[i][j] = dp[i - 1][j - 1] + 1;
+          if (dp[i][j] > maxLen) {
+            maxLen = dp[i][j];
+            aStart = i - maxLen;
+            bStart = j - maxLen;
+          }
+        }
+      }
+    }
+    if (maxLen === 0) return 0;
+    // recursivo en prefijo y sufijo
+    const left = getMatchingBlocks(s1.slice(0, aStart), s2.slice(0, bStart));
+    const right = getMatchingBlocks(s1.slice(aStart + maxLen), s2.slice(bStart + maxLen));
+    return maxLen + left + right;
+  };
+  const matched = getMatchingBlocks(a, b);
+  return (2 * matched) / (a.length + b.length);
+}
+
+export function similitudFinca(a: string, b: string): number {
+  const na = normalizarNombreFinca(a) || '';
+  const nb = normalizarNombreFinca(b) || '';
+  return ratioDifflib(na, nb);
+}
+
+export function buscarFincaCercana(
+  nombre: string,
+  candidatos: string[],
+  umbral = UMBRAL_FINCA
+): { nombre: string; ratio: number } | null {
+  const objetivo = normalizarNombreFinca(nombre) || '';
+  if (!objetivo) return null;
+  // exacto primero
+  for (const c of candidatos) {
+    if ((normalizarNombreFinca(c) || '') === objetivo) return { nombre: c, ratio: 1 };
+  }
+  let mejor: string | null = null;
+  let mejorRatio = 0;
+  for (const c of candidatos) {
+    const cn = normalizarNombreFinca(c) || '';
+    if (!cn) continue;
+    const r = ratioDifflib(objetivo, cn);
+    if (r > mejorRatio) {
+      mejorRatio = r;
+      mejor = c;
+    }
+  }
+  if (mejor && mejorRatio >= umbral) return { nombre: mejor, ratio: mejorRatio };
+  return null;
+}
+
+export function buscarProductoCercano(
+  nombre: string,
+  candidatos: string[],
+  umbral = UMBRAL_PRODUCTO
+): { nombre: string; ratio: number } | null {
+  const objetivo = normalizarNombreProducto(nombre) || '';
+  if (!objetivo) return null;
+  for (const c of candidatos) {
+    if ((normalizarNombreProducto(c) || '') === objetivo) return { nombre: c, ratio: 1 };
+  }
+  let mejor: string | null = null;
+  let mejorRatio = 0;
+  for (const c of candidatos) {
+    const cn = normalizarNombreProducto(c) || '';
+    if (!cn) continue;
+    const r = ratioDifflib(objetivo, cn);
+    if (r > mejorRatio) {
+      mejorRatio = r;
+      mejor = c;
+    }
+  }
+  if (mejor && mejorRatio >= umbral) return { nombre: mejor, ratio: mejorRatio };
+  return null;
+}
+
 export function normalizarNombreProducto(valor?: string): string | undefined {
   const normalizado = normalizarTexto(valor);
   if (!normalizado) return undefined;
