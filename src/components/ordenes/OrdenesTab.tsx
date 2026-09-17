@@ -41,6 +41,7 @@ import { uploadPDF, uploadImage, fetchFincas } from '@/lib/api';
 import { generarId } from '@/lib/id';
 import { useQuery } from '@tanstack/react-query';
 import { encontrarTarifaEspecifica } from '@/lib/export-utils';
+import { normalizarTexto, normalizarRazonSocial } from '@/lib/normalization';
 
 const ESTADOS_ORDEN: { value: EstadoOrden; label: string; className: string }[] = [
   { value: 'pendiente', label: 'Pendiente', className: 'bg-[#F0F2F5] text-[#344054] border-0' },
@@ -289,6 +290,53 @@ function EditFincaSelect({ clienteId, value, onChange }: { clienteId: string; va
   );
 }
 
+/**
+ * Resuelve el cliente con tolerancia a que el nombre no haga match al 100%.
+ * Ej. la factura trae "INDUSTRIAL PESQUERA SANTA PRISCILA S.A." pero en el
+ * catálogo es "Santa Priscila". Usamos normalización de texto/razón social
+ * para encontrar el cliente correcto y sus fincas.
+ */
+function resolverClienteConFincas(effectiveClienteId: string, item: ItemPrevisualizado, clientes: any[]) {
+  let cliente = clientes.find(c => c.id === effectiveClienteId);
+  let fincas = (cliente as any)?.fincas as any[] | undefined;
+  if (fincas && fincas.length > 0) return { cliente, fincas, clienteIdEfectivo: cliente.id };
+
+  const nombreExtraido = (() => {
+    const prob = item.problemas?.find(p => p.toLowerCase().includes('sector') && p.toLowerCase().includes('entre los de'));
+    const m = prob?.match(/entre los de ([^.]+)\./i);
+    return m ? m[1].trim() : '';
+  })();
+
+  if (nombreExtraido) {
+    const normBuscado = normalizarTexto(nombreExtraido) || '';
+    const normRazonBuscado = normalizarRazonSocial(nombreExtraido);
+    const candidatos = [
+      clientes.find(c => (normalizarTexto(c.nombre) || '') === normBuscado),
+      clientes.find(c => normalizarRazonSocial(c.nombre) === normRazonBuscado),
+      clientes.find(c => {
+        const n = normalizarTexto(c.nombre) || '';
+        return n && normBuscado.includes(n);
+      }),
+      clientes.find(c => {
+        const n = normalizarTexto(c.nombre) || '';
+        return n && n.includes(normBuscado);
+      }),
+    ].filter(Boolean) as any[];
+    for (const cand of candidatos) {
+      const f = (cand as any).fincas as any[] | undefined;
+      if (f && f.length > 0) return { cliente: cand, fincas: f, clienteIdEfectivo: cand.id };
+      if (cand) return { cliente: cand, fincas: f ?? [], clienteIdEfectivo: cand.id };
+    }
+  }
+
+  if (nombreExtraido && (normalizarTexto(nombreExtraido) || '').includes('SANTA PRISCILA')) {
+    const santa = clientes.find(c => (normalizarTexto(c.nombre) || '').includes('SANTA PRISCILA'));
+    if (santa) return { cliente: santa, fincas: (santa as any).fincas ?? [], clienteIdEfectivo: santa.id };
+  }
+
+  return { cliente, fincas: fincas ?? [], clienteIdEfectivo: effectiveClienteId };
+}
+
 function CeldaSectorPreview({
   previewIdx,
   item,
@@ -303,22 +351,20 @@ function CeldaSectorPreview({
   onChange: (previewIdx: number, itemId: string, nuevoFincaId: string | null, nuevoNombre: string) => void;
 }) {
   const { clientes } = useApp();
-  const effectiveClienteId = pdfClienteId || item.clienteId || '';
-  const cliente = clientes.find(c => c.id === effectiveClienteId);
-  // Cargar fincas directo por clienteId de la factura (inferido por el backend),
-  // aunque el selector superior esté vacío. Así si la factura ya trae Santa Priscila,
-  // el desplegable sí carga sus sectores.
-  const { data: fincas, isLoading: fincasCargando } = useQuery({
-    queryKey: ['fincas', effectiveClienteId],
-    queryFn: () => fetchFincas(effectiveClienteId),
-    enabled: !!effectiveClienteId,
+  const effectiveClienteIdRaw = pdfClienteId || item.clienteId || '';
+  const { cliente, fincas: fincasLocal, clienteIdEfectivo } = resolverClienteConFincas(effectiveClienteIdRaw, item, clientes as any[]);
+  const { data: fincasRemotas, isLoading: fincasCargando } = useQuery({
+    queryKey: ['fincas', clienteIdEfectivo],
+    queryFn: () => fetchFincas(clienteIdEfectivo),
+    enabled: !!clienteIdEfectivo && fincasLocal.length === 0,
   });
-  const tieneFincas = !!(fincas && fincas.length > 0);
-  const esGrupo = cliente?.tipo === 'grupo' || tieneFincas;
+  const fincas = fincasLocal.length > 0 ? fincasLocal : (fincasRemotas ?? []);
+  const tieneFincas = fincas.length > 0;
+  const esGrupo = (cliente as any)?.tipo === 'grupo' || tieneFincas;
   const est = estadoItem(item);
   const esErrorSector = est === 'error' && (item.problemas || []).some(p => p.toLowerCase().includes('sector'));
 
-  if (!effectiveClienteId) {
+  if (!clienteIdEfectivo) {
     return <span className="text-xs text-[#B91C1C]">Seleccioná cliente arriba para cargar sectores</span>;
   }
   if (fincasCargando) {
@@ -382,12 +428,14 @@ function CorrectorSectorMasivo({
   const { clientes } = useApp();
   const itemError = preview.items.find(it => (it.problemas || []).some(p => p.toLowerCase().includes('sector')));
   if (!itemError) return null;
-  const effectiveClienteId = pdfClienteId || itemError.clienteId || '';
-  const { data: fincas, isLoading: fincasCargando } = useQuery({
-    queryKey: ['fincas', effectiveClienteId],
-    queryFn: () => fetchFincas(effectiveClienteId),
-    enabled: !!effectiveClienteId,
+  const effectiveClienteIdRaw = pdfClienteId || itemError.clienteId || '';
+  const { cliente, fincas: fincasLocal, clienteIdEfectivo } = resolverClienteConFincas(effectiveClienteIdRaw, itemError, clientes as any[]);
+  const { data: fincasRemotas, isLoading: fincasCargando } = useQuery({
+    queryKey: ['fincas', clienteIdEfectivo],
+    queryFn: () => fetchFincas(clienteIdEfectivo),
+    enabled: !!clienteIdEfectivo && fincasLocal.length === 0,
   });
+  const fincas = fincasLocal.length > 0 ? fincasLocal : (fincasRemotas ?? []);
   const cantidad = preview.items.filter(it => (it.problemas || []).some(p => p.toLowerCase().includes('sector'))).length;
   if (cantidad === 0) return null;
   if (fincasCargando) {
@@ -398,8 +446,7 @@ function CorrectorSectorMasivo({
     );
   }
   if (!fincas || fincas.length === 0) return null;
-  const cliente = clientes.find(c => c.id === effectiveClienteId);
-  const nombreCliente = cliente?.nombre || 'este cliente';
+  const nombreCliente = (cliente as any)?.nombre || 'este cliente';
   const sectorTexto = (() => {
     const prob = itemError.problemas?.find(p => p.toLowerCase().includes('sector'));
     const m = prob?.match(/sector "([^"]+)"/);
@@ -458,16 +505,16 @@ export function OrdenesTab() {
       if (idx !== previewIdx) return preview;
       const updatedItems = preview.items.map(it => {
         if (it.id !== itemId) return it;
-        const effectiveClienteId = pdfClienteId || it.clienteId || '';
-        const cliente = clientes.find(c => c.id === effectiveClienteId);
+        const effectiveClienteIdRaw = pdfClienteId || it.clienteId || '';
+        const { cliente } = resolverClienteConFincas(effectiveClienteIdRaw, it, clientes as any[]);
         const producto = productos.find(p => p.id === it.productoId);
-        const esGrupo = cliente?.tipo === 'grupo';
+        const esGrupo = (cliente as any)?.tipo === 'grupo';
         const nuevoFinca = esGrupo ? (nuevoFincaNombre || '-') : (nuevoFincaNombre || '-');
         const nuevoItemBase = {
           ...it,
           finca: nuevoFinca,
           fincaId: esGrupo ? (nuevoFincaId || undefined) : undefined,
-          clienteId: effectiveClienteId || it.clienteId,
+          clienteId: (cliente as any)?.id || effectiveClienteIdRaw || it.clienteId,
         } as ItemPrevisualizado;
 
         // Recalcular comisionistas con la lógica de tarifas específicas (paridad con backend)
@@ -538,17 +585,17 @@ export function OrdenesTab() {
         const updatedItems = preview.items.map(it => {
           const esErrorSector = (it.problemas || []).some(p => p.toLowerCase().includes('sector'));
           if (!esErrorSector) return it;
-          const effectiveClienteId = pdfClienteId || it.clienteId || '';
-          const cliente = clientes.find(c => c.id === effectiveClienteId);
+          const effectiveClienteIdRaw = pdfClienteId || it.clienteId || '';
+          const { cliente } = resolverClienteConFincas(effectiveClienteIdRaw, it, clientes as any[]);
           const producto = productos.find(p => p.id === it.productoId);
-          const esGrupo = cliente?.tipo === 'grupo';
+          const esGrupo = (cliente as any)?.tipo === 'grupo';
           if (!esGrupo) return it;
           const nuevoFinca = nuevoFincaNombre || '-';
           const nuevoItemBase = {
             ...it,
             finca: nuevoFinca,
             fincaId: nuevoFincaId,
-            clienteId: effectiveClienteId || it.clienteId,
+            clienteId: (cliente as any)?.id || effectiveClienteIdRaw || it.clienteId,
           } as ItemPrevisualizado;
           let nuevosComisionistas: { comisionistaId: string }[] = [];
           if (cliente && it.productoId) {
