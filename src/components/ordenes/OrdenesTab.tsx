@@ -305,22 +305,27 @@ function CeldaSectorPreview({
   const { clientes } = useApp();
   const effectiveClienteId = pdfClienteId || item.clienteId || '';
   const cliente = clientes.find(c => c.id === effectiveClienteId);
-  const esGrupo = cliente?.tipo === 'grupo';
-  const { data: fincas } = useQuery({
+  // Cargar fincas directo por clienteId de la factura (inferido por el backend),
+  // aunque el selector superior esté vacío. Así si la factura ya trae Santa Priscila,
+  // el desplegable sí carga sus sectores.
+  const { data: fincas, isLoading: fincasCargando } = useQuery({
     queryKey: ['fincas', effectiveClienteId],
     queryFn: () => fetchFincas(effectiveClienteId),
-    enabled: !!effectiveClienteId && esGrupo,
+    enabled: !!effectiveClienteId,
   });
+  const tieneFincas = !!(fincas && fincas.length > 0);
+  const esGrupo = cliente?.tipo === 'grupo' || tieneFincas;
   const est = estadoItem(item);
   const esErrorSector = est === 'error' && (item.problemas || []).some(p => p.toLowerCase().includes('sector'));
 
   if (!effectiveClienteId) {
-    return <span className="text-xs text-[#B91C1C]">Seleccioná cliente</span>;
+    return <span className="text-xs text-[#B91C1C]">Seleccioná cliente arriba para cargar sectores</span>;
   }
-  if (esGrupo) {
+  if (fincasCargando) {
+    return <span className="text-xs text-[#6B7684]">Cargando sectores...</span>;
+  }
+  if (tieneFincas) {
     const valorActual = item.fincaId || '';
-    // Cuando el sector no está reconocido, item.finca es "-" pero guardamos el texto original en el mensaje de problema.
-    // Mostrar el placeholder para que se note que hay que elegir.
     const nombreMostrar = valorActual
       ? (fincas?.find((f: { id: string; nombre: string }) => f.id === valorActual)?.nombre || item.finca)
       : (item.finca && item.finca !== '-' ? item.finca : '');
@@ -349,7 +354,10 @@ function CeldaSectorPreview({
       </div>
     );
   }
-  // Cliente individual: el sector es texto libre
+  if (esGrupo && !tieneFincas) {
+    return <span className="text-xs text-amber-700">Sin sectores — dalos de alta en Clientes</span>;
+  }
+  // Cliente individual sin fincas: el sector es texto libre
   return (
     <Input
       value={item.finca === '-' ? '' : item.finca}
@@ -375,15 +383,23 @@ function CorrectorSectorMasivo({
   const itemError = preview.items.find(it => (it.problemas || []).some(p => p.toLowerCase().includes('sector')));
   if (!itemError) return null;
   const effectiveClienteId = pdfClienteId || itemError.clienteId || '';
-  const cliente = clientes.find(c => c.id === effectiveClienteId);
-  if (!cliente || cliente.tipo !== 'grupo') return null;
-  const { data: fincas } = useQuery({
+  const { data: fincas, isLoading: fincasCargando } = useQuery({
     queryKey: ['fincas', effectiveClienteId],
     queryFn: () => fetchFincas(effectiveClienteId),
     enabled: !!effectiveClienteId,
   });
   const cantidad = preview.items.filter(it => (it.problemas || []).some(p => p.toLowerCase().includes('sector'))).length;
   if (cantidad === 0) return null;
+  if (fincasCargando) {
+    return (
+      <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+        <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600" /> Cargando sectores...
+      </div>
+    );
+  }
+  if (!fincas || fincas.length === 0) return null;
+  const cliente = clientes.find(c => c.id === effectiveClienteId);
+  const nombreCliente = cliente?.nombre || 'este cliente';
   const sectorTexto = (() => {
     const prob = itemError.problemas?.find(p => p.toLowerCase().includes('sector'));
     const m = prob?.match(/sector "([^"]+)"/);
@@ -393,7 +409,7 @@ function CorrectorSectorMasivo({
     <div className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
       <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600" />
       <span className="text-xs font-medium text-amber-900">
-        {cantidad} ítem(s) con sector no reconocido{sectorTexto ? ` "${sectorTexto}"` : ''} entre los de {cliente.nombre}. Corregí el sector y se aplicará a todos:
+        {cantidad} ítem(s) con sector no reconocido{sectorTexto ? ` "${sectorTexto}"` : ''} entre los de {nombreCliente}. Corregí el sector y se aplicará a todos:
       </span>
       <Select
         onValueChange={(v) => {
