@@ -289,6 +289,77 @@ function EditFincaSelect({ clienteId, value, onChange }: { clienteId: string; va
   );
 }
 
+function CeldaSectorPreview({
+  previewIdx,
+  item,
+  preview,
+  pdfClienteId,
+  onChange,
+}: {
+  previewIdx: number;
+  item: ItemPrevisualizado;
+  preview: { proveedor: string; fecha: string; semana: string };
+  pdfClienteId: string;
+  onChange: (previewIdx: number, itemId: string, nuevoFincaId: string | null, nuevoNombre: string) => void;
+}) {
+  const { clientes } = useApp();
+  const effectiveClienteId = pdfClienteId || item.clienteId || '';
+  const cliente = clientes.find(c => c.id === effectiveClienteId);
+  const esGrupo = cliente?.tipo === 'grupo';
+  const { data: fincas } = useQuery({
+    queryKey: ['fincas', effectiveClienteId],
+    queryFn: () => fetchFincas(effectiveClienteId),
+    enabled: !!effectiveClienteId && esGrupo,
+  });
+  const est = estadoItem(item);
+  const esErrorSector = est === 'error' && (item.problemas || []).some(p => p.toLowerCase().includes('sector'));
+
+  if (!effectiveClienteId) {
+    return <span className="text-xs text-[#B91C1C]">Seleccioná cliente</span>;
+  }
+  if (esGrupo) {
+    const valorActual = item.fincaId || '';
+    // Cuando el sector no está reconocido, item.finca es "-" pero guardamos el texto original en el mensaje de problema.
+    // Mostrar el placeholder para que se note que hay que elegir.
+    const nombreMostrar = valorActual
+      ? (fincas?.find((f: { id: string; nombre: string }) => f.id === valorActual)?.nombre || item.finca)
+      : (item.finca && item.finca !== '-' ? item.finca : '');
+    return (
+      <div className="flex items-center gap-1">
+        <Select
+          value={valorActual}
+          onValueChange={(v) => {
+            const id = v || null;
+            const f = (fincas || []).find((x: { id: string; nombre: string }) => x.id === id);
+            onChange(previewIdx, item.id, id, f?.nombre || '');
+          }}
+        >
+          <SelectTrigger className={`h-8 w-[160px] rounded-lg border bg-white text-xs text-[#0B1220] ${esErrorSector ? 'border-[#FCA5A5] bg-[#FEF2F2]' : 'border-border'}`}>
+            <SelectValue placeholder="Seleccionar sector">
+              {nombreMostrar || 'Seleccionar sector'}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            {(fincas || []).map((f: { id: string; nombre: string }) => (
+              <SelectItem key={f.id} value={f.id}>{f.nombre}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {esErrorSector && <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-[#B91C1C]" />}
+      </div>
+    );
+  }
+  // Cliente individual: el sector es texto libre
+  return (
+    <Input
+      value={item.finca === '-' ? '' : item.finca}
+      placeholder="Sector"
+      onChange={(e) => onChange(previewIdx, item.id, null, e.target.value)}
+      className={`h-8 text-xs ${esErrorSector ? 'border-[#FCA5A5] bg-[#FEF2F2]' : ''}`}
+    />
+  );
+}
+
 export function OrdenesTab() {
   const { comisionistas, ordenItems, addOrdenItems, updateOrdenItem, updateEstadoOrden, updateEstadoOrdenesMasivo, deleteOrdenItem, deleteOrdenItems, clearOrdenItems, assignComisionistasGlobal, clientes, productos, tarifasClienteProducto } = useApp();
   const [activeForm, setActiveForm] = useState<'manual' | 'pdf'>('manual');
@@ -308,6 +379,86 @@ export function OrdenesTab() {
   const [isProcessingPDF, setIsProcessingPDF] = useState(false);
   const [uploadType, setUploadType] = useState<'pdf' | 'imagen'>('pdf');
   const [pdfClienteId, setPdfClienteId] = useState<string>('');
+
+  // Edición del sector en la vista previa: cuando el extractor no reconoció el sector
+  // (ej. "F/ # 2110"), el usuario puede elegir el sector correcto del catálogo y
+  // revalidar localmente si ahora hay tarifa que asigne comisionistas.
+  const handlePreviewFincaChange = (previewIdx: number, itemId: string, nuevoFincaId: string | null, nuevoFincaNombre: string) => {
+    setPdfPreviews(prev => prev.map((preview, idx) => {
+      if (idx !== previewIdx) return preview;
+      const updatedItems = preview.items.map(it => {
+        if (it.id !== itemId) return it;
+        const effectiveClienteId = pdfClienteId || it.clienteId || '';
+        const cliente = clientes.find(c => c.id === effectiveClienteId);
+        const producto = productos.find(p => p.id === it.productoId);
+        const esGrupo = cliente?.tipo === 'grupo';
+        const nuevoFinca = esGrupo ? (nuevoFincaNombre || '-') : (nuevoFincaNombre || '-');
+        const nuevoItemBase = {
+          ...it,
+          finca: nuevoFinca,
+          fincaId: esGrupo ? (nuevoFincaId || undefined) : undefined,
+          clienteId: effectiveClienteId || it.clienteId,
+        } as ItemPrevisualizado;
+
+        // Recalcular comisionistas con la lógica de tarifas específicas (paridad con backend)
+        let nuevosComisionistas: { comisionistaId: string }[] = [];
+        if (cliente && it.productoId) {
+          const distintos = [...new Set(tarifasClienteProducto.filter(t => t.clienteId === cliente.id && (t.activo ?? true)).map(t => t.comisionistaId))];
+          for (const cid of distintos) {
+            const tempItem: any = {
+              ...nuevoItemBase,
+              clienteId: cliente.id,
+              productoId: it.productoId,
+              fincaId: esGrupo ? (nuevoFincaId || undefined) : undefined,
+              proveedor: preview.proveedor || (it as any).proveedor,
+              fecha: preview.fecha,
+              cliente: { id: cliente.id, nombre: cliente.nombre },
+              productoRel: producto ? { id: producto.id, nombre: producto.nombre, unidadComision: (producto as any).unidadComision } : { nombre: it.producto },
+              fincaRel: esGrupo && nuevoFincaId ? { id: nuevoFincaId, nombre: nuevoFincaNombre } : undefined,
+              finca: nuevoFinca,
+            };
+            const tarifa = encontrarTarifaEspecifica(tempItem as OrdenItem, cid, tarifasClienteProducto);
+            if (tarifa) nuevosComisionistas.push({ comisionistaId: cid });
+          }
+        }
+
+        // Recalcular problemas / advertencias / estado
+        const advertencias: string[] = (it.advertencias || []).filter(a => !a.toLowerCase().includes('sector'));
+        let correccion: any = it.correccion;
+        if (correccion && correccion.campo === 'finca') correccion = null;
+
+        const problemas: string[] = [];
+        if (!it.productoId) {
+          const ya = (it.problemas || []).find(p => p.toLowerCase().includes('producto'));
+          problemas.push(ya || `El producto "${it.producto}" no está registrado. Dalo de alta en Productos (o agregalo como alias de uno existente).`);
+        }
+        if (!cliente) {
+          problemas.push('No se pudo identificar al cliente de la factura. Elegilo en el selector de arriba o dalo de alta en Clientes.');
+        }
+        if (cliente && esGrupo && !nuevoFincaId) {
+          const sectorMostrado = nuevoFincaNombre && nuevoFincaNombre !== '-' ? nuevoFincaNombre : (it.finca && it.finca !== '-' ? it.finca : '-');
+          problemas.push(`No se reconoció el sector "${sectorMostrado}" entre los de ${cliente.nombre}. Sin sector no se pueden asignar comisionistas.`);
+        } else if (cliente && it.productoId && nuevosComisionistas.length === 0) {
+          if (!(cliente && esGrupo && !nuevoFincaId)) {
+            const yaTarifa = (it.problemas || []).find(p => p.toLowerCase().includes('tarifa'));
+            problemas.push(yaTarifa || 'Ningún comisionista tiene tarifa configurada para este producto.');
+          }
+        }
+
+        const estado: 'ok' | 'advertencia' | 'error' = problemas.length > 0 ? 'error' : advertencias.length > 0 ? 'advertencia' : 'ok';
+
+        return {
+          ...nuevoItemBase,
+          comisionistas: nuevosComisionistas,
+          problemas,
+          advertencias,
+          correccion,
+          estado,
+        } as unknown as ItemPrevisualizado;
+      });
+      return { ...preview, items: updatedItems as ItemPrevisualizado[] };
+    }));
+  };
 
   const numerosCargados = useMemo(
     () => new Set(ordenItems.map(o => o.numeroOrden.trim().toUpperCase())),
@@ -1027,7 +1178,7 @@ export function OrdenesTab() {
                 </>
               ) : (
                 <div className="space-y-4">
-                  {pdfPreviews.map(preview => (
+                  {pdfPreviews.map((preview, previewIdx) => (
                     <div key={preview.fileName} className="space-y-3">
                       <div className="bg-[#FAFBFC] rounded-xl p-4 border border-border">
                         <div className="flex items-start justify-between gap-2">
@@ -1076,9 +1227,27 @@ export function OrdenesTab() {
                             {preview.items.map(item => {
                               const est = estadoItem(item);
                               const advText = (item.advertencias ?? []).join(' | ');
+                              const effectiveClienteIdParaSector = pdfClienteId || item.clienteId || '';
+                              const clienteParaSector = clientes.find(c => c.id === effectiveClienteIdParaSector);
+                              const esGrupoParaSector = clienteParaSector?.tipo === 'grupo';
+                              // Sector editable para clientes tipo grupo: cuando hay error de sector (ej. "F/ # 2110") o siempre para permitir corrección.
+                              // Para no sature la vista, lo mostramos solo cuando es grupo (requiere sector); el selector permite corregir cualquier fila.
+                              const sectorEditable = esGrupoParaSector;
                               return (
                               <tr key={item.id} className={`transition-colors ${est === 'error' ? 'bg-[#FEF2F2]' : est === 'advertencia' ? 'border-l-4 border-l-amber-400 bg-white hover:bg-[#FFFBEB]' : 'hover:bg-[#FAFBFC]'}`}>
-                                <td className={`px-3 py-2 text-[#344054] ${est==='advertencia' ? 'pl-[8px]' : ''}`}>{item.finca}</td>
+                                <td className={`px-3 py-1 text-[#344054] ${est==='advertencia' ? 'pl-[8px]' : ''}`}>
+                                  {sectorEditable ? (
+                                    <CeldaSectorPreview
+                                      previewIdx={previewIdx}
+                                      item={item}
+                                      preview={preview}
+                                      pdfClienteId={pdfClienteId}
+                                      onChange={handlePreviewFincaChange}
+                                    />
+                                  ) : (
+                                    item.finca
+                                  )}
+                                </td>
                                 <td className="px-3 py-2 text-[#0B1220] font-medium">
                                   <span className="inline-flex items-start gap-1.5">
                                     <span>{item.producto}</span>
