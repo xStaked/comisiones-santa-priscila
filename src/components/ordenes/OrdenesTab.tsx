@@ -360,6 +360,60 @@ function CeldaSectorPreview({
   );
 }
 
+function CorrectorSectorMasivo({
+  previewIdx,
+  preview,
+  pdfClienteId,
+  onAplicar,
+}: {
+  previewIdx: number;
+  preview: { items: ItemPrevisualizado[] };
+  pdfClienteId: string;
+  onAplicar: (previewIdx: number, nuevoFincaId: string, nuevoNombre: string) => void;
+}) {
+  const { clientes } = useApp();
+  const itemError = preview.items.find(it => (it.problemas || []).some(p => p.toLowerCase().includes('sector')));
+  if (!itemError) return null;
+  const effectiveClienteId = pdfClienteId || itemError.clienteId || '';
+  const cliente = clientes.find(c => c.id === effectiveClienteId);
+  if (!cliente || cliente.tipo !== 'grupo') return null;
+  const { data: fincas } = useQuery({
+    queryKey: ['fincas', effectiveClienteId],
+    queryFn: () => fetchFincas(effectiveClienteId),
+    enabled: !!effectiveClienteId,
+  });
+  const cantidad = preview.items.filter(it => (it.problemas || []).some(p => p.toLowerCase().includes('sector'))).length;
+  if (cantidad === 0) return null;
+  const sectorTexto = (() => {
+    const prob = itemError.problemas?.find(p => p.toLowerCase().includes('sector'));
+    const m = prob?.match(/sector "([^"]+)"/);
+    return m ? m[1] : '';
+  })();
+  return (
+    <div className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+      <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600" />
+      <span className="text-xs font-medium text-amber-900">
+        {cantidad} ítem(s) con sector no reconocido{sectorTexto ? ` "${sectorTexto}"` : ''} entre los de {cliente.nombre}. Corregí el sector y se aplicará a todos:
+      </span>
+      <Select
+        onValueChange={(v) => {
+          const f = (fincas || []).find((x: { id: string; nombre: string }) => x.id === v);
+          if (f) onAplicar(previewIdx, f.id, f.nombre);
+        }}
+      >
+        <SelectTrigger className="h-8 w-[180px] rounded-lg border-amber-200 bg-white text-xs">
+          <SelectValue placeholder="Seleccionar sector..." />
+        </SelectTrigger>
+        <SelectContent>
+          {(fincas || []).map((f: { id: string; nombre: string }) => (
+            <SelectItem key={f.id} value={f.id}>{f.nombre}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
 export function OrdenesTab() {
   const { comisionistas, ordenItems, addOrdenItems, updateOrdenItem, updateEstadoOrden, updateEstadoOrdenesMasivo, deleteOrdenItem, deleteOrdenItems, clearOrdenItems, assignComisionistasGlobal, clientes, productos, tarifasClienteProducto } = useApp();
   const [activeForm, setActiveForm] = useState<'manual' | 'pdf'>('manual');
@@ -458,6 +512,90 @@ export function OrdenesTab() {
       });
       return { ...preview, items: updatedItems as ItemPrevisualizado[] };
     }));
+  };
+
+  // Corrección masiva: aplica el mismo sector a todos los ítems con error de sector de la factura.
+  const handlePreviewFincaChangeMasivo = (previewIdx: number, nuevoFincaId: string, nuevoFincaNombre: string) => {
+    setPdfPreviews(prev =>
+      prev.map((preview, idx) => {
+        if (idx !== previewIdx) return preview;
+        const updatedItems = preview.items.map(it => {
+          const esErrorSector = (it.problemas || []).some(p => p.toLowerCase().includes('sector'));
+          if (!esErrorSector) return it;
+          const effectiveClienteId = pdfClienteId || it.clienteId || '';
+          const cliente = clientes.find(c => c.id === effectiveClienteId);
+          const producto = productos.find(p => p.id === it.productoId);
+          const esGrupo = cliente?.tipo === 'grupo';
+          if (!esGrupo) return it;
+          const nuevoFinca = nuevoFincaNombre || '-';
+          const nuevoItemBase = {
+            ...it,
+            finca: nuevoFinca,
+            fincaId: nuevoFincaId,
+            clienteId: effectiveClienteId || it.clienteId,
+          } as ItemPrevisualizado;
+          let nuevosComisionistas: { comisionistaId: string }[] = [];
+          if (cliente && it.productoId) {
+            const distintos = [
+              ...new Set(
+                tarifasClienteProducto
+                  .filter(t => t.clienteId === cliente.id && (t.activo ?? true))
+                  .map(t => t.comisionistaId)
+              ),
+            ];
+            for (const cid of distintos) {
+              const tempItem: any = {
+                ...nuevoItemBase,
+                clienteId: cliente.id,
+                productoId: it.productoId,
+                fincaId: nuevoFincaId,
+                proveedor: preview.proveedor || (it as any).proveedor,
+                fecha: preview.fecha,
+                cliente: { id: cliente.id, nombre: cliente.nombre },
+                productoRel: producto
+                  ? { id: producto.id, nombre: producto.nombre, unidadComision: (producto as any).unidadComision }
+                  : { nombre: it.producto },
+                fincaRel: { id: nuevoFincaId, nombre: nuevoFincaNombre },
+                finca: nuevoFinca,
+              };
+              const tarifa = encontrarTarifaEspecifica(tempItem as OrdenItem, cid, tarifasClienteProducto);
+              if (tarifa) nuevosComisionistas.push({ comisionistaId: cid });
+            }
+          }
+          const advertencias: string[] = (it.advertencias || []).filter(a => !a.toLowerCase().includes('sector'));
+          let correccion: any = it.correccion;
+          if (correccion && correccion.campo === 'finca') correccion = null;
+          const problemas: string[] = [];
+          if (!it.productoId) {
+            const ya = (it.problemas || []).find(p => p.toLowerCase().includes('producto'));
+            problemas.push(
+              ya || `El producto "${it.producto}" no está registrado. Dalo de alta en Productos (o agregalo como alias de uno existente).`
+            );
+          }
+          if (!cliente) {
+            problemas.push('No se pudo identificar al cliente de la factura. Elegilo en el selector de arriba o dalo de alta en Clientes.');
+          }
+          if (cliente && esGrupo && !nuevoFincaId) {
+            problemas.push(
+              `No se reconoció el sector "${nuevoFincaNombre}" entre los de ${cliente.nombre}. Sin sector no se pueden asignar comisionistas.`
+            );
+          } else if (cliente && it.productoId && nuevosComisionistas.length === 0) {
+            const yaTarifa = (it.problemas || []).find(p => p.toLowerCase().includes('tarifa'));
+            problemas.push(yaTarifa || 'Ningún comisionista tiene tarifa configurada para este producto.');
+          }
+          const estado: 'ok' | 'advertencia' | 'error' = problemas.length > 0 ? 'error' : advertencias.length > 0 ? 'advertencia' : 'ok';
+          return {
+            ...nuevoItemBase,
+            comisionistas: nuevosComisionistas,
+            problemas,
+            advertencias,
+            correccion,
+            estado,
+          } as unknown as ItemPrevisualizado;
+        });
+        return { ...preview, items: updatedItems as ItemPrevisualizado[] };
+      })
+    );
   };
 
   const numerosCargados = useMemo(
@@ -1210,6 +1348,13 @@ export function OrdenesTab() {
                           </div>
                         </div>
                       </div>
+
+                      <CorrectorSectorMasivo
+                        previewIdx={previewIdx}
+                        preview={preview}
+                        pdfClienteId={pdfClienteId}
+                        onAplicar={handlePreviewFincaChangeMasivo}
+                      />
 
                       <div className="overflow-x-auto border border-border rounded-xl">
                         <table className="w-full text-sm">
