@@ -376,12 +376,12 @@ def _problemas_del_item(
     if not producto:
         problemas.append(
             f'El producto "{item.producto}" no está registrado. '
-            "Dalo de alta en Productos (o agregalo como alias de uno existente)."
+            "Regístralo en Productos (o agrégalo como alias de un producto existente)."
         )
     if not cliente:
         problemas.append(
             "No se pudo identificar al cliente de la factura. "
-            "Elegilo en el selector de arriba o dalo de alta en Clientes."
+            "Elígelo en el selector superior o regístralo en Clientes."
         )
     if not item.comisionistas:
         # El motivo más frecuente no es que falte la tarifa, sino que el sector

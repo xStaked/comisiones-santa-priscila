@@ -365,7 +365,7 @@ function CeldaSectorPreview({
   const esErrorSector = est === 'error' && (item.problemas || []).some(p => p.toLowerCase().includes('sector'));
 
   if (!clienteIdEfectivo) {
-    return <span className="text-xs text-[#B91C1C]">Seleccioná cliente arriba para cargar sectores</span>;
+    return <span className="text-xs text-[#B91C1C]">Selecciona un cliente arriba para cargar los sectores</span>;
   }
   if (fincasCargando) {
     return <span className="text-xs text-[#6B7684]">Cargando sectores...</span>;
@@ -401,7 +401,7 @@ function CeldaSectorPreview({
     );
   }
   if (esGrupo && !tieneFincas) {
-    return <span className="text-xs text-amber-700">Sin sectores — dalos de alta en Clientes</span>;
+    return <span className="text-xs text-amber-700">Sin sectores — regístralos en Clientes</span>;
   }
   // Cliente individual sin fincas: el sector es texto libre
   return (
@@ -456,7 +456,7 @@ function CorrectorSectorMasivo({
     <div className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
       <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600" />
       <span className="text-xs font-medium text-amber-900">
-        {cantidad} ítem(s) con sector no reconocido{sectorTexto ? ` "${sectorTexto}"` : ''} entre los de {nombreCliente}. Corregí el sector y se aplicará a todos:
+        {cantidad} ítem(s) con sector no reconocido{sectorTexto ? ` "${sectorTexto}"` : ''} entre los de {nombreCliente}. Corrige el sector y se aplicará a todos:
       </span>
       <Select
         onValueChange={(v) => {
@@ -547,10 +547,10 @@ export function OrdenesTab() {
         const problemas: string[] = [];
         if (!it.productoId) {
           const ya = (it.problemas || []).find(p => p.toLowerCase().includes('producto'));
-          problemas.push(ya || `El producto "${it.producto}" no está registrado. Dalo de alta en Productos (o agregalo como alias de uno existente).`);
+          problemas.push(ya || `El producto "${it.producto}" no está registrado. Regístralo en Productos (o agrégalo como alias de un producto existente).`);
         }
         if (!cliente) {
-          problemas.push('No se pudo identificar al cliente de la factura. Elegilo en el selector de arriba o dalo de alta en Clientes.');
+          problemas.push('No se pudo identificar al cliente de la factura. Elígelo en el selector superior o regístralo en Clientes.');
         }
         if (cliente && esGrupo && !nuevoFincaId) {
           const sectorMostrado = nuevoFincaNombre && nuevoFincaNombre !== '-' ? nuevoFincaNombre : (it.finca && it.finca !== '-' ? it.finca : '-');
@@ -632,11 +632,11 @@ export function OrdenesTab() {
           if (!it.productoId) {
             const ya = (it.problemas || []).find(p => p.toLowerCase().includes('producto'));
             problemas.push(
-              ya || `El producto "${it.producto}" no está registrado. Dalo de alta en Productos (o agregalo como alias de uno existente).`
+              ya || `El producto "${it.producto}" no está registrado. Regístralo en Productos (o agrégalo como alias de un producto existente).`
             );
           }
           if (!cliente) {
-            problemas.push('No se pudo identificar al cliente de la factura. Elegilo en el selector de arriba o dalo de alta en Clientes.');
+            problemas.push('No se pudo identificar al cliente de la factura. Elígelo en el selector superior o regístralo en Clientes.');
           }
           if (cliente && esGrupo && !nuevoFincaId) {
             problemas.push(
@@ -1006,7 +1006,7 @@ export function OrdenesTab() {
 
     if (bloqueadas.length > 0) {
       toast.error(
-        `${bloqueadas.length} factura(s) no se cargaron: tienen datos sin registrar. Revisá el detalle en rojo.`
+        `${bloqueadas.length} factura(s) no se cargaron: tienen datos sin registrar. Revisa el detalle en rojo.`
       );
     }
     if (itemsConCliente.length === 0) return;
@@ -1511,8 +1511,8 @@ export function OrdenesTab() {
                         <p className="flex items-start gap-1.5 text-xs text-[#B91C1C]">
                           <AlertTriangle className="h-4 w-4 shrink-0 mt-px" />
                           <span>
-                            {facturasBloqueadas} factura(s) con datos sin registrar. Dalos de alta y volvé a subirlas:
-                            si entran así, sus ítems no van a generar comisión.
+                            {facturasBloqueadas} factura(s) con datos sin registrar. Regístralos y vuelve a subirlos:
+                            si se cargan así, sus ítems no generarán comisión.
                           </span>
                         </p>
                       )}
