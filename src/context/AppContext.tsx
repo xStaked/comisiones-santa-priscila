@@ -19,6 +19,8 @@ import {
   desasignarComisionista as apiDesasignarComisionista,
   asignarGlobal as apiAsignarGlobal,
   limpiarOrdenes as apiLimpiarOrdenes,
+  recalcularOrden as apiRecalcularOrden,
+  recalcularOrdenesMasivo as apiRecalcularOrdenesMasivo,
   fetchLiquidaciones,
   createLiquidacion,
   deleteLiquidacion as apiDeleteLiquidacion,
@@ -40,6 +42,8 @@ import {
   deleteTarifaClienteProducto as apiDeleteTarifaClienteProducto,
   updateTarifasClienteProductoMasivo as apiUpdateTarifasMasivo,
   fetchRetenciones,
+  type ModoRecalculo,
+  type ResultadoRecalculo,
 } from '@/lib/api';
 import { setPeriodosRetencion } from '@/lib/export-utils';
 
@@ -64,6 +68,7 @@ interface AppContextType {
   assignComisionistasGlobal: (comisionistaIds: string[]) => void;
   addComisionistaToItem: (itemId: string, comisionistaId: string) => void;
   removeComisionistaFromItem: (itemId: string, comisionistaId: string) => void;
+  recalcularComisiones: (ordenIds: string[], modo?: ModoRecalculo) => Promise<ResultadoRecalculo>;
 
   liquidaciones: Liquidacion[];
   saveLiquidacion: (nombre: string, mes: string, ordenItemIds?: string[], comisionistaIds?: string[]) => void;
@@ -202,10 +207,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const deleteComisionistaMutation = useMutation({
     mutationFn: apiDeleteComisionista,
+    onMutate: () => queryClient.cancelQueries({ queryKey: ['ordenes'] }),
     onSuccess: () => {
+      toast.success('Comisionista eliminado');
+    },
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['comisionistas'] });
       queryClient.invalidateQueries({ queryKey: ['ordenes'] });
-      toast.success('Comisionista eliminado');
     },
     onError: (err: any) => {
       toast.error(err?.response?.data?.detail || 'Error al eliminar comisionista');
@@ -215,9 +223,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // Mutations: Ordenes
   const createOrdenesMutation = useMutation({
     mutationFn: (items: OrdenItem[]) => createOrdenes(items.map(ordenItemToCreatePayload)),
+    onMutate: () => queryClient.cancelQueries({ queryKey: ['ordenes'] }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['ordenes'] });
       toast.success('Órdenes agregadas');
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['ordenes'] });
     },
     onError: (err: any) => {
       toast.error(err?.response?.data?.detail || 'Error al agregar órdenes');
@@ -226,9 +237,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const updateOrdenMutation = useMutation({
     mutationFn: ({ id, data }: { id: string; data: Partial<OrdenItem> }) => apiUpdateOrden(id, data),
+    onMutate: () => queryClient.cancelQueries({ queryKey: ['ordenes'] }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['ordenes'] });
       toast.success('Orden actualizada');
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['ordenes'] });
     },
     onError: (err: any) => {
       toast.error(err?.response?.data?.detail || 'Error al actualizar orden');
@@ -238,9 +252,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const updateEstadoOrdenMutation = useMutation({
     mutationFn: ({ ordenId, estado, fechaPago }: { ordenId: string; estado: EstadoOrden; fechaPago?: string | null }) =>
       apiUpdateEstadoOrdenGrupo(ordenId, estado, fechaPago),
+    onMutate: () => queryClient.cancelQueries({ queryKey: ['ordenes'] }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['ordenes'] });
       toast.success('Estado de orden actualizado');
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['ordenes'] });
     },
     onError: (err: any) => {
       toast.error(err?.response?.data?.detail || 'Error al actualizar estado de orden');
@@ -250,13 +267,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const updateEstadoOrdenesMasivoMutation = useMutation({
     mutationFn: ({ ordenIds, estado, fechaPago }: { ordenIds: string[]; estado: EstadoOrden; fechaPago?: string | null }) =>
       apiUpdateEstadoOrdenesMasivo(ordenIds, estado, fechaPago),
+    onMutate: () => queryClient.cancelQueries({ queryKey: ['ordenes'] }),
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['ordenes'] });
       if (data.omitidas.length > 0) {
         toast.success(`${data.actualizadas} orden(es) actualizadas; ${data.omitidas.length} omitida(s) por tener ítems liquidados`);
       } else {
         toast.success(`${data.actualizadas} orden(es) actualizadas`);
       }
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['ordenes'] });
     },
     onError: (err: any) => {
       toast.error(err?.response?.data?.detail || 'Error al actualizar órdenes');
@@ -265,9 +285,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const deleteOrdenMutation = useMutation({
     mutationFn: apiDeleteOrden,
+    onMutate: () => queryClient.cancelQueries({ queryKey: ['ordenes'] }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['ordenes'] });
       toast.success('Orden eliminada');
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['ordenes'] });
     },
     onError: (err: any) => {
       toast.error(err?.response?.data?.detail || 'Error al eliminar orden');
@@ -280,21 +303,26 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     mutationFn: async (ids: string[]) => {
       for (const id of ids) await apiDeleteOrden(id);
     },
+    onMutate: () => queryClient.cancelQueries({ queryKey: ['ordenes'] }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['ordenes'] });
       toast.success('Órdenes eliminadas');
     },
     onError: (err: any) => {
-      queryClient.invalidateQueries({ queryKey: ['ordenes'] });
       toast.error(err?.response?.data?.detail || 'Error al eliminar órdenes');
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['ordenes'] });
     },
   });
 
   const limpiarOrdenesMutation = useMutation({
     mutationFn: apiLimpiarOrdenes,
+    onMutate: () => queryClient.cancelQueries({ queryKey: ['ordenes'] }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['ordenes'] });
       toast.success('Órdenes limpiadas');
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['ordenes'] });
     },
     onError: (err: any) => {
       toast.error(err?.response?.data?.detail || 'Error al limpiar órdenes');
@@ -304,9 +332,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const asignarGlobalMutation = useMutation({
     mutationFn: ({ ordenIds, comisionistaIds }: { ordenIds: string[]; comisionistaIds: string[] }) =>
       apiAsignarGlobal(ordenIds, comisionistaIds),
+    onMutate: () => queryClient.cancelQueries({ queryKey: ['ordenes'] }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['ordenes'] });
       toast.success('Comisionistas asignados globalmente');
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['ordenes'] });
     },
     onError: (err: any) => {
       toast.error(err?.response?.data?.detail || 'Error al asignar comisionistas');
@@ -316,7 +347,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const asignarComisionistaMutation = useMutation({
     mutationFn: ({ itemId, comisionistaId }: { itemId: string; comisionistaId: string }) =>
       apiAsignarComisionista(itemId, comisionistaId),
-    onSuccess: () => {
+    onMutate: () => queryClient.cancelQueries({ queryKey: ['ordenes'] }),
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['ordenes'] });
     },
     onError: (err: any) => {
@@ -327,7 +359,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const desasignarComisionistaMutation = useMutation({
     mutationFn: ({ itemId, comisionistaId }: { itemId: string; comisionistaId: string }) =>
       apiDesasignarComisionista(itemId, comisionistaId),
-    onSuccess: () => {
+    onMutate: () => queryClient.cancelQueries({ queryKey: ['ordenes'] }),
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['ordenes'] });
     },
     onError: (err: any) => {
@@ -335,18 +368,50 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     },
   });
 
+  // Recálculo de comisiones: reasigna comisionistas con los catálogos actuales
+  // sin borrar la factura. Una sola factura usa el endpoint por grupo; varias,
+  // el masivo. `agregar` solo inserta faltantes, `sincronizar` además quita
+  // pendientes que ya no aplican.
+  const recalcularComisionesMutation = useMutation({
+    mutationFn: ({ ordenIds, modo }: { ordenIds: string[]; modo?: ModoRecalculo }) =>
+      ordenIds.length === 1
+        ? apiRecalcularOrden(ordenIds[0], modo)
+        : apiRecalcularOrdenesMasivo({ ordenIds, modo }),
+    onMutate: () => queryClient.cancelQueries({ queryKey: ['ordenes'] }),
+    onSuccess: (data) => {
+      const partes: string[] = [];
+      if (data.agregadas > 0) partes.push(`${data.agregadas} asignación(es) agregada(s)`);
+      if (data.quitadas > 0) partes.push(`${data.quitadas} asignación(es) quitada(s)`);
+      if (data.omitidas.length > 0) partes.push(`${data.omitidas.length} omitida(s) por liquidada`);
+      toast.success(partes.length > 0 ? `Recálculo: ${partes.join(' · ')}` : 'Recálculo sin cambios');
+    },
+    onError: (err: unknown) => {
+      const detalle = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      toast.error(detalle || 'Error al recalcular comisiones');
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['ordenes'] });
+    },
+  });
+
   // Mutations: Liquidaciones
   const createLiquidacionMutation = useMutation({
     mutationFn: ({ nombre, mes, ordenItemIds, comisionistaIds }: { nombre: string; mes: string; ordenItemIds: string[]; comisionistaIds?: string[] }) =>
       createLiquidacion({ nombre, mes, ordenItemIds, comisionistaIds }),
+    onMutate: () => Promise.all([
+      queryClient.cancelQueries({ queryKey: ['ordenes'] }),
+      queryClient.cancelQueries({ queryKey: ['liquidaciones'] }),
+    ]),
     onSuccess: (data: any) => {
-      queryClient.invalidateQueries({ queryKey: ['ordenes'] });
-      queryClient.invalidateQueries({ queryKey: ['liquidaciones'] });
       if (data.omitidos && data.omitidos.length > 0) {
         toast.success(`Liquidación guardada. Se omitieron ${data.omitidos.length} ítem(s) que ya no están pagados.`);
       } else {
         toast.success('Liquidación guardada');
       }
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['ordenes'] });
+      queryClient.invalidateQueries({ queryKey: ['liquidaciones'] });
     },
     onError: (err: any) => {
       toast.error(err?.response?.data?.detail || 'Error al guardar liquidación');
@@ -355,10 +420,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const deleteLiquidacionMutation = useMutation({
     mutationFn: apiDeleteLiquidacion,
+    onMutate: () => Promise.all([
+      queryClient.cancelQueries({ queryKey: ['ordenes'] }),
+      queryClient.cancelQueries({ queryKey: ['liquidaciones'] }),
+    ]),
     onSuccess: () => {
+      toast.success('Liquidación eliminada');
+    },
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['ordenes'] });
       queryClient.invalidateQueries({ queryKey: ['liquidaciones'] });
-      toast.success('Liquidación eliminada');
     },
     onError: (err: any) => {
       toast.error(err?.response?.data?.detail || 'Error al eliminar liquidación');
@@ -367,10 +438,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const restaurarLiquidacionMutation = useMutation({
     mutationFn: apiRestaurarLiquidacion,
+    onMutate: () => Promise.all([
+      queryClient.cancelQueries({ queryKey: ['ordenes'] }),
+      queryClient.cancelQueries({ queryKey: ['liquidaciones'] }),
+    ]),
     onSuccess: () => {
+      toast.success('Liquidación restaurada');
+    },
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['ordenes'] });
       queryClient.invalidateQueries({ queryKey: ['liquidaciones'] });
-      toast.success('Liquidación restaurada');
     },
     onError: (err: any) => {
       toast.error(err?.response?.data?.detail || 'Error al restaurar liquidación');
@@ -379,9 +456,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const seedDemoMutation = useMutation({
     mutationFn: seedDemo,
+    onMutate: () => queryClient.cancelQueries({ queryKey: ['ordenes'] }),
     onSuccess: () => {
-      queryClient.invalidateQueries();
       toast.success('Datos reales cargados');
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries();
     },
     onError: (err: any) => {
       toast.error(err?.response?.data?.detail || 'Error al cargar datos reales');
@@ -402,10 +482,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const updateClienteMutation = useMutation({
     mutationFn: ({ id, data }: { id: string; data: Partial<Cliente> }) => apiUpdateCliente(id, data),
+    onMutate: () => queryClient.cancelQueries({ queryKey: ['ordenes'] }),
     onSuccess: () => {
+      toast.success('Cliente actualizado');
+    },
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['clientes'] });
       queryClient.invalidateQueries({ queryKey: ['ordenes'] });
-      toast.success('Cliente actualizado');
     },
     onError: (err: any) => {
       toast.error(err?.response?.data?.detail || 'Error al actualizar cliente');
@@ -591,6 +674,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [desasignarComisionistaMutation]
   );
 
+  const recalcularComisiones = useCallback(
+    (ordenIds: string[], modo?: ModoRecalculo) =>
+      recalcularComisionesMutation.mutateAsync({ ordenIds, modo }),
+    [recalcularComisionesMutation]
+  );
+
   const saveLiquidacion = useCallback(
     (nombre: string, mes: string, ordenItemIds?: string[], comisionistaIds?: string[]) => {
       const ids = ordenItemIds ?? ordenItems.filter((o) => o.estado === 'pagada').map((o) => o.id);
@@ -709,6 +798,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         assignComisionistasGlobal,
         addComisionistaToItem,
         removeComisionistaFromItem,
+        recalcularComisiones,
         liquidaciones,
         saveLiquidacion,
         deleteLiquidacion,

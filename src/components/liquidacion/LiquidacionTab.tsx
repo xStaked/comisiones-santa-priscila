@@ -605,7 +605,7 @@ export function LiquidacionTab() {
                               </div>
                               <div className="flex flex-wrap justify-end gap-1.5">
                                 {item.comisionesAsignadas.length === 0 ? (
-                                  <span className="text-xs text-[#98A2B3]">Sin asignar</span>
+                                  <span className="text-xs text-[#98A2B3]" title="Sin comisionista asignado al subir — recalcúlala desde Facturas">Sin asignar</span>
                                 ) : (
                                   item.comisionesAsignadas.map((com) => (
                                     <span

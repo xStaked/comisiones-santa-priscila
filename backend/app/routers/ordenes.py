@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from datetime import date
 from decimal import Decimal
-from typing import Any, List, Optional
+from typing import Any, List, Literal, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Body, Depends, HTTPException, status
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func
 from sqlalchemy.orm import Session, selectinload
 
@@ -14,12 +14,17 @@ from app.database import get_db
 from app.models.user import User
 from app.models.orden import Asignacion, EstadoOrden, Orden, OrdenItem
 from app.models.proveedor import Proveedor
+from app.models.tarifa_cliente_producto import TarifaClienteProducto
 from app.schemas.orden import OrdenCreate, OrdenItemCreate, OrdenItemResponse, OrdenItemUpdate
 from app.dependencies import get_current_user
 from app.services.catalog_normalization import normalizar_razon_social
 from app.services.liquidacion import (
     _buscar_tarifa_especifica,
     _tiene_tarifas_especificas,
+)
+from app.services.order_extraction_normalizer import (
+    _buscar_finca,
+    _buscar_producto,
 )
 
 router = APIRouter()
@@ -725,6 +730,244 @@ def asignar_global(body: AsignarGlobalBody, db: Session = Depends(get_db), curre
 
         db.commit()
         return {"message": "Asignaciones actualizadas"}
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
+        ) from exc
+
+
+class RecalcularBody(BaseModel):
+    """Modo de recálculo: `agregar` solo inserta asignaciones faltantes (jamás
+    borra, respeta lo manual); `sincronizar` además quita las pendientes que ya
+    no aplican."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    modo: Literal["agregar", "sincronizar"] = "agregar"
+
+
+class RecalcularMasivoBody(RecalcularBody):
+    orden_ids: List[UUID] = Field(default_factory=list, alias="ordenIds")
+    orden_item_ids: List[UUID] = Field(default_factory=list, alias="ordenItemIds")
+
+
+def _candidatos_recalculo(db: Session) -> list[UUID]:
+    """Comisionistas con al menos una tarifa específica activa: los mismos que el
+    extractor asigna al subir. Los solo-globales nunca se asignan en la subida,
+    así que el recálculo tampoco los activa por sorpresa."""
+    filas = (
+        db.query(TarifaClienteProducto.comisionista_id)
+        .filter(TarifaClienteProducto.activo.is_(True))
+        .distinct()
+        .all()
+    )
+    return [fila[0] for fila in filas]
+
+
+def _backfill_fks_recalculo(db: Session, oi: OrdenItem) -> bool:
+    """Rellena FKs de catálogo hoy NULL que ahora resuelven (alias nuevo,
+    sector recién registrado). Solo NULLs, nunca sobrescribe. Devuelve True si
+    rellenó algo.
+
+    El ítem no guarda texto de cliente, así que `cliente_id` se hereda de la
+    orden padre o de la finca resuelta; producto y finca sí se resuelven por su
+    texto con los mismos buscadores de la subida.
+    """
+    cambio = False
+    if oi.producto_id is None and oi.producto:
+        producto = _buscar_producto(db, oi.producto)
+        if producto is not None:
+            oi.producto_id = producto.id
+            cambio = True
+    if (
+        oi.cliente_id is None
+        and oi.orden is not None
+        and oi.orden.cliente_id is not None
+    ):
+        oi.cliente_id = oi.orden.cliente_id
+        cambio = True
+    if oi.finca_id is None:
+        nombre = oi.finca if oi.finca and oi.finca != "-" else oi.sector
+        if nombre:
+            finca = _buscar_finca(db, nombre, oi.cliente)
+            if finca is not None:
+                oi.finca_id = finca.id
+                cambio = True
+                if oi.cliente_id is None:
+                    oi.cliente_id = finca.cliente_id
+                    cambio = True
+    return cambio
+
+
+def _recalcular_item(
+    db: Session, oi: OrdenItem, candidatos: list[UUID], modo: str
+) -> tuple[bool, int, int, dict | None]:
+    """Recalcula las asignaciones de un ítem. Lo liquidado no se toca.
+
+    Devuelve (actualizado, agregadas, quitadas, omitida): `omitida` es
+    `{"id", "motivo"}` cuando el ítem se salta, o None si se procesó.
+    """
+    if oi.estado == EstadoOrden.liquidada:
+        return (False, 0, 0, {"id": str(oi.id), "motivo": "ítem liquidado"})
+    if _item_o_grupo_tiene_items_liquidados(db, oi):
+        return (
+            False,
+            0,
+            0,
+            {"id": str(oi.id), "motivo": "factura con ítems liquidados"},
+        )
+    if _tiene_asignaciones_liquidadas(oi):
+        return (
+            False,
+            0,
+            0,
+            {"id": str(oi.id), "motivo": "tiene asignaciones ya liquidadas"},
+        )
+
+    actualizado = _backfill_fks_recalculo(db, oi)
+
+    aplicables = set(_comisionistas_aplicables(db, oi, candidatos))
+    existentes = {a.comisionista_id for a in oi.asignaciones}
+    agregadas = 0
+    for cid in aplicables - existentes:
+        db.add(Asignacion(orden_item_id=oi.id, comisionista_id=cid))
+        agregadas += 1
+    quitadas = 0
+    if modo == "sincronizar":
+        for asignacion in list(oi.asignaciones):
+            if (
+                asignacion.liquidacion_id is None
+                and asignacion.comisionista_id not in aplicables
+            ):
+                db.delete(asignacion)
+                quitadas += 1
+    if agregadas or quitadas:
+        actualizado = True
+    return (actualizado, agregadas, quitadas, None)
+
+
+def _recalcular_items(
+    db: Session, items: list[OrdenItem], modo: str
+) -> dict:
+    """Aplica `_recalcular_item` a cada ítem y agrega los conteos de respuesta."""
+    candidatos = _candidatos_recalculo(db)
+    actualizados = 0
+    agregadas = 0
+    quitadas = 0
+    omitidas: list[dict] = []
+    vistos: set = set()
+    for oi in items:
+        if oi.id in vistos:
+            continue
+        vistos.add(oi.id)
+        actualizado, n_agregadas, n_quitadas, omitida = _recalcular_item(
+            db, oi, candidatos, modo
+        )
+        if omitida is not None:
+            omitidas.append(omitida)
+            continue
+        if actualizado:
+            actualizados += 1
+        agregadas += n_agregadas
+        quitadas += n_quitadas
+    return {
+        "actualizados": actualizados,
+        "agregadas": agregadas,
+        "quitadas": quitadas,
+        "omitidas": omitidas,
+    }
+
+
+def _items_para_recalculo(db: Session, filtros: list) -> list[OrdenItem]:
+    """Ítems con asignaciones y orden padre precargadas (los guards y el
+    backfill las necesitan)."""
+    return (
+        db.query(OrdenItem)
+        .options(
+            selectinload(OrdenItem.asignaciones),
+            selectinload(OrdenItem.orden),
+        )
+        .filter(*filtros)
+        .all()
+    )
+
+
+@router.post("/grupos/{orden_id}/recalcular")
+def recalcular_grupo(
+    orden_id: UUID,
+    body: RecalcularBody | None = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Recalcula las asignaciones de una factura sin borrarla ni resubirla."""
+    existe = db.query(Orden.id).filter(Orden.id == orden_id).first()
+    if existe is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Orden no encontrada"
+        )
+    modo = body.modo if body else "agregar"
+    try:
+        resultado = _recalcular_items(
+            db, _items_para_recalculo(db, [OrdenItem.orden_id == orden_id]), modo
+        )
+        db.commit()
+        return resultado
+    except HTTPException:
+        raise
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
+        ) from exc
+
+
+@router.post("/recalcular")
+def recalcular_masivo(
+    body: RecalcularMasivoBody | None = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Recalcula asignaciones en masa. Sin ids recorre todo lo no liquidado."""
+    modo = body.modo if body else "agregar"
+    orden_ids = body.orden_ids if body else []
+    orden_item_ids = body.orden_item_ids if body else []
+
+    try:
+        omitidas: list[dict] = []
+        items: list[OrdenItem] = []
+        if orden_item_ids:
+            encontrados = _items_para_recalculo(
+                db, [OrdenItem.id.in_(orden_item_ids)]
+            )
+            vistos = {oi.id for oi in encontrados}
+            for iid in orden_item_ids:
+                if iid not in vistos:
+                    omitidas.append({"id": str(iid), "motivo": "no encontrada"})
+            items.extend(encontrados)
+        if orden_ids:
+            filas = (
+                db.query(Orden.id).filter(Orden.id.in_(orden_ids)).all()
+            )
+            vistas = {fila[0] for fila in filas}
+            for oid in orden_ids:
+                if oid not in vistas:
+                    omitidas.append({"id": str(oid), "motivo": "orden no encontrada"})
+            if vistas:
+                items.extend(
+                    _items_para_recalculo(db, [OrdenItem.orden_id.in_(vistas)])
+                )
+        if not orden_ids and not orden_item_ids:
+            items = _items_para_recalculo(
+                db, [OrdenItem.estado != EstadoOrden.liquidada]
+            )
+
+        resultado = _recalcular_items(db, items, modo)
+        resultado["omitidas"] = omitidas + resultado["omitidas"]
+        db.commit()
+        return resultado
+    except HTTPException:
+        raise
     except Exception as exc:
         db.rollback()
         raise HTTPException(
