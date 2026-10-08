@@ -75,21 +75,24 @@ def actualizar_comisionista(
     comisionista.nombre = data.nombre
     comisionista.tipo = data.tipo
 
-    db.query(Tarifa).filter(Tarifa.comisionista_id == id).delete(
-        synchronize_session=False
-    )
-
-    for t in data.tarifas:
-        db.add(
-            Tarifa(
-                comisionista_id=comisionista.id,
-                tipo=TipoTarifa(t.tipo),
-                valor=t.valor,
-                proveedores_excluidos=t.proveedores_excluidos or [],
-                umbral_kg=t.umbral_kg,
-                valor_sobre_umbral=t.valor_sobre_umbral,
-            )
+    # Las tarifas globales se gestionan aparte: si el PUT no trae tarifas,
+    # solo se actualizan nombre y tipo y se conservan las existentes.
+    if data.tarifas is not None:
+        db.query(Tarifa).filter(Tarifa.comisionista_id == id).delete(
+            synchronize_session=False
         )
+
+        for t in data.tarifas:
+            db.add(
+                Tarifa(
+                    comisionista_id=comisionista.id,
+                    tipo=TipoTarifa(t.tipo),
+                    valor=t.valor,
+                    proveedores_excluidos=t.proveedores_excluidos or [],
+                    umbral_kg=t.umbral_kg,
+                    valor_sobre_umbral=t.valor_sobre_umbral,
+                )
+            )
 
     try:
         db.commit()

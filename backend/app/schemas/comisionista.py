@@ -36,7 +36,7 @@ class ComisionistaCreate(ComisionistaBase):
 
 
 class ComisionistaUpdate(ComisionistaBase):
-    tarifas: List[TarifaCreate]
+    tarifas: Optional[List[TarifaCreate]] = None
 
 
 class ComisionistaResponse(ComisionistaBase):

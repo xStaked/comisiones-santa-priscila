@@ -107,6 +107,15 @@ export function ComisionistasTab() {
       toast.error('Ingresa el nombre del comisionista');
       return;
     }
+
+    // Al editar solo se cambian nombre y tipo; las tarifas se conservan tal cual.
+    if (editing) {
+      updateComisionista(editing.id, { nombre: form.nombre, tipo: form.tipo });
+      resetForm();
+      setOpen(false);
+      return;
+    }
+
     const tarifas: TarifaComision[] = form.tarifas
       .filter((t) => t.valor && parseFloat(t.valor) > 0)
       .map((t) => ({
@@ -123,11 +132,7 @@ export function ComisionistasTab() {
       return;
     }
 
-    if (editing) {
-      updateComisionista(editing.id, { nombre: form.nombre, tipo: form.tipo, tarifas });
-    } else {
-      addComisionista({ nombre: form.nombre, tipo: form.tipo, tarifas });
-    }
+    addComisionista({ nombre: form.nombre, tipo: form.tipo, tarifas });
     resetForm();
     setOpen(false);
   };
@@ -308,6 +313,7 @@ export function ComisionistasTab() {
               </Select>
             </div>
 
+            {!editing && (
             <div className="space-y-3">
               <Label>Tarifas de comisión</Label>
               {form.tarifas.map((tarifa, idx) => (
@@ -371,6 +377,7 @@ export function ComisionistasTab() {
                 Agregar otra tarifa
               </Button>
             </div>
+            )}
 
             <div className="flex justify-end gap-2 pt-2">
               <Button
