@@ -478,7 +478,7 @@ function CorrectorSectorMasivo({
 }
 
 export function OrdenesTab() {
-  const { comisionistas, ordenItems, addOrdenItems, updateOrdenItem, updateEstadoOrden, updateEstadoOrdenesMasivo, deleteOrdenItem, deleteOrdenItems, clearOrdenItems, assignComisionistasGlobal, clientes, productos, tarifasClienteProducto } = useApp();
+  const { comisionistas, ordenItems, addOrdenItems, updateOrdenItem, updateEstadoOrden, updateEstadoOrdenesMasivo, deleteOrdenItem, deleteOrdenItems, clearOrdenItems, assignComisionistasGlobal, recalcularComisiones, clientes, productos, tarifasClienteProducto } = useApp();
   const [activeForm, setActiveForm] = useState<'manual' | 'pdf'>('manual');
   // La carga vive en un panel lateral (rediseño), no en una tarjeta siempre visible.
   const [sheetAbierto, setSheetAbierto] = useState(false);
@@ -855,6 +855,16 @@ export function OrdenesTab() {
     if (!confirm(`¿Eliminar ${selectedOrdenIds.size} orden${selectedOrdenIds.size === 1 ? '' : 'es'} y sus productos?`)) return;
     deleteOrdenItems(itemIds)
       .then(() => setSelectedOrdenIds(new Set()))
+      .catch(() => {});
+  };
+
+  // Recálculo de comisiones con los catálogos actuales, sin borrar la factura.
+  // `agregar` solo inserta asignaciones faltantes; `sincronizar` además quita
+  // las pendientes que ya no aplican (puede quitar una asignación manual).
+  const pedirRecalculo = (ordenIds: string[], modo: 'agregar' | 'sincronizar', limpiarSeleccion = false) => {
+    if (modo === 'sincronizar' && !confirm('Sincronizar quita las asignaciones pendientes que ya no aplican (puede quitar una asignación manual). ¿Continuar?')) return;
+    recalcularComisiones(ordenIds, modo)
+      .then(() => { if (limpiarSeleccion) setSelectedOrdenIds(new Set()); })
       .catch(() => {});
   };
 
@@ -1751,6 +1761,12 @@ export function OrdenesTab() {
                   </Select>
                 )}
                 {selectedOrdenIds.size > 0 && (
+                  <Button variant="ghost" size="sm" onClick={() => pedirRecalculo(Array.from(selectedOrdenIds), 'agregar', true)} className="h-7 text-xs text-[#0B5E56] hover:text-[#0A4A44] hover:bg-[#E6F2F0] rounded-lg">
+                    <Calculator className="h-3.5 w-3.5 mr-1" />
+                    {`Recalcular (${selectedOrdenIds.size})`}
+                  </Button>
+                )}
+                {selectedOrdenIds.size > 0 && (
                   <Button variant="ghost" size="sm" onClick={handleEliminarMasivo} className="h-7 text-xs text-[#B91C1C] hover:text-[#991B1B] hover:bg-[#FDECEC] rounded-lg">
                     <Trash2 className="h-3.5 w-3.5 mr-1" />
                     {`Eliminar (${selectedOrdenIds.size})`}
@@ -1964,14 +1980,23 @@ export function OrdenesTab() {
                               </label>
                             )}
                           </div>
-                          <Button variant="ghost" size="sm" disabled={orden.estado === 'liquidada' || orden.items.some(item => item.estado === 'liquidada')} className="text-[#B91C1C] hover:text-[#991B1B] hover:bg-[#FDECEC] rounded-lg disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-red-300" onClick={() => {
-                            if (confirm('¿Eliminar toda la orden y sus productos?')) {
-                              orden.items.forEach(item => deleteOrdenItem(item.id));
-                            }
-                          }}>
-                            <Trash2 className="h-3.5 w-3.5 mr-1" />
-                            Eliminar orden
-                          </Button>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Button variant="ghost" size="sm" disabled={orden.estado === 'liquidada' || orden.items.some(item => item.estado === 'liquidada')} title="Agrega las asignaciones faltantes según las tarifas actuales (no quita nada)" className="text-[#0B5E56] hover:text-[#0A4A44] hover:bg-[#E6F2F0] rounded-lg disabled:opacity-40 disabled:hover:bg-transparent" onClick={() => pedirRecalculo([orden.id], 'agregar')}>
+                              <Calculator className="h-3.5 w-3.5 mr-1" />
+                              Recalcular
+                            </Button>
+                            <Button variant="ghost" size="sm" disabled={orden.estado === 'liquidada' || orden.items.some(item => item.estado === 'liquidada')} title="Sincroniza asignaciones con las tarifas actuales (quita pendientes que ya no aplican)" className="text-[#6B7684] hover:text-[#0B1220] hover:bg-[#F0F2F5] rounded-lg disabled:opacity-40 disabled:hover:bg-transparent" onClick={() => pedirRecalculo([orden.id], 'sincronizar')}>
+                              Sincronizar
+                            </Button>
+                            <Button variant="ghost" size="sm" disabled={orden.estado === 'liquidada' || orden.items.some(item => item.estado === 'liquidada')} className="text-[#B91C1C] hover:text-[#991B1B] hover:bg-[#FDECEC] rounded-lg disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-red-300" onClick={() => {
+                              if (confirm('¿Eliminar toda la orden y sus productos?')) {
+                                orden.items.forEach(item => deleteOrdenItem(item.id));
+                              }
+                            }}>
+                              <Trash2 className="h-3.5 w-3.5 mr-1" />
+                              Eliminar orden
+                            </Button>
+                          </div>
                         </div>
                       </div>
                     )}

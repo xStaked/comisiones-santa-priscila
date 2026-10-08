@@ -189,6 +189,33 @@ export async function limpiarOrdenes() {
   await api.post('/api/v1/ordenes/limpiar');
 }
 
+// Recálculo de comisiones: reasigna comisionistas con los catálogos actuales.
+// `agregar` solo inserta asignaciones faltantes (respeta lo manual);
+// `sincronizar` además quita pendientes que ya no aplican.
+export type ModoRecalculo = 'agregar' | 'sincronizar';
+
+export interface OmitidaRecalculo {
+  id: string;
+  motivo: string;
+}
+
+export interface ResultadoRecalculo {
+  actualizados: number;
+  agregadas: number;
+  quitadas: number;
+  omitidas: OmitidaRecalculo[];
+}
+
+export async function recalcularOrden(ordenId: string, modo?: ModoRecalculo) {
+  const res = await api.post(`/api/v1/ordenes/grupos/${ordenId}/recalcular`, toSnakeCase({ modo }));
+  return toCamelCase<ResultadoRecalculo>(res.data);
+}
+
+export async function recalcularOrdenesMasivo(datos: { ordenIds?: string[]; ordenItemIds?: string[]; modo?: ModoRecalculo }) {
+  const res = await api.post('/api/v1/ordenes/recalcular', toSnakeCase(datos));
+  return toCamelCase<ResultadoRecalculo>(res.data);
+}
+
 function snapshotItemToOrdenItem(item: any): OrdenItem {
   return {
     id: item.id,
