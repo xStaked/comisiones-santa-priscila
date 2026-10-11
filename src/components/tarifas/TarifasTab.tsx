@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react';
 import { Plus, Pencil, Trash2, Percent, FileSpreadsheet } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
-import * as XLSX from 'xlsx';
+import * as XLSX from 'xlsx-js-style';
 import { useApp } from '@/context/AppContext';
 import { TarifaClienteProducto, Finca, Proveedor } from '@/types';
 import { fetchProveedores } from '@/lib/api';

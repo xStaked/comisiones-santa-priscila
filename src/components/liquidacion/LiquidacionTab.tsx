@@ -3,7 +3,7 @@
 import { useState, useMemo } from 'react';
 import { FileText, FileSpreadsheet, Save, Calculator, ChevronRight } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
-import * as XLSX from 'xlsx';
+import * as XLSX from 'xlsx-js-style';
 import { useApp } from '@/context/AppContext';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
 import { exportarPDF, exportarExcel, calcularDetalleComision, getCantidadParaTarifaKg, sectorDeItem } from '@/lib/export-utils';

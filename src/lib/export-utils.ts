@@ -1,12 +1,15 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import * as XLSX from 'xlsx';
+// xlsx-js-style: fork de SheetJS que sí escribe estilos de celda (fill, font,
+// border, alignment). La API pública es compatible con `xlsx`, así que solo
+// cambia el import. Lo necesitamos para colorear secciones por razón social
+// y los totales en el Excel de liquidación.
+import * as XLSX from 'xlsx-js-style';
 import { OrdenItem, Comisionista, TarifaClienteProducto, Cliente } from '@/types';
 import {
   normalizarTexto,
   normalizarNombreFinca,
   normalizarNombreProducto,
-  normalizarRazonSocial,
   ratioDifflib,
   UMBRAL_FINCA,
   UMBRAL_PRODUCTO,
@@ -574,9 +577,120 @@ export function exportarExcel(
   const comisionistaMap = new Map(comisionistas.map(c => [c.id, c]));
   const wb = XLSX.utils.book_new();
 
-  const nombresMes = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+  // Comisionista que el caller está liquidando. Cuando viene informado (caso
+  // típico del módulo de Liquidación) las líneas se imputan solo a esa persona;
+  // cuando viene vacío (ej. historial de liquidaciones ya guardadas) se usa
+  // el snapshot de comisiones, que ya viene con los valores por ítem.
+  const comisionistaOwner = nombreComisionista
+    ? comisionistas.find(c => c.nombre === nombreComisionista)
+    : undefined;
 
-  // El grupo empresarial es del CLIENTE de cada fila (las hojas siguen siendo por razón social/proveedor).
+  // ── Estilos de celda ──────────────────────────────────────────────────────
+  // Paleta deliberadamente sobria: el reporte va al cliente, no a un dev.
+  // xlsx-js-style es fork de SheetJS que sí escribe estilos de celda (la
+  // versión oficial solo lee, no escribe).
+  const thin = { style: 'thin' as const, color: { rgb: 'FF7F7F7F' } };
+  const borde = {
+    top: thin,
+    bottom: thin,
+    left: thin,
+    right: thin,
+  };
+  const estilos = {
+    tituloEmpresa: {
+      font: { bold: true, sz: 14, color: { rgb: 'FF0F172A' } },
+      alignment: { horizontal: 'center' as const, vertical: 'center' as const },
+    },
+    tituloComision: {
+      font: { bold: true, sz: 11, color: { rgb: 'FF334155' } },
+      alignment: { horizontal: 'center' as const, vertical: 'center' as const },
+    },
+    tituloFecha: {
+      font: { bold: true, sz: 11, color: { rgb: 'FF334155' } },
+      alignment: { horizontal: 'center' as const, vertical: 'center' as const },
+    },
+    // Cabecera de cliente. Alterna amarillo / verde claro para separar visualmente
+    // cada razón social en el sheet, igual que el modelo histórico de la hoja de
+    // cálculo manual que maneja el cliente.
+    clienteHeaderAmarillo: {
+      font: { bold: true, sz: 11, color: { rgb: 'FF0F172A' } },
+      fill: { fgColor: { rgb: 'FFFFEB3B' }, patternType: 'solid' as const },
+      alignment: { horizontal: 'left' as const, vertical: 'center' as const, indent: 1 },
+      border: borde,
+    },
+    clienteHeaderVerde: {
+      font: { bold: true, sz: 11, color: { rgb: 'FF0F172A' } },
+      fill: { fgColor: { rgb: 'FFC8E6A0' }, patternType: 'solid' as const },
+      alignment: { horizontal: 'left' as const, vertical: 'center' as const, indent: 1 },
+      border: borde,
+    },
+    columnaHeader: {
+      font: { bold: true, sz: 10, color: { rgb: 'FF0F172A' } },
+      fill: { fgColor: { rgb: 'FFE5E7EB' }, patternType: 'solid' as const },
+      alignment: { horizontal: 'center' as const, vertical: 'center' as const, wrapText: true },
+      border: borde,
+    },
+    celdaTexto: {
+      font: { sz: 10 },
+      alignment: { vertical: 'center' as const },
+      border: borde,
+    },
+    celdaFecha: {
+      font: { sz: 10 },
+      alignment: { horizontal: 'center' as const, vertical: 'center' as const },
+      border: borde,
+    },
+    celdaCantidad: {
+      font: { sz: 10 },
+      alignment: { horizontal: 'right' as const, vertical: 'center' as const },
+      border: borde,
+      numFmt: '#,##0',
+    },
+    celdaComision: {
+      font: { sz: 10 },
+      alignment: { horizontal: 'right' as const, vertical: 'center' as const },
+      border: borde,
+      numFmt: '"$ "#,##0.00',
+    },
+    celdaEstado: {
+      font: { sz: 10 },
+      alignment: { horizontal: 'center' as const, vertical: 'center' as const },
+      border: borde,
+    },
+    // Fila TOTAL al cierre de cada cliente. Amarillo claro para distinguirla
+    // del resto de la tabla sin saturar visualmente.
+    totalFila: {
+      font: { bold: true, sz: 10, color: { rgb: 'FF0F172A' } },
+      fill: { fgColor: { rgb: 'FFFEF3C7' }, patternType: 'solid' as const },
+      alignment: { horizontal: 'right' as const, vertical: 'center' as const },
+      border: borde,
+      numFmt: '"$ "#,##0.00',
+    },
+    totalFilaLabel: {
+      font: { bold: true, sz: 10, color: { rgb: 'FF0F172A' } },
+      fill: { fgColor: { rgb: 'FFFEF3C7' }, patternType: 'solid' as const },
+      alignment: { horizontal: 'center' as const, vertical: 'center' as const },
+      border: borde,
+    },
+    // Gran total al pie del sheet: caja amarilla saturada, como el cierre del
+    // formato manual que usa el cliente.
+    granTotal: {
+      font: { bold: true, sz: 11, color: { rgb: 'FF0F172A' } },
+      fill: { fgColor: { rgb: 'FFFFEB3B' }, patternType: 'solid' as const },
+      alignment: { horizontal: 'right' as const, vertical: 'center' as const },
+      border: borde,
+      numFmt: '"$ "#,##0.00',
+    },
+    granTotalLabel: {
+      font: { bold: true, sz: 11, color: { rgb: 'FF0F172A' } },
+      fill: { fgColor: { rgb: 'FFFFEB3B' }, patternType: 'solid' as const },
+      alignment: { horizontal: 'left' as const, vertical: 'center' as const, indent: 1 },
+      border: borde,
+    },
+  };
+
+  // ── Helpers de catálogo ──────────────────────────────────────────────────
+  // El grupo empresarial es del CLIENTE de cada fila.
   const grupoPorClienteId = new Map(clientes.map(c => [c.id, c.grupo?.nombre]));
   const grupoPorClienteNombre = new Map(clientes.map(c => [normalizarTexto(c.nombre), c.grupo?.nombre]));
   const nombrePorClienteId = new Map(clientes.map(c => [c.id, c.nombre]));
@@ -591,173 +705,253 @@ export function exportarExcel(
       ? 'SANTA PRISCILA'
       : 'N/A');
 
-  // Una hoja por (grupo empresarial del cliente × razón social del proveedor):
-  // "ACUARIOS DEL GOLFO - DINACUAMAR" y "ACUARIOS DEL GOLFO - ELIZABETH OCHOA"
-  // van en hojas distintas. La razón social se normaliza para que variantes
-  // tipográficas de la misma empresa (con/sin "CIA.LTDA.") caigan juntas; se
-  // muestra el nombre más largo visto (normalmente el nombre legal completo).
-  // Clientes sin grupo → "VARIOS".
-  const itemsPorHoja = new Map<string, { grupo: string; nombre: string; items: OrdenItem[] }>();
-  items.forEach(item => {
-    const prov = item.proveedor?.trim() || 'Sin proveedor';
-    const grupoNombre = grupoDelItem(item) === 'N/A' ? 'VARIOS' : grupoDelItem(item);
-    const clave = `${normalizarTexto(grupoNombre)}|${normalizarRazonSocial(prov) || 'Sin proveedor'}`;
-    const hoja = itemsPorHoja.get(clave);
-    if (hoja) {
-      hoja.items.push(item);
-      if (prov.length > hoja.nombre.length) hoja.nombre = prov;
-    } else {
-      itemsPorHoja.set(clave, { grupo: grupoNombre, nombre: prov, items: [item] });
+  // Fecha "AL" del reporte: el último día del rango (o el último pago si no hay
+  // rango explícito). En Liquidación ya viene filtrado por mes de pago.
+  const fechaCorte = (() => {
+    if (items.length === 0) {
+      const hoy = new Date();
+      return `${String(hoy.getDate()).padStart(2, '0')}/${String(hoy.getMonth() + 1).padStart(2, '0')}/${hoy.getFullYear()}`;
     }
+    const maxFecha = items.reduce((max, it) => {
+      const f = it.fechaPago || it.fecha;
+      return f > max ? f : max;
+    }, items[0].fechaPago || items[0].fecha);
+    const [a, m, d] = maxFecha.slice(0, 10).split('-');
+    return `${d}/${m}/${a}`;
+  })();
+
+  // Línea "COMISIONES: {nombre} - GRUPO {grupo}". Si hay un comisionista
+  // filtrado, se usa ese; si no, se etiqueta como "Varios".
+  const encabezadoComisionista = nombreComisionista || 'Varios';
+
+  // ── Comisión y label por ítem ─────────────────────────────────────────────
+  // Devuelve la comisión total (sumando todos los comisionistas asignados al
+  // ítem) y un label legible con la tarifa aplicada. Prioridad de fuentes:
+  //   1. Snapshot precomputado del caller (caso historial).
+  //   2. Cálculo en vivo para el comisionista filtrado (caso Liquidación).
+  //   3. Suma de todos los comisionistas asignados (caso mixto / sin filtro).
+  const detalleItem = (item: OrdenItem): { comision: number; tarifasLabel: string } => {
+    if (comisionesSnapshot && comisionistaOwner) {
+      const key = `${item.id}|${comisionistaOwner.id}`;
+      const snap = comisionesSnapshot.get(key);
+      if (snap) return snap;
+    }
+    if (comisionistaOwner) {
+      const kg = kgAcumuladoPorComisionista?.get(comisionistaOwner.id);
+      return calcularDetalleComision(item, comisionistaOwner, tarifasClienteProducto, kg);
+    }
+    if (item.comisionistas.length === 0) {
+      return { comision: 0, tarifasLabel: '-' };
+    }
+    let total = 0;
+    const labels: string[] = [];
+    for (const asig of item.comisionistas) {
+      const com = comisionistaMap.get(asig.comisionistaId);
+      if (!com) continue;
+      const kg = kgAcumuladoPorComisionista?.get(asig.comisionistaId);
+      const det = calcularDetalleComision(item, com, tarifasClienteProducto, kg);
+      total += det.comision;
+      if (det.tarifasLabel && det.tarifasLabel !== '-') labels.push(det.tarifasLabel);
+    }
+    return { comision: total, tarifasLabel: labels.length > 0 ? labels.join(' + ') : '-' };
+  };
+
+  // ── Agrupación: una hoja por grupo ────────────────────────────────────────
+  // Antes se partía por grupo × proveedor (ACUARIOS DEL GOLFO - DINACUAMAR /
+  // ACUARIOS DEL GOLFO - ELIZABETH OCHOA) y eso rompía la lectura por cliente.
+  // Ahora cada grupo tiene UNA hoja, y dentro se agrupa por razón social.
+  const itemsPorGrupo = new Map<string, OrdenItem[]>();
+  items.forEach(item => {
+    const grupo = grupoDelItem(item) === 'N/A' ? 'VARIOS' : grupoDelItem(item);
+    const arr = itemsPorGrupo.get(grupo) || [];
+    arr.push(item);
+    itemsPorGrupo.set(grupo, arr);
   });
-
-  const gruposProveedor = Array.from(itemsPorHoja.values()).sort((a, b) =>
-    a.grupo.localeCompare(b.grupo, 'es') || a.nombre.localeCompare(b.nombre, 'es')
+  const gruposOrdenados = Array.from(itemsPorGrupo.keys()).sort((a, b) =>
+    a.localeCompare(b, 'es')
   );
-  const nombresHojaUsados = new Set<string>(['RESUMEN GENERAL']);
 
-  // Primera hoja: todas las líneas de todas las hojas juntas, filtre o no por
-  // comisionista. Se llena mientras se arman las hojas de detalle.
-  const resumen: any[] = [
+  // ── RESUMEN GENERAL (hoja de auditoría rápida) ────────────────────────────
+  // Mantenemos esta hoja porque en el historial servía para encontrar líneas
+  // sin abrir cada hoja por grupo. Se llena mientras se arman las hojas.
+  type CeldaResumen = string | number | { v: string | number; s?: XLSX.CellStyle };
+  const resumen: CeldaResumen[][] = [
     ['RESUMEN GENERAL'],
     [],
-    ['Fecha', 'Factura', 'Nombre', 'Cantidad', 'Tipo Comisión', 'Valor de Comisión', 'Estado', 'Sector', 'Comisionista', 'Grupo', 'Razón social'],
+    ['Fecha', 'Factura', 'Producto', 'Cantidad', 'Tarifa', 'Valor Comisión', 'Estado', 'Sector', 'Comisionista', 'Grupo', 'Razón social'],
   ];
   let totalGeneral = 0;
+  const nombresHojaUsados = new Set<string>(['RESUMEN GENERAL']);
 
-  gruposProveedor.forEach(({ grupo: nombreGrupo, nombre: nombreProveedor, items: itemsProveedor }) => {
+  // ── Una hoja por grupo ────────────────────────────────────────────────────
+  // Tipo compartido por todas las celdas del sheet: string crudo (separadores,
+  // totales a cero) o { v, s } con estilo. Definido una sola vez acá arriba
+  // para que las tres hojas (cabecera, secciones, gran total) usen la misma
+  // estructura y `aoa_to_sheet` no se queje.
+  type Celda = string | { v: string | number; s?: XLSX.CellStyle };
+  type Fila = Celda[];
 
-    // Agrupar items por comisionista, luego por mes (formato original por hoja)
-    const itemsPorComisionista = new Map<string, Map<string, OrdenItem[]>>();
-    itemsProveedor.forEach(item => {
-      const comIds = item.comisionistas.length > 0
-        ? item.comisionistas.map(asig => asig.comisionistaId || 'sin-asignar')
-        : ['sin-asignar'];
-      comIds.forEach(comId => {
-        if (!itemsPorComisionista.has(comId)) {
-          itemsPorComisionista.set(comId, new Map());
+  gruposOrdenados.forEach(nombreGrupo => {
+    const itemsGrupo = itemsPorGrupo.get(nombreGrupo)!;
+
+    // Estructura de la hoja: filas y celdas con estilos. Mantenemos las dos
+    // listas en paralelo para poder resolver estilos al final y construir los
+    // rangos de merge (cabeceras que abarcan todas las columnas).
+    const numCols = 8; // Fecha | Factura | Producto | Cant | Comisión | Valor a Comisionar | Estado | Sector
+    const filas: Fila[] = [];
+    const merges: { s: { r: number; c: number }; e: { r: number; c: number } }[] = [];
+
+    // ── Cabecera de la hoja ──
+    filas.push([{ v: 'INDUSTRIAL ACUICOLA OCHOA Y BARCIA DINACUAMAR CIA LTDA', s: estilos.tituloEmpresa }]);
+    merges.push({ s: { r: filas.length - 1, c: 0 }, e: { r: filas.length - 1, c: numCols - 1 } });
+
+    filas.push([{ v: `COMISIONES: ${encabezadoComisionista} - GRUPO ${nombreGrupo}`, s: estilos.tituloComision }]);
+    merges.push({ s: { r: filas.length - 1, c: 0 }, e: { r: filas.length - 1, c: numCols - 1 } });
+
+    filas.push([{ v: `AL ${fechaCorte}`, s: estilos.tituloFecha }]);
+    merges.push({ s: { r: filas.length - 1, c: 0 }, e: { r: filas.length - 1, c: numCols - 1 } });
+
+    // Espacio en blanco para que la cabecera respire antes de los totales / secciones.
+    filas.push(Array.from({ length: numCols }, () => ''));
+
+    // ── Secciones por razón social ──
+    const itemsPorCliente = new Map<string, OrdenItem[]>();
+    itemsGrupo.forEach(item => {
+      const rs = razonSocialDelItem(item);
+      const arr = itemsPorCliente.get(rs) || [];
+      arr.push(item);
+      itemsPorCliente.set(rs, arr);
+    });
+    const clientesOrdenados = Array.from(itemsPorCliente.entries()).sort((a, b) =>
+      a[0].localeCompare(b[0], 'es')
+    );
+
+    let totalGrupo = 0;
+    clientesOrdenados.forEach(([razonSocial, itemsCliente], idx) => {
+      // Cabecera del cliente: amarillo para el primero (cliente principal),
+      // verde claro para el resto. Coincide con la hoja histórica del cliente
+      // donde el "primer cliente" del grupo va destacado en amarillo.
+      const estiloClienteHeader =
+        idx === 0 ? estilos.clienteHeaderAmarillo : estilos.clienteHeaderVerde;
+
+      filas.push([{ v: razonSocial, s: estiloClienteHeader }]);
+      merges.push({ s: { r: filas.length - 1, c: 0 }, e: { r: filas.length - 1, c: numCols - 1 } });
+
+      // Cabecera de columnas
+      const headerCols = ['Fecha', 'Factura', 'Producto', 'Cant', 'Comisión', 'Valor a Comisionar', 'Estado', 'Sector'];
+      filas.push(headerCols.map(c => ({ v: c, s: estilos.columnaHeader })));
+
+      // Filas de datos, ordenadas por fecha → sector → factura (mismo criterio
+      // que el resto de exports para que la auditoría sea consistente).
+      const itemsOrdenados = [...itemsCliente].sort(
+        (a, b) =>
+          a.fecha.localeCompare(b.fecha) ||
+          sectorParaOrden(a, b) ||
+          a.numeroOrden.localeCompare(b.numeroOrden)
+      );
+
+      let totalCliente = 0;
+      itemsOrdenados.forEach(item => {
+        const { comision, tarifasLabel } = detalleItem(item);
+        totalCliente += comision;
+
+        // Fecha en formato dd/mm/aa (cortita, como la hoja histórica).
+        let fechaCorta = '';
+        if (item.fecha) {
+          const [a, m, d] = item.fecha.slice(0, 10).split('-');
+          fechaCorta = `${d}/${m}/${a.slice(2)}`;
         }
-        const fecha = new Date(item.fecha);
-        const mesKey = `${fecha.getFullYear()}-${String(fecha.getMonth() + 1).padStart(2, '0')}`;
-        const mesMap = itemsPorComisionista.get(comId)!;
-        if (!mesMap.has(mesKey)) {
-          mesMap.set(mesKey, []);
-        }
-        mesMap.get(mesKey)!.push(item);
+
+        filas.push([
+          { v: fechaCorta, s: estilos.celdaFecha },
+          { v: item.numeroOrden, s: estilos.celdaTexto },
+          { v: item.producto, s: estilos.celdaTexto },
+          { v: item.cantidad, s: estilos.celdaCantidad },
+          { v: tarifasLabel, s: estilos.celdaComision },
+          { v: comision, s: estilos.celdaComision },
+          { v: item.estado || 'pagada', s: estilos.celdaEstado },
+          { v: sectorDeItem(item) || 'N/A', s: estilos.celdaTexto },
+        ]);
+
+        // Alimentamos el RESUMEN GENERAL con cada línea.
+        resumen.push([
+          item.fecha,
+          item.numeroOrden,
+          item.producto,
+          item.cantidad,
+          tarifasLabel,
+          comision,
+          item.estado || 'pagada',
+          sectorDeItem(item) || 'N/A',
+          comisionistaOwner?.nombre || getNombresComisionistas(item, comisionistas),
+          grupoDelItem(item),
+          razonSocialDelItem(item),
+        ]);
       });
+
+      // Fila TOTAL por cliente (label en la columna Cant para alinearla con el
+      // formato histórico: "TOTAL" como cuarta columna, monto en la sexta).
+      filas.push([
+        { v: '', s: estilos.totalFilaLabel },
+        { v: '', s: estilos.totalFilaLabel },
+        { v: '', s: estilos.totalFilaLabel },
+        { v: 'TOTAL', s: estilos.totalFilaLabel },
+        { v: '', s: estilos.totalFila },
+        { v: totalCliente, s: estilos.totalFila },
+        { v: '', s: estilos.totalFilaLabel },
+        { v: '', s: estilos.totalFilaLabel },
+      ]);
+
+      // Separador entre clientes.
+      filas.push(Array.from({ length: numCols }, () => ''));
+
+      totalGrupo += totalCliente;
     });
 
-    const comisionistaIds = Array.from(itemsPorComisionista.keys()).sort((a, b) => {
-      const comA = comisionistaMap.get(a);
-      const comB = comisionistaMap.get(b);
-      return (comA?.nombre || '').localeCompare(comB?.nombre || '');
-    });
+    // Gran TOTAL del grupo al pie del sheet (caja amarilla como en el modelo).
+    filas.push([
+      { v: '', s: estilos.granTotalLabel },
+      { v: '', s: estilos.granTotalLabel },
+      { v: '', s: estilos.granTotalLabel },
+      { v: '', s: estilos.granTotalLabel },
+      { v: `Total ${nombreGrupo}`, s: estilos.granTotalLabel },
+      { v: totalGrupo, s: estilos.granTotal },
+      { v: '', s: estilos.granTotalLabel },
+      { v: '', s: estilos.granTotalLabel },
+    ]);
 
-    const data: any[] = [];
-    let totalProveedor = 0;
-
-    data.push([`Grupo: ${nombreGrupo}  —  Razón social: ${nombreProveedor}`]);
-    data.push([]);
-
-    comisionistaIds.forEach(comId => {
-      const com = comisionistaMap.get(comId);
-      const comNombre = com?.nombre || 'Sin asignar';
-      const mesesMap = itemsPorComisionista.get(comId)!;
-      const meses = Array.from(mesesMap.keys()).sort();
-
-      meses.forEach(mesKey => {
-        const itemsDelGrupo = [...mesesMap.get(mesKey)!].sort(
-          (a, b) =>
-            a.fecha.localeCompare(b.fecha) ||
-            sectorParaOrden(a, b) ||
-            a.numeroOrden.localeCompare(b.numeroOrden)
-        );
-        const [anio, mes] = mesKey.split('-');
-        const nombreMes = nombresMes[parseInt(mes) - 1];
-        const ultimoDia = getUltimoDiaMes(parseInt(mes), parseInt(anio));
-
-        data.push(['INDUSTRIAL ACUICOLA OCHOA & BARCIA DINACUAMAR CIA.LTDA.']);
-        data.push(['Sistema de Liquidación de Comisiones']);
-        data.push([`Comisionista: ${comNombre} del 1 al ${ultimoDia} de ${nombreMes} ${anio}`]);
-        data.push([]);
-        data.push(['Fecha', 'Factura', 'Nombre', 'Cantidad', 'Tipo Comisión', 'Valor de Comisión', 'Estado', 'Sector', 'Grupo', 'Razón social']);
-
-        let totalGrupo = 0;
-        // Orden cronológico y por sector (para auditoría) dentro de cada tabla
-        itemsDelGrupo.forEach(item => {
-          let comision = 0;
-          let tarifasLabel = '-';
-          const snapshotKey = `${item.id}|${comId}`;
-          if (comisionesSnapshot?.has(snapshotKey)) {
-            const snap = comisionesSnapshot.get(snapshotKey)!;
-            comision = snap.comision;
-            tarifasLabel = snap.tarifasLabel;
-          } else {
-            const detalle = com
-              ? calcularDetalleComision(item, com, tarifasClienteProducto, kgAcumuladoPorComisionista?.get(comId))
-              : undefined;
-            comision = detalle?.comision || 0;
-            tarifasLabel = detalle?.tarifasLabel || '-';
-          }
-          totalGrupo += comision;
-          const fila = [
-            item.fecha,
-            item.numeroOrden,
-            item.producto,
-            item.cantidad,
-            tarifasLabel,
-            `$ ${comision.toFixed(2).replace('.', ',')}`,
-            item.estado || 'pagada',
-            sectorDeItem(item) || 'N/A',
-            grupoDelItem(item),
-            razonSocialDelItem(item),
-          ];
-          data.push(fila);
-          resumen.push([...fila.slice(0, 8), comNombre, ...fila.slice(8)]);
-        });
-
-        data.push(['', '', '', '', '', `$ ${totalGrupo.toFixed(2).replace('.', ',')}`, '', '', '', '']);
-        data.push([]);
-
-        totalProveedor += totalGrupo;
-      });
-    });
-
-    data.push(['', '', '', '', '', 'TOTAL', `$ ${totalProveedor.toFixed(2).replace('.', ',')}`, '', '', '']);
-
-    const ws = XLSX.utils.aoa_to_sheet(data);
+    const ws = XLSX.utils.aoa_to_sheet(filas);
+    ws['!merges'] = merges;
     ws['!cols'] = [
-      { wch: 12 },
-      { wch: 20 },
-      { wch: 25 },
-      { wch: 10 },
-      { wch: 16 },
-      { wch: 16 },
-      { wch: 10 },
-      { wch: 10 },
-      { wch: 18 },
-      { wch: 30 },
+      { wch: 10 },  // Fecha
+      { wch: 22 },  // Factura
+      { wch: 28 },  // Producto
+      { wch: 10 },  // Cant
+      { wch: 16 },  // Comisión
+      { wch: 18 },  // Valor a Comisionar
+      { wch: 12 },  // Estado
+      { wch: 14 },  // Sector
     ];
-    XLSX.utils.book_append_sheet(wb, ws, nombreHojaValido(`${nombreGrupo} ${nombreProveedor}`, nombresHojaUsados));
-    totalGeneral += totalProveedor;
+    XLSX.utils.book_append_sheet(wb, ws, nombreHojaValido(nombreGrupo, nombresHojaUsados));
+    totalGeneral += totalGrupo;
   });
 
-  // Ordenar RESUMEN GENERAL por fecha → sector → factura (auditoría)
+  // ── Hoja RESUMEN GENERAL ─────────────────────────────────────────────────
   {
     const encabezado = resumen.slice(0, 3);
-    const filas = resumen.slice(3);
-    filas.sort(
+    const filasDatos = resumen.slice(3);
+    filasDatos.sort(
       (a, b) =>
         String(a[0]).localeCompare(String(b[0])) ||
         String(a[7]).localeCompare(String(b[7]), 'es') ||
         String(a[1]).localeCompare(String(b[1]))
     );
     resumen.length = 0;
-    resumen.push(...encabezado, ...filas);
+    resumen.push(...encabezado, ...filasDatos);
   }
 
   resumen.push([]);
-  resumen.push(['', '', '', '', 'TOTAL GENERAL', `$ ${totalGeneral.toFixed(2).replace('.', ',')}`, '', '', '', '', '']);
+  resumen.push(['', '', '', '', '', totalGeneral, '', '', '', 'TOTAL GENERAL', '']);
   const wsResumen = XLSX.utils.aoa_to_sheet(resumen);
   wsResumen['!cols'] = [
     { wch: 12 },
@@ -779,8 +973,17 @@ export function exportarExcel(
     // Fila 3 (índice 2) es la cabecera: A3:K<lastDataRow>
     wsResumen['!autofilter'] = { ref: `A3:K${lastDataRow}` };
   }
-  // Congelar filas de título para que la cabecera quede visible al scrollear
-  (wsResumen as any)['!freeze'] = { xSplit: 0, ySplit: 3, topLeftCell: 'A4', activePane: 'bottomRight', state: 'frozen' } as any;
+  // Congelar filas de título para que la cabecera quede visible al scrollear.
+  // `!freeze` es una extensión oficiosa del tipo público WorkSheet (la firma
+  // no lo expone), así que vamos por Reflect.set para no tocar el tipo del
+  // worksheet a mano.
+  Reflect.set(wsResumen, '!freeze', {
+    xSplit: 0,
+    ySplit: 3,
+    topLeftCell: 'A4',
+    activePane: 'bottomRight',
+    state: 'frozen',
+  });
   XLSX.utils.book_append_sheet(wb, wsResumen, 'RESUMEN GENERAL');
   wb.SheetNames.unshift(wb.SheetNames.pop()!); // ponytail: book_append_sheet solo agrega al final
 
