@@ -7,8 +7,9 @@ import * as XLSX from 'xlsx-js-style';
 import { useApp } from '@/context/AppContext';
 import { TarifaClienteProducto, Finca, Proveedor } from '@/types';
 import { fetchProveedores } from '@/lib/api';
-import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import {
@@ -107,10 +108,16 @@ export function TarifasTab() {
   const [seleccionadas, setSeleccionadas] = useState<Set<string>>(new Set());
   const [filtrosAbiertos, setFiltrosAbiertos] = useState(false);
   const [bulkOpen, setBulkOpen] = useState(false);
-  const [bulkForm, setBulkForm] = useState<{ tipo: string; valor: string; activo: string }>({
+  type CampoMasivo = { modo: 'sin_cambio' | 'limpiar' | 'establecer'; valor: string };
+  const campoMasivo = (): CampoMasivo => ({ modo: 'sin_cambio', valor: '' });
+  const [bulkForm, setBulkForm] = useState({
     tipo: 'sin_cambio',
     valor: '',
     activo: 'sin_cambio',
+    vigenteHasta: campoMasivo(),
+    umbralKg: campoMasivo(),
+    valorSobreUmbral: campoMasivo(),
+    proveedoresExcluidos: campoMasivo(),
   });
 
   const { data: proveedores = [] } = useQuery<Proveedor[]>({
@@ -326,10 +333,57 @@ export function TarifasTab() {
 
   const handleBulkSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const cambios: { tipo?: 'porcentaje' | 'fijo_kg' | 'fijo_unidad'; valor?: number; activo?: boolean } = {};
+    const cambios: {
+      tipo?: 'porcentaje' | 'fijo_kg' | 'fijo_unidad';
+      valor?: number;
+      activo?: boolean;
+      umbralKg?: number | null;
+      valorSobreUmbral?: number | null;
+      vigenteHasta?: string | null;
+      proveedoresExcluidos?: string[];
+    } = {};
     if (bulkForm.tipo !== 'sin_cambio') cambios.tipo = bulkForm.tipo as 'porcentaje' | 'fijo_kg' | 'fijo_unidad';
-    if (bulkForm.valor !== '' && parseFloat(bulkForm.valor) > 0) cambios.valor = parseFloat(bulkForm.valor);
+    if (bulkForm.valor !== '') {
+      const valor = Number(bulkForm.valor);
+      if (!Number.isFinite(valor) || valor <= 0) {
+        toast.error('Ingresa un valor mayor que cero');
+        return;
+      }
+      cambios.valor = valor;
+    }
     if (bulkForm.activo !== 'sin_cambio') cambios.activo = bulkForm.activo === 'activa';
+
+    const numericFields = [
+      ['umbralKg', 'umbralKg', 'El umbral'],
+      ['valorSobreUmbral', 'valorSobreUmbral', 'El valor sobre umbral'],
+    ] as const;
+    for (const [campo, payload, etiqueta] of numericFields) {
+      const dato = bulkForm[campo];
+      if (dato.modo === 'limpiar') cambios[payload] = null;
+      if (dato.modo === 'establecer') {
+        const valor = Number(dato.valor);
+        if (!Number.isFinite(valor) || valor < 0) {
+          toast.error(`${etiqueta} debe ser un número válido`);
+          return;
+        }
+        cambios[payload] = valor;
+      }
+    }
+    if (bulkForm.vigenteHasta.modo === 'limpiar') cambios.vigenteHasta = null;
+    if (bulkForm.vigenteHasta.modo === 'establecer') {
+      if (!bulkForm.vigenteHasta.valor) {
+        toast.error('Selecciona una fecha de vigencia');
+        return;
+      }
+      cambios.vigenteHasta = bulkForm.vigenteHasta.valor;
+    }
+    if (bulkForm.proveedoresExcluidos.modo === 'limpiar') cambios.proveedoresExcluidos = [];
+    if (bulkForm.proveedoresExcluidos.modo === 'establecer') {
+      cambios.proveedoresExcluidos = bulkForm.proveedoresExcluidos.valor
+        .split('\n')
+        .map((nombre) => nombre.trim())
+        .filter(Boolean);
+    }
     if (Object.keys(cambios).length === 0) {
       toast.error('Indica al menos un cambio');
       return;
@@ -337,7 +391,7 @@ export function TarifasTab() {
     updateTarifasMasivo(Array.from(seleccionadas), cambios)
       .then(() => setSeleccionadas(new Set()))
       .catch(() => {});
-    setBulkForm({ tipo: 'sin_cambio', valor: '', activo: 'sin_cambio' });
+    setBulkForm({ tipo: 'sin_cambio', valor: '', activo: 'sin_cambio', vigenteHasta: campoMasivo(), umbralKg: campoMasivo(), valorSobreUmbral: campoMasivo(), proveedoresExcluidos: campoMasivo() });
     setBulkOpen(false);
   };
 
@@ -347,7 +401,7 @@ export function TarifasTab() {
 
   const handleExportarExcel = () => {
     if (filtered.length === 0) {
-      toast.error('No hay tarifas para exportar');
+      toast.error('No hay comisiones para exportar');
       return;
     }
 
@@ -365,8 +419,8 @@ export function TarifasTab() {
 
     const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Tarifas');
-    XLSX.writeFile(wb, 'Tarifas.xlsx');
+    XLSX.utils.book_append_sheet(wb, ws, 'Comisiones');
+    XLSX.writeFile(wb, 'Comisiones.xlsx');
   };
 
   const formatValor = (t: TarifaClienteProducto) => {
@@ -415,7 +469,7 @@ export function TarifasTab() {
     <div className="flex max-w-[1360px] flex-col gap-3.5">
       {/* Filtros y acciones */}
       <BarraAcciones>
-        <Buscador value={search} onChange={setSearch} placeholder="Buscar tarifa…" className="w-full sm:w-[280px]" />
+        <Buscador value={search} onChange={setSearch} placeholder="Buscar comisión…" className="w-full sm:w-[280px]" />
         <BotonSecundario onClick={() => setFiltrosAbiertos((v) => !v)}>
           Filtros
           {filtrosActivos > 0 && (
@@ -426,7 +480,7 @@ export function TarifasTab() {
         </BotonSecundario>
         {seleccionadas.size > 0 && (
           <BotonSecundario onClick={() => setBulkOpen(true)}>
-            <Pencil className="size-3.5" /> Editar {seleccionadas.size} seleccionadas
+            <Pencil className="size-3.5" /> Editar {seleccionadas.size} comisiones
           </BotonSecundario>
         )}
         <div className="flex-1" />
@@ -440,7 +494,7 @@ export function TarifasTab() {
             setOpen(true);
           }}
         >
-          <Plus className="size-3.5" /> Nueva tarifa
+          <Plus className="size-3.5" /> Nueva comisión
         </BotonPrimario>
       </BarraAcciones>
 
@@ -530,7 +584,7 @@ export function TarifasTab() {
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-[660px]">
           <DialogHeader>
-            <DialogTitle>{editing ? 'Editar tarifa' : 'Nueva tarifa'}</DialogTitle>
+            <DialogTitle>{editing ? 'Editar comisión' : 'Nueva comisión'}</DialogTitle>
             <DialogDescription>
               Dos pasos: a quién aplica y cuánto se paga.
             </DialogDescription>
@@ -807,7 +861,7 @@ export function TarifasTab() {
                 className="h-4 w-4 rounded border-[#C6CDD6] text-[#0B1220] focus:ring-slate-900"
               />
               <Label htmlFor="activo" className="text-sm font-normal cursor-pointer">
-                Tarifa activa
+                Comisión activa
               </Label>
             </div>
 
@@ -824,7 +878,7 @@ export function TarifasTab() {
                 Cancelar
               </Button>
               <Button type="submit" className="rounded-xl">
-                {editing ? 'Guardar Cambios' : 'Crear Tarifa'}
+                {editing ? 'Guardar Cambios' : 'Crear Comisión'}
               </Button>
             </div>
           </form>
@@ -835,9 +889,9 @@ export function TarifasTab() {
       <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>¿Eliminar tarifa?</DialogTitle>
+            <DialogTitle>¿Eliminar comisión?</DialogTitle>
             <DialogDescription>
-              Esta acción no se puede deshacer. Se eliminará permanentemente la tarifa de{' '}
+              Esta acción no se puede deshacer. Se eliminará permanentemente la comisión de{' '}
               <span className="font-medium text-foreground">
                 {tarifaToDelete ? getComisionistaTarifa(tarifaToDelete) : ''}
               </span>{' '}
@@ -872,63 +926,76 @@ export function TarifasTab() {
 
       {/* Dialog de edición masiva */}
       <Dialog open={bulkOpen} onOpenChange={setBulkOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>Editar {seleccionadas.size} tarifas</DialogTitle>
+            <DialogTitle>Editar {seleccionadas.size} comisiones</DialogTitle>
             <DialogDescription>
-              Solo se aplican los campos que cambies; el resto queda igual.
+              Solo se aplican los campos que cambies. Puedes elegir “Quitar” para limpiar un valor existente.
             </DialogDescription>
           </DialogHeader>
-          <form onSubmit={handleBulkSubmit} className="space-y-4 mt-2">
-            <div className="space-y-2">
-              <Label>Tipo</Label>
-              <Select value={bulkForm.tipo} onValueChange={(v) => setBulkForm({ ...bulkForm, tipo: v ?? 'sin_cambio' })}>
-                <SelectTrigger className="h-10 w-full rounded-xl">
-                  <span className="flex flex-1 truncate text-left">
-                    {bulkForm.tipo === 'sin_cambio' ? 'Sin cambio' : bulkForm.tipo === 'porcentaje' ? 'Porcentaje (%)' : bulkForm.tipo === 'fijo_kg' ? 'Fijo por kg (USD)' : 'Fijo por unidad (USD)'}
-                  </span>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="sin_cambio">Sin cambio</SelectItem>
-                  <SelectItem value="porcentaje">Porcentaje (%)</SelectItem>
-                  <SelectItem value="fijo_kg">Fijo por kg (USD)</SelectItem>
-                  <SelectItem value="fijo_unidad">Fijo por unidad (USD)</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Valor (vacío = sin cambio)</Label>
-              <Input
-                type="number"
-                step="0.0001"
-                min="0"
-                value={bulkForm.valor}
-                onChange={(e) => setBulkForm({ ...bulkForm, valor: e.target.value })}
-                className="rounded-xl"
-              />
+          <form onSubmit={handleBulkSubmit} className="mt-2 space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Tipo</Label>
+                <Select value={bulkForm.tipo} onValueChange={(v) => setBulkForm({ ...bulkForm, tipo: v ?? 'sin_cambio' })}>
+                  <SelectTrigger className="h-10 w-full rounded-xl"><span className="flex flex-1 truncate text-left">{bulkForm.tipo === 'sin_cambio' ? 'Sin cambio' : bulkForm.tipo === 'porcentaje' ? 'Porcentaje (%)' : bulkForm.tipo === 'fijo_kg' ? 'Fijo por kg (USD)' : 'Fijo por unidad (USD)'}</span></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="sin_cambio">Sin cambio</SelectItem>
+                    <SelectItem value="porcentaje">Porcentaje (%)</SelectItem>
+                    <SelectItem value="fijo_kg">Fijo por kg (USD)</SelectItem>
+                    <SelectItem value="fijo_unidad">Fijo por unidad (USD)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Valor (vacío = sin cambio)</Label>
+                <Input type="number" step="0.0001" min="0" value={bulkForm.valor} onChange={(e) => setBulkForm({ ...bulkForm, valor: e.target.value })} className="rounded-xl" />
+              </div>
             </div>
             <div className="space-y-2">
               <Label>Estado</Label>
               <Select value={bulkForm.activo} onValueChange={(v) => setBulkForm({ ...bulkForm, activo: v ?? 'sin_cambio' })}>
-                <SelectTrigger className="h-10 w-full rounded-xl">
-                  <span className="flex flex-1 truncate text-left">
-                    {bulkForm.activo === 'sin_cambio' ? 'Sin cambio' : bulkForm.activo === 'activa' ? 'Activa' : 'Inactiva'}
-                  </span>
-                </SelectTrigger>
+                <SelectTrigger className="h-10 w-full rounded-xl"><span className="flex flex-1 truncate text-left">{bulkForm.activo === 'sin_cambio' ? 'Sin cambio' : bulkForm.activo === 'activa' ? 'Activar todas' : 'Desactivar todas'}</span></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="sin_cambio">Sin cambio</SelectItem>
-                  <SelectItem value="activa">Activa</SelectItem>
-                  <SelectItem value="inactiva">Inactiva</SelectItem>
+                  <SelectItem value="activa">Activar todas</SelectItem>
+                  <SelectItem value="inactiva">Desactivar todas</SelectItem>
                 </SelectContent>
               </Select>
             </div>
+            {(['vigenteHasta', 'umbralKg', 'valorSobreUmbral'] as const).map((campo) => {
+              const etiquetas = { vigenteHasta: 'Vigente hasta', umbralKg: 'Umbral (kg)', valorSobreUmbral: 'Valor sobre umbral' };
+              const dato = bulkForm[campo];
+              return (
+                <div key={campo} className="space-y-2">
+                  <Label>{etiquetas[campo]}</Label>
+                  <div className="grid grid-cols-[145px_1fr] gap-2">
+                    <Select value={dato.modo} onValueChange={(modo) => setBulkForm({ ...bulkForm, [campo]: { ...dato, modo: modo as CampoMasivo['modo'] } })}>
+                      <SelectTrigger className="h-10 rounded-xl"><span className="truncate">{dato.modo === 'sin_cambio' ? 'Sin cambio' : dato.modo === 'limpiar' ? 'Quitar' : 'Establecer'}</span></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="sin_cambio">Sin cambio</SelectItem>
+                        <SelectItem value="establecer">Establecer</SelectItem>
+                        <SelectItem value="limpiar">Quitar</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    {dato.modo === 'establecer' && <Input type={campo === 'vigenteHasta' ? 'date' : 'number'} step={campo === 'vigenteHasta' ? undefined : '0.0001'} min={campo === 'vigenteHasta' ? undefined : '0'} value={dato.valor} onChange={(e) => setBulkForm({ ...bulkForm, [campo]: { ...dato, valor: e.target.value } })} className="rounded-xl" />}
+                  </div>
+                </div>
+              );
+            })}
+            <div className="space-y-2">
+              <Label>Proveedores excluidos</Label>
+              <div className="grid grid-cols-[145px_1fr] gap-2">
+                <Select value={bulkForm.proveedoresExcluidos.modo} onValueChange={(modo) => setBulkForm({ ...bulkForm, proveedoresExcluidos: { ...bulkForm.proveedoresExcluidos, modo: modo as CampoMasivo['modo'] } })}>
+                  <SelectTrigger className="h-10 rounded-xl"><span className="truncate">{bulkForm.proveedoresExcluidos.modo === 'sin_cambio' ? 'Sin cambio' : bulkForm.proveedoresExcluidos.modo === 'limpiar' ? 'Quitar todos' : 'Reemplazar'}</span></SelectTrigger>
+                  <SelectContent><SelectItem value="sin_cambio">Sin cambio</SelectItem><SelectItem value="establecer">Reemplazar</SelectItem><SelectItem value="limpiar">Quitar todos</SelectItem></SelectContent>
+                </Select>
+                {bulkForm.proveedoresExcluidos.modo === 'establecer' && <Textarea value={bulkForm.proveedoresExcluidos.valor} onChange={(e) => setBulkForm({ ...bulkForm, proveedoresExcluidos: { ...bulkForm.proveedoresExcluidos, valor: e.target.value } })} placeholder="Un proveedor por línea" className="rounded-xl" />}
+              </div>
+            </div>
             <div className="flex justify-end gap-2 pt-2">
-              <Button type="button" variant="outline" onClick={() => setBulkOpen(false)} className="rounded-xl">
-                Cancelar
-              </Button>
-              <Button type="submit" className="rounded-xl">
-                Aplicar a {seleccionadas.size} tarifas
-              </Button>
+              <Button type="button" variant="outline" onClick={() => setBulkOpen(false)} className="rounded-xl">Cancelar</Button>
+              <Button type="submit" className="rounded-xl">Aplicar a {seleccionadas.size} comisiones</Button>
             </div>
           </form>
         </DialogContent>
@@ -938,10 +1005,10 @@ export function TarifasTab() {
       {filtered.length === 0 ? (
         <Vacio
           icono={Percent}
-          titulo={tarifasClienteProducto.length === 0 ? 'No hay tarifas' : 'Ninguna tarifa coincide'}
+          titulo={tarifasClienteProducto.length === 0 ? 'No hay comisiones' : 'Ninguna comisión coincide'}
           nota={
             tarifasClienteProducto.length === 0
-              ? 'Crea tu primera tarifa específica para comenzar.'
+              ? 'Crea tu primera comisión específica para comenzar.'
               : 'Ajusta la búsqueda o limpia los filtros.'
           }
         />
@@ -956,7 +1023,7 @@ export function TarifasTab() {
                     className="size-[15px] cursor-pointer accent-primary align-middle"
                     checked={todasFiltradasSeleccionadas}
                     onChange={toggleSeleccionTodas}
-                    aria-label="Seleccionar todas las tarifas"
+                    aria-label="Seleccionar todas las comisiones"
                   />
                 </div>
                 <div>Comisionista</div>
@@ -983,7 +1050,7 @@ export function TarifasTab() {
                         className="size-[15px] cursor-pointer accent-primary align-middle"
                         checked={seleccionadas.has(t.id)}
                         onChange={() => toggleSeleccion(t.id)}
-                        aria-label={`Seleccionar tarifa de ${getComisionistaTarifa(t)}`}
+                        aria-label={`Seleccionar comisión de ${getComisionistaTarifa(t)}`}
                       />
                     </div>
                     <div className="min-w-0">

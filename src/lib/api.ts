@@ -425,7 +425,15 @@ export async function deleteTarifaClienteProducto(id: string) {
 
 export async function updateTarifasClienteProductoMasivo(
   ids: string[],
-  cambios: { tipo?: string; valor?: number; activo?: boolean }
+  cambios: {
+    tipo?: string;
+    valor?: number;
+    activo?: boolean;
+    umbralKg?: number | null;
+    valorSobreUmbral?: number | null;
+    vigenteHasta?: string | null;
+    proveedoresExcluidos?: string[];
+  }
 ) {
   const res = await api.put('/api/v1/tarifas-cliente-producto/masivo', toSnakeCase({ ids, cambios }));
   return toCamelCase<{ actualizadas: number }>(res.data);

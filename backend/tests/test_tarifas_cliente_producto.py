@@ -59,7 +59,18 @@ def test_actualizacion_masiva_de_tarifas(authenticated_client, db_session):
 
     resp = authenticated_client.put(
         "/api/v1/tarifas-cliente-producto/masivo",
-        json={"ids": [str(t1.id), str(t2.id)], "cambios": {"valor": "3.5"}},
+        json={
+            "ids": [str(t1.id), str(t2.id)],
+            "cambios": {
+                "tipo": "fijo_kg",
+                "valor": "3.5",
+                "activo": False,
+                "umbralKg": "1000",
+                "valorSobreUmbral": "2.5",
+                "vigenteHasta": "2026-12-31",
+                "proveedoresExcluidos": ["Proveedor bloqueado"],
+            },
+        },
     )
 
     assert resp.status_code == 200
@@ -68,9 +79,32 @@ def test_actualizacion_masiva_de_tarifas(authenticated_client, db_session):
     db_session.refresh(t2)
     assert t1.valor == Decimal("3.5")
     assert t2.valor == Decimal("3.5")
-    # el tipo no se tocó
-    assert t1.tipo == TipoTarifa.porcentaje
+    assert t1.tipo == TipoTarifa.fijo_kg
+    assert t1.activo is False
+    assert t1.umbral_kg == Decimal("1000")
+    assert t1.valor_sobre_umbral == Decimal("2.5")
+    assert str(t1.vigente_hasta) == "2026-12-31"
+    assert t1.proveedores_excluidos == ["Proveedor bloqueado"]
+    assert t2.proveedores_excluidos == ["Proveedor bloqueado"]
 
+    limpiar = authenticated_client.put(
+        "/api/v1/tarifas-cliente-producto/masivo",
+        json={
+            "ids": [str(t1.id), str(t2.id)],
+            "cambios": {
+                "vigenteHasta": None,
+                "umbralKg": None,
+                "valorSobreUmbral": None,
+                "proveedoresExcluidos": [],
+            },
+        },
+    )
+    assert limpiar.status_code == 200
+    db_session.refresh(t1)
+    assert t1.vigente_hasta is None
+    assert t1.umbral_kg is None
+    assert t1.valor_sobre_umbral is None
+    assert t1.proveedores_excluidos == []
 
 def test_actualizacion_masiva_id_inexistente(authenticated_client):
     resp = authenticated_client.put(

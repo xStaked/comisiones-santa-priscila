@@ -89,7 +89,7 @@ interface AppContextType {
   tarifasClienteProducto: TarifaClienteProducto[];
   addTarifa: (data: Omit<TarifaClienteProducto, 'id' | 'createdAt'>) => void;
   updateTarifa: (id: string, data: Partial<TarifaClienteProducto>) => void;
-  updateTarifasMasivo: (ids: string[], cambios: { tipo?: 'porcentaje' | 'fijo_kg' | 'fijo_unidad'; valor?: number; activo?: boolean }) => Promise<{ actualizadas: number }>;
+  updateTarifasMasivo: (ids: string[], cambios: { tipo?: 'porcentaje' | 'fijo_kg' | 'fijo_unidad'; valor?: number; activo?: boolean; umbralKg?: number | null; valorSobreUmbral?: number | null; vigenteHasta?: string | null; proveedoresExcluidos?: string[] }) => Promise<{ actualizadas: number }>;
   deleteTarifa: (id: string) => void;
 
   retenciones: Retencion[];
@@ -546,10 +546,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     mutationFn: createTarifaClienteProducto,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tarifas-cliente-producto'] });
-      toast.success('Tarifa creada');
+      toast.success('Comisión creada');
     },
     onError: (err: any) => {
-      toast.error(err?.response?.data?.detail || 'Error al crear tarifa');
+      toast.error(err?.response?.data?.detail || 'Error al crear comisión');
     },
   });
 
@@ -557,22 +557,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     mutationFn: ({ id, data }: { id: string; data: Partial<TarifaClienteProducto> }) => apiUpdateTarifaClienteProducto(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tarifas-cliente-producto'] });
-      toast.success('Tarifa actualizada');
+      toast.success('Comisión actualizada');
     },
     onError: (err: any) => {
-      toast.error(err?.response?.data?.detail || 'Error al actualizar tarifa');
+      toast.error(err?.response?.data?.detail || 'Error al actualizar comisión');
     },
   });
 
   const updateTarifasMasivoMutation = useMutation({
-    mutationFn: ({ ids, cambios }: { ids: string[]; cambios: { tipo?: string; valor?: number; activo?: boolean } }) =>
+    mutationFn: ({ ids, cambios }: { ids: string[]; cambios: { tipo?: string; valor?: number; activo?: boolean; umbralKg?: number | null; valorSobreUmbral?: number | null; vigenteHasta?: string | null; proveedoresExcluidos?: string[] } }) =>
       apiUpdateTarifasMasivo(ids, cambios),
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['tarifas-cliente-producto'] });
-      toast.success(`${data.actualizadas} tarifas actualizadas`);
+      toast.success(`${data.actualizadas} comisiones actualizadas`);
     },
     onError: (err: any) => {
-      toast.error(err?.response?.data?.detail || 'Error al actualizar tarifas');
+      toast.error(err?.response?.data?.detail || 'Error al actualizar comisiones');
     },
   });
 
@@ -580,10 +580,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     mutationFn: apiDeleteTarifaClienteProducto,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tarifas-cliente-producto'] });
-      toast.success('Tarifa eliminada');
+      toast.success('Comisión eliminada');
     },
     onError: (err: any) => {
-      toast.error(err?.response?.data?.detail || 'Error al eliminar tarifa');
+      toast.error(err?.response?.data?.detail || 'Error al eliminar comisión');
     },
   });
 

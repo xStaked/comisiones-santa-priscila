@@ -37,7 +37,7 @@ export const gruposNav: { titulo: string; items: ItemNav[] }[] = [
       { href: '/clientes', label: 'Clientes', icono: Building2, subtitulo: 'Clientes, fincas y retención vigente' },
       { href: '/productos', label: 'Productos', icono: Package, subtitulo: 'Productos y unidades de comisión' },
       { href: '/comisionistas', label: 'Comisionistas', icono: Users, subtitulo: 'Comisionistas y tarifa global' },
-      { href: '/tarifas', label: 'Tarifas', icono: Percent, subtitulo: 'Tarifas específicas por comisionista, cliente y producto' },
+      { href: '/tarifas', label: 'Comisiones', icono: Percent, subtitulo: 'Comisiones específicas por comisionista, cliente y producto' },
       { href: '/proveedores', label: 'Proveedores', icono: Truck, subtitulo: 'Razones sociales que emiten las facturas' },
     ],
   },

@@ -58,7 +58,10 @@ class TarifaCambiosMasivos(BaseModel):
     tipo: Optional[str] = None
     valor: Optional[Decimal] = None
     activo: Optional[bool] = None
-
+    umbral_kg: Optional[Decimal] = Field(default=None, alias="umbralKg")
+    valor_sobre_umbral: Optional[Decimal] = Field(default=None, alias="valorSobreUmbral")
+    vigente_hasta: Optional[date] = Field(default=None, alias="vigenteHasta")
+    proveedores_excluidos: Optional[List[str]] = Field(default=None, alias="proveedoresExcluidos")
 
 class TarifaUpdateMasivo(BaseModel):
     ids: List[UUID]

@@ -129,7 +129,7 @@ def actualizar_tarifas_masivo(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    cambios = data.cambios.model_dump(exclude_none=True)
+    cambios = data.cambios.model_dump(exclude_unset=True)
     if not cambios:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
