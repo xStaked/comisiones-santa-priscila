@@ -687,6 +687,46 @@ export function exportarExcel(
       alignment: { horizontal: 'left' as const, vertical: 'center' as const, indent: 1 },
       border: borde,
     },
+    resumenTitulo: {
+      font: { bold: true, sz: 14, color: { rgb: 'FF0F172A' } },
+      alignment: { horizontal: 'center' as const, vertical: 'center' as const },
+      border: borde,
+    },
+    resumenTexto: {
+      font: { sz: 10 },
+      alignment: { vertical: 'center' as const },
+      border: borde,
+    },
+    resumenFecha: {
+      font: { sz: 10 },
+      alignment: { horizontal: 'center' as const, vertical: 'center' as const },
+      border: borde,
+    },
+    resumenCantidad: {
+      font: { sz: 10 },
+      alignment: { horizontal: 'right' as const, vertical: 'center' as const },
+      border: borde,
+      numFmt: '#,##0',
+    },
+    resumenComision: {
+      font: { sz: 10 },
+      alignment: { horizontal: 'right' as const, vertical: 'center' as const },
+      border: borde,
+      numFmt: '"$ "#,##0.00',
+    },
+    resumenTotal: {
+      font: { bold: true, sz: 11, color: { rgb: 'FF0F172A' } },
+      fill: { fgColor: { rgb: 'FFFFEB3B' }, patternType: 'solid' as const },
+      alignment: { horizontal: 'right' as const, vertical: 'center' as const },
+      border: borde,
+      numFmt: '"$ "#,##0.00',
+    },
+    resumenTotalLabel: {
+      font: { bold: true, sz: 11, color: { rgb: 'FF0F172A' } },
+      fill: { fgColor: { rgb: 'FFFFEB3B' }, patternType: 'solid' as const },
+      alignment: { horizontal: 'left' as const, vertical: 'center' as const, indent: 1 },
+      border: borde,
+    },
   };
 
   // ── Helpers de catálogo ──────────────────────────────────────────────────
@@ -937,7 +977,6 @@ export function exportarExcel(
   });
 
   // ── Hoja RESUMEN GENERAL ─────────────────────────────────────────────────
-  {
     const encabezado = resumen.slice(0, 3);
     const filasDatos = resumen.slice(3);
     filasDatos.sort(
@@ -948,11 +987,34 @@ export function exportarExcel(
     );
     resumen.length = 0;
     resumen.push(...encabezado, ...filasDatos);
-  }
 
-  resumen.push([]);
-  resumen.push(['', '', '', '', '', totalGeneral, '', '', '', 'TOTAL GENERAL', '']);
-  const wsResumen = XLSX.utils.aoa_to_sheet(resumen);
+  const resumenEstilizado: CeldaResumen[][] = [
+    [{ v: 'RESUMEN GENERAL', s: estilos.resumenTitulo }, ...Array.from({ length: 10 }, () => '')],
+    Array.from({ length: 11 }, () => ''),
+    resumen[2].map(valor => ({ v: String(valor), s: estilos.columnaHeader })),
+    ...filasDatos.map(fila => fila.map((valor, indice) => ({
+      v: typeof valor === 'object' ? valor.v : valor,
+      s: indice === 0
+        ? estilos.resumenFecha
+        : indice === 3
+          ? estilos.resumenCantidad
+          : indice === 5
+            ? estilos.resumenComision
+            : estilos.resumenTexto,
+    }))),
+  ];
+  resumenEstilizado.push(
+    Array.from({ length: 11 }, () => ''),
+    [
+      ...Array.from({ length: 5 }, () => ({ v: '', s: estilos.resumenTotalLabel })),
+      { v: totalGeneral, s: estilos.resumenTotal },
+      ...Array.from({ length: 3 }, () => ({ v: '', s: estilos.resumenTotalLabel })),
+      { v: 'TOTAL GENERAL', s: estilos.resumenTotalLabel },
+      { v: '', s: estilos.resumenTotalLabel },
+    ],
+  );
+  const wsResumen = XLSX.utils.aoa_to_sheet(resumenEstilizado);
+  wsResumen['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 10 } }];
   wsResumen['!cols'] = [
     { wch: 12 },
     { wch: 20 },
@@ -968,8 +1030,8 @@ export function exportarExcel(
   ];
   // Filtros nativos de Excel sobre Fecha y Sector (y resto) + congelar cabecera
   // para facilitar la auditoría sin reordenar manualmente.
-  if (resumen.length > 3) {
-    const lastDataRow = resumen.length - 2; // sin contar fila vacía + total
+  if (filasDatos.length > 0) {
+    const lastDataRow = resumenEstilizado.length - 2; // sin contar fila vacía + total
     // Fila 3 (índice 2) es la cabecera: A3:K<lastDataRow>
     wsResumen['!autofilter'] = { ref: `A3:K${lastDataRow}` };
   }
