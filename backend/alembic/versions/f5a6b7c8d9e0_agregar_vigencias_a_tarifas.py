@@ -16,9 +16,9 @@ down_revision: Union[str, None] = "d1a2b3c4e5f6"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
-
 NOMBRE_UNIQUE_ANTERIOR = "uq_tarifa_com_cli_prod_finca_prov"
 NOMBRE_UNIQUE_NUEVO = "uq_tarifa_com_cli_prod_finca_prov_desde"
+NOMBRE_INDICE_SIN_INICIO = "uq_tarifa_com_cli_prod_finca_prov_sin_inicio"
 COLUMNAS_UNIQUE = [
     "comisionista_id",
     "cliente_id",
@@ -46,9 +46,18 @@ def upgrade() -> None:
         "tarifas_cliente_producto",
         COLUMNAS_UNIQUE,
     )
+    op.create_index(
+        NOMBRE_INDICE_SIN_INICIO,
+        "tarifas_cliente_producto",
+        ["comisionista_id", "cliente_id", "producto_id", "finca_id", "proveedor"],
+        unique=True,
+        postgresql_where=sa.text("vigente_desde IS NULL"),
+        sqlite_where=sa.text("vigente_desde IS NULL"),
+    )
 
 
 def downgrade() -> None:
+    op.drop_index(NOMBRE_INDICE_SIN_INICIO, table_name="tarifas_cliente_producto")
     op.drop_constraint(
         NOMBRE_UNIQUE_NUEVO,
         "tarifas_cliente_producto",

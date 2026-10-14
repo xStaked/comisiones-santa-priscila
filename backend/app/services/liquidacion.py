@@ -245,6 +245,7 @@ def _consultar_tarifa_especifica(
                 TarifaClienteProducto.activo.is_(True),
                 _vigente_en(_fecha_efectiva(orden_item)),
             )
+            .order_by(TarifaClienteProducto.vigente_desde.desc().nullslast())
             .first()
         )
         if tarifa and _tarifa_aplica_para_proveedor(tarifa):
@@ -266,6 +267,7 @@ def _consultar_tarifa_especifica(
                 TarifaClienteProducto.activo.is_(True),
                 _vigente_en(_fecha_efectiva(orden_item)),
             )
+            .order_by(TarifaClienteProducto.vigente_desde.desc().nullslast())
             .first()
         )
         if tarifa and _tarifa_aplica_para_proveedor(tarifa):
@@ -380,6 +382,7 @@ def _consultar_tarifa_especifica(
             TarifaClienteProducto.activo.is_(True),
             _vigente_en(_fecha_efectiva(orden_item)),
         )
+        .order_by(TarifaClienteProducto.vigente_desde.desc().nullslast())
         .first()
     )
     if tarifa and _tarifa_aplica_para_proveedor(tarifa):
@@ -400,6 +403,7 @@ def _consultar_tarifa_especifica(
             TarifaClienteProducto.activo.is_(True),
             _vigente_en(_fecha_efectiva(orden_item)),
         )
+        .order_by(TarifaClienteProducto.vigente_desde.desc().nullslast())
         .first()
     )
     if tarifa and _tarifa_aplica_para_proveedor(tarifa):
@@ -426,6 +430,7 @@ def _consultar_tarifa_especifica(
                                 TarifaClienteProducto.activo.is_(True),
                                 _vigente_en(_fecha_efectiva(orden_item)),
                             )
+                            .order_by(TarifaClienteProducto.vigente_desde.desc().nullslast())
                             .first()
                         )
                         if tarifa_alt and _tarifa_aplica_para_proveedor(tarifa_alt):

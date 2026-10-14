@@ -224,6 +224,7 @@ export function encontrarTarifaEspecifica(
 
   const candidatas = tarifas.filter(
     (tarifa) =>
+      tarifa.comisionistaId === comisionistaId &&
       (!tarifa.vigenteDesde || !fechaEfectiva || fechaEfectiva >= tarifa.vigenteDesde.slice(0, 10)) &&
       (!tarifa.vigenteHasta || !fechaEfectiva || fechaEfectiva <= tarifa.vigenteHasta.slice(0, 10)) &&
       (coincideCliente(tarifa) || sinClienteIdentificado) &&
