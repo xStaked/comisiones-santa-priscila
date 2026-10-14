@@ -89,7 +89,7 @@ interface AppContextType {
   tarifasClienteProducto: TarifaClienteProducto[];
   addTarifa: (data: Omit<TarifaClienteProducto, 'id' | 'createdAt'>) => void;
   updateTarifa: (id: string, data: Partial<TarifaClienteProducto>) => void;
-  updateTarifasMasivo: (ids: string[], cambios: { tipo?: 'porcentaje' | 'fijo_kg' | 'fijo_unidad'; valor?: number; activo?: boolean; umbralKg?: number | null; valorSobreUmbral?: number | null; vigenteHasta?: string | null; proveedoresExcluidos?: string[] }) => Promise<{ actualizadas: number }>;
+  updateTarifasMasivo: (ids: string[], cambios: { tipo?: 'porcentaje' | 'fijo_kg' | 'fijo_unidad'; valor?: number; activo?: boolean; umbralKg?: number | null; valorSobreUmbral?: number | null; vigenteDesde?: string | null; vigenteHasta?: string | null; proveedoresExcluidos?: string[] }) => Promise<{ actualizadas: number }>;
   deleteTarifa: (id: string) => void;
 
   retenciones: Retencion[];
@@ -565,7 +565,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   });
 
   const updateTarifasMasivoMutation = useMutation({
-    mutationFn: ({ ids, cambios }: { ids: string[]; cambios: { tipo?: string; valor?: number; activo?: boolean; umbralKg?: number | null; valorSobreUmbral?: number | null; vigenteHasta?: string | null; proveedoresExcluidos?: string[] } }) =>
+    mutationFn: ({ ids, cambios }: { ids: string[]; cambios: { tipo?: string; valor?: number; activo?: boolean; umbralKg?: number | null; valorSobreUmbral?: number | null; vigenteDesde?: string | null; vigenteHasta?: string | null; proveedoresExcluidos?: string[] } }) =>
       apiUpdateTarifasMasivo(ids, cambios),
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['tarifas-cliente-producto'] });

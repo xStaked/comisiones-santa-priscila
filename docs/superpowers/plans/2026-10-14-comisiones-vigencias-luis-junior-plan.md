@@ -58,7 +58,7 @@ Archivos:
 
 Crear una migración de datos o comando dedicado bajo `backend/app/commands/` siguiendo el patrón idempotente existente.
 
-1. Buscar exactamente un comisionista cuyo nombre normalizado sea `LUIS CASTRO`; fallar claramente si no existe o hay duplicados.
+1. Buscar exactamente un comisionista cuyo nombre normalizado sea `LUIS CASTRO` o el nombre histórico `CASTRO`; fallar claramente si hay duplicados.
 2. Seleccionar todas sus tarifas específicas y globales actuales.
 3. Para las tarifas específicas, cerrar las originales el `2026-07-31`.
 4. Para cada tarifa, crear una copia con `vigente_desde = 2026-08-01`, `vigente_hasta = NULL` y los mismos alcances/exclusiones.

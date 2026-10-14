@@ -1,5 +1,5 @@
 import enum
-from sqlalchemy import Column, String, Numeric, ForeignKey, Enum as SAEnum, Uuid, JSON
+from sqlalchemy import Column, String, Numeric, ForeignKey, Enum as SAEnum, Uuid, JSON, Date
 from sqlalchemy.orm import relationship
 from app.models.base import BaseModel
 
@@ -35,6 +35,8 @@ class Tarifa(BaseModel):
     )
     tipo = Column(SAEnum(TipoTarifa, name="tipo_tarifa"), nullable=False)
     valor = Column(Numeric(10, 4), nullable=False)
+    vigente_desde = Column(Date, nullable=True)
+    vigente_hasta = Column(Date, nullable=True)
     proveedores_excluidos = Column(JSON, nullable=False, default=list)
     # Regla por volumen: si el comisionista acumula >= umbral_kg en la liquidación,
     # la comisión pasa a fijo_kg con valor_sobre_umbral (caso Naranjo).

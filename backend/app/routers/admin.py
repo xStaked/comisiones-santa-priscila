@@ -16,6 +16,7 @@ from app.commands.seed_tarifas_excel import (
     procesar_hoja,
 )
 from app.commands.seed_tarifas_externas import seed_aliases_productos, seed_tarifas_externas
+from app.commands.seed_reglas_comision import aplicar_reglas_comision
 
 router = APIRouter()
 
@@ -60,7 +61,7 @@ def cargar_datos_reales(db: Session) -> int:
             productos,
             fincas,
         )
-        db.commit()
+    aplicar_reglas_comision(db)
 
     return total_tarifas
 
@@ -99,6 +100,7 @@ def seed_tarifas_externas_endpoint(
 ):
     try:
         resumen = seed_tarifas_externas(db)
+        resumen.update(aplicar_reglas_comision(db))
         return {
             "detail": "Tarifas externas cargadas correctamente",
             **resumen,

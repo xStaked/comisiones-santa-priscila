@@ -216,12 +216,17 @@ def _buscar_comisionistas_aplicables(
         TarifaClienteProducto.activo.is_(True),
     )
     if fecha:
-        # Una tarifa caducada no asigna comisionistas a órdenes posteriores.
+        # La fecha de extracción es solo un filtro preliminar de asignación;
+        # la liquidación definitiva vuelve a resolver por fecha de pago.
         query = query.filter(
+            or_(
+                TarifaClienteProducto.vigente_desde.is_(None),
+                TarifaClienteProducto.vigente_desde <= fecha,
+            ),
             or_(
                 TarifaClienteProducto.vigente_hasta.is_(None),
                 TarifaClienteProducto.vigente_hasta >= fecha,
-            )
+            ),
         )
     if cliente.fincas:
         if not finca:

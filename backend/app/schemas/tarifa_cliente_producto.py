@@ -19,6 +19,7 @@ class TarifaClienteProductoBase(BaseModel):
     valor: Decimal
     umbral_kg: Optional[Decimal] = Field(default=None, alias="umbralKg")
     valor_sobre_umbral: Optional[Decimal] = Field(default=None, alias="valorSobreUmbral")
+    vigente_desde: Optional[date] = Field(default=None, alias="vigenteDesde")
     vigente_hasta: Optional[date] = Field(default=None, alias="vigenteHasta")
 
     model_config = ConfigDict(populate_by_name=True)
@@ -45,6 +46,7 @@ class TarifaClienteProductoResponse(BaseModel):
     activo: bool
     umbral_kg: Optional[Decimal] = Field(default=None, alias="umbralKg")
     valor_sobre_umbral: Optional[Decimal] = Field(default=None, alias="valorSobreUmbral")
+    vigente_desde: Optional[date] = Field(default=None, alias="vigenteDesde")
     vigente_hasta: Optional[date] = Field(default=None, alias="vigenteHasta")
     comisionista: Optional[str] = None
     cliente: Optional[str] = None
@@ -60,6 +62,7 @@ class TarifaCambiosMasivos(BaseModel):
     activo: Optional[bool] = None
     umbral_kg: Optional[Decimal] = Field(default=None, alias="umbralKg")
     valor_sobre_umbral: Optional[Decimal] = Field(default=None, alias="valorSobreUmbral")
+    vigente_desde: Optional[date] = Field(default=None, alias="vigenteDesde")
     vigente_hasta: Optional[date] = Field(default=None, alias="vigenteHasta")
     proveedores_excluidos: Optional[List[str]] = Field(default=None, alias="proveedoresExcluidos")
 

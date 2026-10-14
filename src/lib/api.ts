@@ -430,8 +430,8 @@ export async function updateTarifasClienteProductoMasivo(
     valor?: number;
     activo?: boolean;
     umbralKg?: number | null;
-    valorSobreUmbral?: number | null;
-    vigenteHasta?: string | null;
+    vigenteDesde?: string | null;
+    vigenteHasta?: string | null,
     proveedoresExcluidos?: string[];
   }
 ) {

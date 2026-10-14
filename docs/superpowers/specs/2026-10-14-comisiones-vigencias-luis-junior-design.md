@@ -19,7 +19,7 @@ La fecha de pago (`fechaPago` / `fecha_pago`) es la única fecha que decide la t
 - Las tarifas porcentuales de la copia pasan de 2% a 5%.
 - No se crean combinaciones que no existan en la configuración actual o que el PDF no contemple.
 - Si hubiera una tarifa de Luis que no sea porcentual, se conserva su tipo y valor en la copia; no se transforma silenciosamente en porcentaje.
-- La identificación de Luis será por nombre normalizado `LUIS CASTRO`; la carga debe fallar con mensaje explícito si no existe o si hay más de un resultado.
+- La identificación de Luis aceptará el nombre normalizado `LUIS CASTRO` o el nombre histórico exacto `CASTRO`; la carga debe fallar con mensaje explícito si hay más de un resultado.
 
 ### Junior Naranjo
 

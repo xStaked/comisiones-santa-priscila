@@ -17,6 +17,8 @@ from app.services.liquidacion import (
     _buscar_tarifa_especifica,
     _calcular_comision_con_tarifa,
     _calcular_comision_especifica,
+    _fecha_efectiva,
+    _tarifa_vigente,
 )
 from app.services.retencion import cargar_periodos
 from app.models.retencion import Retencion
@@ -39,7 +41,8 @@ def _calcular_comision_orden(
         total += _calcular_comision_especifica(db, oi, tarifa_esp, periodos)
     else:
         for tarifa in comisionista.tarifas:
-            total += _calcular_comision_con_tarifa(oi, tarifa)
+            if _tarifa_vigente(tarifa, _fecha_efectiva(oi)):
+                total += _calcular_comision_con_tarifa(oi, tarifa)
     return total
 
 

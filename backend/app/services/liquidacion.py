@@ -4,7 +4,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from uuid import UUID
 
-from sqlalchemy import func, or_
+from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session
 
 from app.models.comisionista import Tarifa, TipoTarifa
@@ -93,14 +93,24 @@ def _fecha_efectiva(orden_item: OrdenItem) -> date:
 
 
 def _vigente_en(fecha: date):
-    """Predicado: la tarifa aplica a una orden con esa fecha efectiva.
+    """Predicado de vigencia para tarifas específicas."""
+    return and_(
+        or_(
+            TarifaClienteProducto.vigente_desde.is_(None),
+            TarifaClienteProducto.vigente_desde <= fecha,
+        ),
+        or_(
+            TarifaClienteProducto.vigente_hasta.is_(None),
+            TarifaClienteProducto.vigente_hasta >= fecha,
+        ),
+    )
 
-    `vigente_hasta` NULL significa sin caducidad. Si tiene fecha, la tarifa
-    solo se usa hasta ese día inclusive.
-    """
-    return or_(
-        TarifaClienteProducto.vigente_hasta.is_(None),
-        TarifaClienteProducto.vigente_hasta >= fecha,
+
+def _tarifa_vigente(tarifa: Tarifa, fecha: date) -> bool:
+    """Comprueba la misma ventana para tarifas globales ya cargadas."""
+    return (
+        (tarifa.vigente_desde is None or tarifa.vigente_desde <= fecha)
+        and (tarifa.vigente_hasta is None or tarifa.vigente_hasta >= fecha)
     )
 
 
@@ -665,7 +675,10 @@ def crear_liquidacion(
                     proveedor_orden = _normalizar_texto(
                         oi.orden.proveedor if oi.orden else ""
                     )
+                    fecha_efectiva = _fecha_efectiva(oi)
                     for tarifa in comisionista.tarifas:
+                        if not _tarifa_vigente(tarifa, fecha_efectiva):
+                            continue
                         if tarifa.proveedores_excluidos:
                             excluidos = [
                                 _normalizar_texto(p) for p in tarifa.proveedores_excluidos

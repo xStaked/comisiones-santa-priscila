@@ -22,6 +22,7 @@ from app.database import SessionLocal
 from app.models.cliente import Cliente, Finca
 from app.models.comisionista import Comisionista, TipoTarifa
 from app.models.producto import Producto, ProductoAlias
+from app.commands.seed_reglas_comision import aplicar_reglas_comision
 from app.models.tarifa_cliente_producto import TarifaClienteProducto
 from app.services.catalog_normalization import normalizar_nombre_finca
 
@@ -701,6 +702,7 @@ def main() -> None:
     db = SessionLocal()
     try:
         resumen = seed_tarifas_externas(db)
+        resumen.update(aplicar_reglas_comision(db))
         print("Tarifas externas cargadas correctamente.")
         for clave, valor in resumen.items():
             print(f"{clave}: {valor}")

@@ -114,6 +114,7 @@ export function TarifasTab() {
     tipo: 'sin_cambio',
     valor: '',
     activo: 'sin_cambio',
+    vigenteDesde: campoMasivo(),
     vigenteHasta: campoMasivo(),
     umbralKg: campoMasivo(),
     valorSobreUmbral: campoMasivo(),
@@ -136,6 +137,7 @@ export function TarifasTab() {
     activo: boolean;
     umbralKg: string;
     valorSobreUmbral: string;
+    vigenteDesde: string;
     vigenteHasta: string;
   }>({
     comisionistaId: '',
@@ -148,6 +150,7 @@ export function TarifasTab() {
     activo: true,
     umbralKg: '',
     valorSobreUmbral: '',
+    vigenteDesde: '',
     vigenteHasta: '',
   });
 
@@ -239,6 +242,7 @@ export function TarifasTab() {
       activo: true,
       umbralKg: '',
       valorSobreUmbral: '',
+      vigenteDesde: '',
       vigenteHasta: '',
     });
     setProveedoresSeleccionados([]);
@@ -277,6 +281,7 @@ export function TarifasTab() {
       activo: form.activo,
       umbralKg: form.umbralKg ? parseFloat(form.umbralKg) : undefined,
       valorSobreUmbral: form.valorSobreUmbral ? parseFloat(form.valorSobreUmbral) : undefined,
+      vigenteDesde: form.vigenteDesde || undefined,
       vigenteHasta: form.vigenteHasta || undefined,
     };
 
@@ -302,6 +307,7 @@ export function TarifasTab() {
       activo: t.activo,
       umbralKg: t.umbralKg?.toString() || '',
       valorSobreUmbral: t.valorSobreUmbral?.toString() || '',
+      vigenteDesde: t.vigenteDesde?.slice(0, 10) || '',
       vigenteHasta: t.vigenteHasta?.slice(0, 10) || '',
     });
     setProveedoresSeleccionados(t.proveedoresExcluidos || []);
@@ -339,6 +345,7 @@ export function TarifasTab() {
       activo?: boolean;
       umbralKg?: number | null;
       valorSobreUmbral?: number | null;
+      vigenteDesde?: string | null;
       vigenteHasta?: string | null;
       proveedoresExcluidos?: string[];
     } = {};
@@ -369,6 +376,14 @@ export function TarifasTab() {
         cambios[payload] = valor;
       }
     }
+    if (bulkForm.vigenteDesde.modo === 'limpiar') cambios.vigenteDesde = null;
+    if (bulkForm.vigenteDesde.modo === 'establecer') {
+      if (!bulkForm.vigenteDesde.valor) {
+        toast.error('Selecciona una fecha de inicio');
+        return;
+      }
+      cambios.vigenteDesde = bulkForm.vigenteDesde.valor;
+    }
     if (bulkForm.vigenteHasta.modo === 'limpiar') cambios.vigenteHasta = null;
     if (bulkForm.vigenteHasta.modo === 'establecer') {
       if (!bulkForm.vigenteHasta.valor) {
@@ -391,7 +406,7 @@ export function TarifasTab() {
     updateTarifasMasivo(Array.from(seleccionadas), cambios)
       .then(() => setSeleccionadas(new Set()))
       .catch(() => {});
-    setBulkForm({ tipo: 'sin_cambio', valor: '', activo: 'sin_cambio', vigenteHasta: campoMasivo(), umbralKg: campoMasivo(), valorSobreUmbral: campoMasivo(), proveedoresExcluidos: campoMasivo() });
+    setBulkForm({ tipo: 'sin_cambio', valor: '', activo: 'sin_cambio', vigenteDesde: campoMasivo(), vigenteHasta: campoMasivo(), umbralKg: campoMasivo(), valorSobreUmbral: campoMasivo(), proveedoresExcluidos: campoMasivo() });
     setBulkOpen(false);
   };
 
@@ -838,6 +853,19 @@ export function TarifasTab() {
             </div>
 
             <div className="space-y-2">
+              <Label htmlFor="vigenteDesde">Vigente desde (opcional)</Label>
+              <Input
+                id="vigenteDesde"
+                type="date"
+                value={form.vigenteDesde}
+                onChange={(e) => setForm({ ...form, vigenteDesde: e.target.value })}
+                className="rounded-xl"
+              />
+              <p className="text-xs text-muted-foreground">
+                Déjalo vacío si la tarifa aplica desde cualquier fecha.
+              </p>
+            </div>
+            <div className="space-y-2">
               <Label htmlFor="vigenteHasta">Vigente hasta (opcional)</Label>
               <Input
                 id="vigenteHasta"
@@ -963,8 +991,8 @@ export function TarifasTab() {
                 </SelectContent>
               </Select>
             </div>
-            {(['vigenteHasta', 'umbralKg', 'valorSobreUmbral'] as const).map((campo) => {
-              const etiquetas = { vigenteHasta: 'Vigente hasta', umbralKg: 'Umbral (kg)', valorSobreUmbral: 'Valor sobre umbral' };
+            {(['vigenteDesde', 'vigenteHasta', 'umbralKg', 'valorSobreUmbral'] as const).map((campo) => {
+              const etiquetas = { vigenteDesde: 'Vigente desde', vigenteHasta: 'Vigente hasta', umbralKg: 'Umbral (kg)', valorSobreUmbral: 'Valor sobre umbral' };
               const dato = bulkForm[campo];
               return (
                 <div key={campo} className="space-y-2">
@@ -978,7 +1006,7 @@ export function TarifasTab() {
                         <SelectItem value="limpiar">Quitar</SelectItem>
                       </SelectContent>
                     </Select>
-                    {dato.modo === 'establecer' && <Input type={campo === 'vigenteHasta' ? 'date' : 'number'} step={campo === 'vigenteHasta' ? undefined : '0.0001'} min={campo === 'vigenteHasta' ? undefined : '0'} value={dato.valor} onChange={(e) => setBulkForm({ ...bulkForm, [campo]: { ...dato, valor: e.target.value } })} className="rounded-xl" />}
+                    {dato.modo === 'establecer' && <Input type={campo === 'vigenteDesde' || campo === 'vigenteHasta' ? 'date' : 'number'} step={campo === 'vigenteDesde' || campo === 'vigenteHasta' ? undefined : '0.0001'} min={campo === 'vigenteDesde' || campo === 'vigenteHasta' ? undefined : '0'} value={dato.valor} onChange={(e) => setBulkForm({ ...bulkForm, [campo]: { ...dato, valor: e.target.value } })} className="rounded-xl" />}
                   </div>
                 </div>
               );

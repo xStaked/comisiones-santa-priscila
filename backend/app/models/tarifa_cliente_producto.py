@@ -48,8 +48,8 @@ class TarifaClienteProducto(BaseModel):
     activo = Column(Boolean, nullable=False, default=True)
     umbral_kg = Column(Numeric(12, 2), nullable=True)
     valor_sobre_umbral = Column(Numeric(10, 4), nullable=True)
-    # NULL = sin caducidad. Si tiene fecha, la tarifa solo aplica a órdenes
-    # con fecha menor o igual a ella.
+    # NULL = sin límite. La tarifa aplica si vigente_desde <= fecha <= vigente_hasta.
+    vigente_desde = Column(Date, nullable=True)
     vigente_hasta = Column(Date, nullable=True)
 
     comisionista = relationship("Comisionista")
@@ -64,6 +64,7 @@ class TarifaClienteProducto(BaseModel):
             "producto_id",
             "finca_id",
             "proveedor",
-            name="uq_tarifa_com_cli_prod_finca_prov",
+            "vigente_desde",
+            name="uq_tarifa_com_cli_prod_finca_prov_desde",
         ),
     )

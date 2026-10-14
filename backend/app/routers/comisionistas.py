@@ -45,6 +45,8 @@ def crear_comisionista(data: ComisionistaCreate, db: Session = Depends(get_db), 
                 proveedores_excluidos=t.proveedores_excluidos or [],
                 umbral_kg=t.umbral_kg,
                 valor_sobre_umbral=t.valor_sobre_umbral,
+                vigente_desde=t.vigente_desde,
+                vigente_hasta=t.vigente_hasta,
             )
         )
 
@@ -91,6 +93,8 @@ def actualizar_comisionista(
                     proveedores_excluidos=t.proveedores_excluidos or [],
                     umbral_kg=t.umbral_kg,
                     valor_sobre_umbral=t.valor_sobre_umbral,
+                    vigente_desde=t.vigente_desde,
+                    vigente_hasta=t.vigente_hasta,
                 )
             )
 

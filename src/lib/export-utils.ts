@@ -221,13 +221,11 @@ export function encontrarTarifaEspecifica(
   // pagan); si aún no está pagada, cae a la fecha de la factura. Ambas son ISO
   // YYYY-MM-DD, así que comparar como texto ordena bien.
   const fechaEfectiva = (item.fechaPago || item.fecha || '').slice(0, 10);
-  const estaVigente = (tarifa: TarifaClienteProducto) =>
-    !tarifa.vigenteHasta || !fechaEfectiva || fechaEfectiva <= tarifa.vigenteHasta.slice(0, 10);
 
   const candidatas = tarifas.filter(
     (tarifa) =>
-      tarifa.comisionistaId === comisionistaId &&
-      estaVigente(tarifa) &&
+      (!tarifa.vigenteDesde || !fechaEfectiva || fechaEfectiva >= tarifa.vigenteDesde.slice(0, 10)) &&
+      (!tarifa.vigenteHasta || !fechaEfectiva || fechaEfectiva <= tarifa.vigenteHasta.slice(0, 10)) &&
       (coincideCliente(tarifa) || sinClienteIdentificado) &&
       coincideProducto(tarifa)
   );
@@ -277,7 +275,10 @@ export function encontrarTarifaEspecifica(
 export function calcularComision(item: OrdenItem, comisionista: Comisionista | undefined, kgAcumulado?: number): number {
   if (!comisionista) return 0;
   const proveedorOrden = normalizarTexto(item.proveedor || '');
+  const fechaEfectiva = (item.fechaPago || item.fecha || '').slice(0, 10);
   return comisionista.tarifas.reduce((sum, tarifa) => {
+    if (tarifa.vigenteDesde && fechaEfectiva && fechaEfectiva < tarifa.vigenteDesde.slice(0, 10)) return sum;
+    if (tarifa.vigenteHasta && fechaEfectiva && fechaEfectiva > tarifa.vigenteHasta.slice(0, 10)) return sum;
     if (tarifa.proveedoresExcluidos?.length) {
       const excluidos = tarifa.proveedoresExcluidos.map(normalizarTexto);
       if (excluidos.includes(proveedorOrden)) {

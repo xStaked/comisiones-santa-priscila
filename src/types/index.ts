@@ -16,6 +16,8 @@ export interface TarifaComision {
   proveedoresExcluidos?: string[];
   umbralKg?: number;
   valorSobreUmbral?: number;
+  vigenteDesde?: string;
+  vigenteHasta?: string;
 }
 
 export interface Comisionista {
@@ -137,7 +139,9 @@ export interface TarifaClienteProducto {
   activo: boolean;
   umbralKg?: number;
   valorSobreUmbral?: number;
-  /** ISO YYYY-MM-DD. Vacío = sin caducidad. La tarifa solo aplica a órdenes hasta esta fecha. */
+  /** ISO YYYY-MM-DD. NULL = sin inicio. */
+  vigenteDesde?: string;
+  /** ISO YYYY-MM-DD. NULL = sin caducidad. */
   vigenteHasta?: string;
   createdAt: string;
   // Relaciones opcionales (populadas por el backend)

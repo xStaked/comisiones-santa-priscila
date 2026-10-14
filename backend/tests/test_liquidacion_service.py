@@ -56,6 +56,51 @@ def test_busca_tarifa_especifica_por_nombres_en_orden_antigua(db_session):
     assert encontrada.id == tarifa.id
 
 
+def test_tarifa_luis_usa_cinco_por_ciento_por_fecha_de_pago(db_session):
+    cliente = Cliente(nombre="Cliente Luis", tipo="individual")
+    comisionista = Comisionista(nombre="LUIS CASTRO")
+    producto = Producto(nombre="Producto Luis", unidad_comision="kg")
+    db_session.add_all([cliente, comisionista, producto])
+    db_session.flush()
+
+    db_session.add_all([
+        TarifaClienteProducto(
+            comisionista_id=comisionista.id,
+            cliente_id=cliente.id,
+            producto_id=producto.id,
+            tipo=TipoTarifa.porcentaje,
+            valor=Decimal("2"),
+            vigente_hasta=date(2026, 7, 31),
+        ),
+        TarifaClienteProducto(
+            comisionista_id=comisionista.id,
+            cliente_id=cliente.id,
+            producto_id=producto.id,
+            tipo=TipoTarifa.porcentaje,
+            valor=Decimal("5"),
+            vigente_desde=date(2026, 8, 1),
+        ),
+    ])
+    orden = Orden(
+        fecha=date(2026, 2, 1), fecha_pago=date(2026, 10, 1),
+        numero_orden="LUIS-001", estado=EstadoOrden.pagada,
+    )
+    db_session.add(orden)
+    db_session.flush()
+    item = OrdenItem(
+        orden_id=orden.id, fecha=date(2026, 2, 1), numero_orden=orden.numero_orden,
+        finca="-", producto=producto.nombre, cantidad=Decimal("100"), unidad="kg",
+        precio_unitario=Decimal("1"), total=Decimal("100"), estado=EstadoOrden.pagada,
+        cliente_id=cliente.id, producto_id=producto.id,
+    )
+    db_session.add(item)
+    db_session.commit()
+
+    tarifa = _buscar_tarifa_especifica(db_session, item, comisionista.id)
+
+    assert tarifa is not None
+    assert tarifa.valor == Decimal("5")
+
 def test_busca_tarifa_pineda_para_goldo_administracion_y_ecu_bacillus(db_session):
     cliente = Cliente(nombre="Santa Priscila", tipo="grupo")
     comisionista = Comisionista(nombre="PINEDA")

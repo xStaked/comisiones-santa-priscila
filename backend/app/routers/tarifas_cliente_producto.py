@@ -38,6 +38,7 @@ def _enriquecer_respuesta(
         valor=tarifa.valor,
         activo=tarifa.activo,
         umbralKg=tarifa.umbral_kg,
+        vigenteDesde=tarifa.vigente_desde,
         valorSobreUmbral=tarifa.valor_sobre_umbral,
         vigenteHasta=tarifa.vigente_hasta,
         comisionista=tarifa.comisionista.nombre if tarifa.comisionista else None,
@@ -100,6 +101,7 @@ def crear_tarifa_cliente_producto(
         tipo=data.tipo,
         valor=data.valor,
         umbral_kg=data.umbral_kg,
+        vigente_desde=data.vigente_desde,
         valor_sobre_umbral=data.valor_sobre_umbral,
         vigente_hasta=data.vigente_hasta,
     )
@@ -194,6 +196,7 @@ def actualizar_tarifa_cliente_producto(
     tarifa.tipo = data.tipo
     tarifa.valor = data.valor
     tarifa.umbral_kg = data.umbral_kg
+    tarifa.vigente_desde = data.vigente_desde
     tarifa.valor_sobre_umbral = data.valor_sobre_umbral
     tarifa.vigente_hasta = data.vigente_hasta
 

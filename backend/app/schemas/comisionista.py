@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import date
 from decimal import Decimal
 from typing import List, Literal, Optional
 from uuid import UUID
@@ -13,6 +14,8 @@ class TarifaBase(BaseModel):
     proveedores_excluidos: List[str] = []
     umbral_kg: Optional[Decimal] = None
     valor_sobre_umbral: Optional[Decimal] = None
+    vigente_desde: Optional[date] = None
+    vigente_hasta: Optional[date] = None
 
 
 class TarifaCreate(TarifaBase):

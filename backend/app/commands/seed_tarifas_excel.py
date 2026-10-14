@@ -21,6 +21,7 @@ from app.models.cliente import Cliente
 from app.models.comisionista import Comisionista, TipoTarifa
 from app.models.producto import Producto
 from app.models.cliente import Finca
+from app.commands.seed_reglas_comision import aplicar_reglas_comision
 from app.models.tarifa_cliente_producto import TarifaClienteProducto
 
 EXCEL_PATH = os.environ.get(
@@ -296,6 +297,8 @@ def main():
         else:
             print("   Hoja 'OTRAS EMPRESAS' no encontrada.")
 
+        resumen_reglas = aplicar_reglas_comision(db)
+        print(f"Reglas especiales: {resumen_reglas}")
         print("\n" + "=" * 60)
         print(f"TOTAL DE TARIFAS CREADAS: {total_tarifas}")
         print("=" * 60)
