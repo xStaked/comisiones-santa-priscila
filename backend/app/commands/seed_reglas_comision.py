@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.models.cliente import Cliente
 from app.models.comisionista import Comisionista, Tarifa, TipoTarifa
+from app.database import SessionLocal
 from app.models.producto import Producto
 from app.models.tarifa_cliente_producto import TarifaClienteProducto
 from app.services.catalog_normalization import _normalizar_texto, normalizar_nombre_producto
@@ -172,3 +173,20 @@ def aplicar_reglas_comision(db: Session) -> dict[str, int]:
 
     db.commit()
     return {"tarifas_luis_creadas": creadas_luis, "tarifas_junior_actualizadas": actualizadas_junior}
+
+
+def main() -> None:
+    db = SessionLocal()
+    try:
+        resumen = aplicar_reglas_comision(db)
+        for clave, valor in resumen.items():
+            print(f"{clave}: {valor}")
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+
+if __name__ == "__main__":
+    main()
