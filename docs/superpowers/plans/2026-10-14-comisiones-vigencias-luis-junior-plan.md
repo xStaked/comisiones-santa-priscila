@@ -59,12 +59,11 @@ Archivos:
 Crear una migración de datos o comando dedicado bajo `backend/app/commands/` siguiendo el patrón idempotente existente.
 
 1. Buscar exactamente un comisionista cuyo nombre normalizado sea `LUIS CASTRO` o el nombre histórico `CASTRO`; fallar claramente si hay duplicados.
-2. Seleccionar todas sus tarifas específicas y globales actuales.
-3. Para las tarifas específicas, cerrar las originales el `2026-07-31`.
-4. Para cada tarifa, crear una copia con `vigente_desde = 2026-08-01`, `vigente_hasta = NULL` y los mismos alcances/exclusiones.
-5. En las copias porcentuales, cambiar `valor` de `2` a `5`.
-6. No crear combinaciones inexistentes ni modificar excepciones del PDF.
-7. Reejecutar el comando sin duplicar copias.
+2. Cerrar sus tarifas antiguas el `2026-07-31`, sin reutilizar sus alcances como tarifas externas.
+3. Cargar desde `2026-08-01` tarifas específicas al 5% para FRIGOLANDIA, PLUMONT - EXPALSA, FILACAS - EXPALSA y CALIMMO - EXPALSA.
+4. Crear filas para Pastillas TH, Pastillas Grandes, Pastillas Alimentador, Salud, Agua y Suelo Polvo, sin finca ni proveedor específico.
+5. Aplicar la idempotencia por combinación comisionista/cliente/producto/fecha de inicio y eliminar copias externas obsoletas.
+6. No crear clientes, productos ni alcances fuera de la segunda hoja del PDF.
 
 ## 6. Configuración de Junior
 

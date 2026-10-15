@@ -8,59 +8,65 @@ from app.models.producto import Producto
 from app.models.tarifa_cliente_producto import TarifaClienteProducto
 
 
-def test_copia_tarifas_de_luis_con_vigencia_y_cinco_por_ciento(db_session):
+CLIENTES_LUIS = [
+    "FRIGOLANDIA",
+    "PLUMONT - EXPALSA",
+    "FILACAS - EXPALSA",
+    "CALIMMO - EXPALSA",
+]
+PRODUCTOS_LUIS = [
+    "PAST TH",
+    "ECU BACILLUS SUELO PASTILLA",
+    "PAST ALIM",
+    "ECU-BACILLUS SALUD",
+    "ECU-BACILLUS AGUA",
+    "ECU-BACILLUS SUELO",
+]
+
+
+def _crear_catalogo_luis(db_session):
+    clientes = [Cliente(nombre=nombre, tipo="individual") for nombre in CLIENTES_LUIS]
+    productos = [Producto(nombre=nombre, unidad_comision="kg") for nombre in PRODUCTOS_LUIS]
+    db_session.add_all(clientes + productos)
+    db_session.flush()
+    return clientes, productos
+
+
+def test_carga_tarifas_externas_de_luis_y_cierra_las_antiguas(db_session):
     luis = Comisionista(nombre="CASTRO")
-    tarifa = Tarifa(comisionista=luis, tipo=TipoTarifa.porcentaje, valor=Decimal("2"))
-    db_session.add_all([luis, tarifa])
+    tarifa_antigua = Tarifa(comisionista=luis, tipo=TipoTarifa.porcentaje, valor=Decimal("2"))
+    clientes, productos = _crear_catalogo_luis(db_session)
+    db_session.add_all([luis, tarifa_antigua])
     db_session.commit()
 
     resultado = aplicar_reglas_comision(db_session)
-    tarifas = db_session.query(Tarifa).filter(Tarifa.comisionista_id == luis.id).all()
+    tarifas = db_session.query(TarifaClienteProducto).filter(
+        TarifaClienteProducto.comisionista_id == luis.id
+    ).all()
 
-    assert resultado["tarifas_luis_creadas"] == 1
-    assert len(tarifas) == 2
-    original = next(t for t in tarifas if t.vigente_desde is None)
-    externa = next(t for t in tarifas if t.vigente_desde == date(2026, 8, 1))
-    assert original.valor == Decimal("2")
-    assert original.vigente_hasta == date(2026, 7, 31)
-    assert externa.valor == Decimal("5")
-    assert externa.vigente_hasta is None
-
-    segunda_ejecucion = aplicar_reglas_comision(db_session)
-    tarifas_despues = db_session.query(Tarifa).filter(Tarifa.comisionista_id == luis.id).all()
-
-    assert segunda_ejecucion["tarifas_luis_creadas"] == 0
-    assert len(tarifas_despues) == 2
+    assert resultado["tarifas_luis_creadas"] == 24
+    assert len(tarifas) == 24
+    assert tarifa_antigua.vigente_hasta == date(2026, 7, 31)
+    assert {tarifa.valor for tarifa in tarifas} == {Decimal("5")}
+    assert {tarifa.cliente_id for tarifa in tarifas} == {cliente.id for cliente in clientes}
+    assert {tarifa.producto_id for tarifa in tarifas} == {producto.id for producto in productos}
+    assert all(tarifa.vigente_desde == date(2026, 8, 1) for tarifa in tarifas)
 
 
-
-def test_copia_tarifa_especifica_conserva_alcance_y_exclusiones(db_session):
-    cliente = Cliente(nombre="Cliente Específico", tipo="individual")
+def test_carga_externa_de_luis_es_idempotente(db_session):
     luis = Comisionista(nombre="LUIS CASTRO")
-    producto = Producto(nombre="Producto Específico", unidad_comision="kg")
-    tarifa = TarifaClienteProducto(
-        comisionista=luis,
-        cliente=cliente,
-        producto=producto,
-        proveedor="Proveedor A",
-        proveedores_excluidos=["Proveedor B"],
-        tipo=TipoTarifa.porcentaje,
-        valor=Decimal("2"),
-    )
-    db_session.add_all([cliente, luis, producto, tarifa])
+    clientes, productos = _crear_catalogo_luis(db_session)
+    db_session.add(luis)
     db_session.commit()
 
     aplicar_reglas_comision(db_session)
-    copia = db_session.query(TarifaClienteProducto).filter(
-        TarifaClienteProducto.comisionista_id == luis.id,
-        TarifaClienteProducto.vigente_desde == date(2026, 8, 1),
-    ).one()
+    segunda_ejecucion = aplicar_reglas_comision(db_session)
+    tarifas = db_session.query(TarifaClienteProducto).filter(
+        TarifaClienteProducto.comisionista_id == luis.id
+    ).all()
 
-    assert copia.cliente_id == tarifa.cliente_id
-    assert copia.producto_id == tarifa.producto_id
-    assert copia.proveedor == "Proveedor A"
-    assert copia.proveedores_excluidos == ["Proveedor B"]
-    assert copia.valor == Decimal("5")
+    assert segunda_ejecucion["tarifas_luis_creadas"] == 0
+    assert len(tarifas) == 24
 
 
 def test_configura_umbral_de_junior_en_productos_bacterias(db_session):

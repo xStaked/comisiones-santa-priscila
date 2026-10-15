@@ -13,12 +13,11 @@ La fecha de pago (`fechaPago` / `fecha_pago`) es la única fecha que decide la t
 
 ### Luis Castro
 
-- Copiar todas las tarifas existentes de Luis, conservando cliente, producto, finca, proveedor y exclusiones.
-- La tarifa original queda cerrada el 31/07/2026.
-- La copia comienza el 01/08/2026.
-- Las tarifas porcentuales de la copia pasan de 2% a 5%.
-- No se crean combinaciones que no existan en la configuración actual o que el PDF no contemple.
-- Si hubiera una tarifa de Luis que no sea porcentual, se conserva su tipo y valor en la copia; no se transforma silenciosamente en porcentaje.
+- Cerrar todas las tarifas antiguas de Luis el 31/07/2026.
+- Crear desde el 01/08/2026 tarifas nuevas, independientes de las antiguas, para FRIGOLANDIA, PLUMONT - EXPALSA, FILACAS - EXPALSA y CALIMMO - EXPALSA.
+- Las nuevas tarifas cubren ECU-Bacillus Pastillas TH, Pastillas Grandes, Pastillas Alimentador, Salud, Agua y Suelo Polvo.
+- Todas las nuevas tarifas son `5%` sobre la venta después de restar la retención vigente.
+- No copiar los alcances internos anteriores ni crear clientes/productos fuera de la segunda hoja del PDF.
 - La identificación de Luis aceptará el nombre normalizado `LUIS CASTRO` o el nombre histórico exacto `CASTRO`; la carga debe fallar con mensaje explícito si hay más de un resultado.
 
 ### Junior Naranjo
@@ -60,7 +59,7 @@ La regla de umbral de Junior continúa usando el acumulado de la liquidación en
 ## Migraciones y carga inicial
 
 - Crear una migración Alembic para las columnas de vigencia.
-- Crear una migración/seed idempotente que cierre las tarifas actuales de Luis y cree sus copias de 5%.
+- Crear una migración/seed idempotente que cierre las tarifas antiguas de Luis y cargue las tarifas externas nuevas definidas por el PDF.
 - Actualizar schemas Pydantic, tipos TypeScript, transformaciones necesarias y endpoints de tarifas para exponer las nuevas fechas.
 - Actualizar la carga de tarifas de Junior sin duplicar filas existentes.
 - Mantener la lógica de normalización existente para localizar productos ECU-Bacillus.
