@@ -8,9 +8,9 @@ from decimal import Decimal
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
+from app.database import SessionLocal
 from app.models.cliente import Cliente
 from app.models.comisionista import Comisionista, Tarifa, TipoTarifa
-from app.database import SessionLocal
 from app.models.producto import Producto
 from app.models.tarifa_cliente_producto import TarifaClienteProducto
 from app.services.catalog_normalization import _normalizar_texto, normalizar_nombre_producto
@@ -44,8 +44,12 @@ PRODUCTOS_JUNIOR = {
 
 
 def _buscar_luis(db: Session) -> Comisionista | None:
-    nombres = {"LUIS CASTRO", "CASTRO"}
-    resultados = [c for c in db.query(Comisionista).all() if _normalizar_texto(c.nombre) in nombres]
+    resultados = [
+        c
+        for c in db.query(Comisionista).all()
+        if {"LUIS", "CASTRO"}.issubset(set(_normalizar_texto(c.nombre).split()))
+        or _normalizar_texto(c.nombre) == "CASTRO"
+    ]
     if len(resultados) > 1:
         raise ValueError("Hay varios comisionistas que coinciden con Luis Castro")
     return resultados[0] if resultados else None

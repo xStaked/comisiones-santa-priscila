@@ -33,7 +33,7 @@ def _crear_catalogo_luis(db_session):
 
 
 def test_carga_tarifas_externas_de_luis_y_cierra_las_antiguas(db_session):
-    luis = Comisionista(nombre="CASTRO")
+    luis = Comisionista(nombre="CASTRO LUIS")
     tarifa_antigua = Tarifa(comisionista=luis, tipo=TipoTarifa.porcentaje, valor=Decimal("2"))
     clientes, productos = _crear_catalogo_luis(db_session)
     db_session.add_all([luis, tarifa_antigua])
