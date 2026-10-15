@@ -31,7 +31,7 @@ import {
 import { toast } from 'sonner';
 
 const COLS =
-  'grid-cols-[34px_minmax(0,1.15fr)_minmax(0,1.25fr)_minmax(0,1.3fr)_minmax(0,1fr)_120px_minmax(0,1.1fr)_100px_80px]';
+  'grid-cols-[34px_minmax(0,1.15fr)_minmax(0,1.25fr)_minmax(0,1.3fr)_minmax(0,1fr)_120px_minmax(0,1.1fr)_100px_82px_80px]';
 
 /** "Regla escalonada" del prototipo: el umbral en kg y el valor sobre umbral. */
 function reglaEscalonada(t: TarifaClienteProducto): { texto: string; conRegla: boolean } {
@@ -1061,6 +1061,7 @@ export function TarifasTab() {
                 <div className="text-right">Valor</div>
                 <div>Regla escalonada</div>
                 <div>Vigencia</div>
+                <div>Estado</div>
                 <div className="text-right">Acciones</div>
               </div>
 
@@ -1083,7 +1084,6 @@ export function TarifasTab() {
                     </div>
                     <div className="min-w-0">
                       <div className="truncate text-[13px] text-[#0B1220]">{getComisionistaTarifa(t)}</div>
-                      {!t.activo && <Chip className="mt-0.5">Inactiva</Chip>}
                     </div>
                     <div className="min-w-0">
                       <div className="truncate text-[12.5px] text-[#344054]">{getClienteTarifa(t)}</div>
@@ -1111,6 +1111,11 @@ export function TarifasTab() {
                     </div>
                     <div className="cifra text-[11.5px] text-[#6B7684]">
                       {t.vigenteHasta ? t.vigenteHasta.slice(0, 10) : 'Sin caducidad'}
+                    </div>
+                    <div>
+                      <Chip className={t.activo ? 'bg-[#DCFCE7] text-[#166534]' : 'bg-[#FEE2E2] text-[#991B1B]'}>
+                        {t.activo ? 'Activa' : 'Inactiva'}
+                      </Chip>
                     </div>
                     <div className="flex justify-end gap-1.5">
                       <button
