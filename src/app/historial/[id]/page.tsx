@@ -2,7 +2,7 @@
 
 import { useMemo } from 'react';
 import Link from 'next/link';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import {
   ArrowLeft,
@@ -14,7 +14,6 @@ import {
   Package,
   TrendingUp,
   Trash2,
-  RotateCcw,
   MapPin,
 } from 'lucide-react';
 import {
@@ -79,8 +78,7 @@ function buildComisionistasFromSnapshot(items: any[]): Comisionista[] {
 export default function LiquidacionDetallePage() {
   const params = useParams();
   const id = params.id as string;
-  const router = useRouter();
-  const { deleteLiquidacion, restoreLiquidacion, clientes } = useApp();
+  const { deleteLiquidacion, clientes } = useApp();
 
   const { data: rawLiquidacion } = useQuery({
     queryKey: ['liquidacion', id],
@@ -305,19 +303,6 @@ export default function LiquidacionDetallePage() {
             >
               <Trash2 className="h-4 w-4 mr-2" />
               Eliminar
-            </Button>
-            <Button
-              size="sm"
-              onClick={() => {
-                if (confirm('¿Restaurar esta liquidación a órdenes pagadas? Se eliminará del historial y los registros volverán a estar editables.')) {
-                  restoreLiquidacion(liquidacion.id);
-                  router.push('/ordenes');
-                }
-              }}
-              className="btn-primary-dark rounded-xl"
-            >
-              <RotateCcw className="h-4 w-4 mr-2" />
-              Restaurar a pagadas
             </Button>
           </div>
         </div>

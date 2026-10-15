@@ -106,9 +106,10 @@ def por_finca(db: Session = Depends(get_db), current_user: User = Depends(get_cu
         grupos[clave]["cantidad"] += oi.cantidad
         grupos[clave]["total"] += oi.total
         for asignacion in oi.asignaciones:
-            grupos[clave]["comision"] += _calcular_comision_orden(
-                db, oi, asignacion.comisionista, periodos
-            )
+            if asignacion.liquidacion_id is None:
+                grupos[clave]["comision"] += _calcular_comision_orden(
+                    db, oi, asignacion.comisionista, periodos
+                )
 
     return [
         {
@@ -152,9 +153,10 @@ def por_producto(db: Session = Depends(get_db), current_user: User = Depends(get
         grupos[clave]["cantidad"] += oi.cantidad
         grupos[clave]["total"] += oi.total
         for asignacion in oi.asignaciones:
-            grupos[clave]["comision"] += _calcular_comision_orden(
-                db, oi, asignacion.comisionista, periodos
-            )
+            if asignacion.liquidacion_id is None:
+                grupos[clave]["comision"] += _calcular_comision_orden(
+                    db, oi, asignacion.comisionista, periodos
+                )
 
     return [
         {
@@ -177,9 +179,9 @@ def por_comisionista(db: Session = Depends(get_db), current_user: User = Depends
     for c in comisionistas:
         ordenes = (
             db.query(OrdenItem)
-            .join(Asignacion)
             .filter(
                 Asignacion.comisionista_id == c.id,
+                Asignacion.liquidacion_id.is_(None),
                 OrdenItem.estado == EstadoOrden.pagada,
             )
             .options(
@@ -244,9 +246,10 @@ def por_cliente(db: Session = Depends(get_db), current_user: User = Depends(get_
         grupos[clave]["cantidad"] += oi.cantidad
         grupos[clave]["total"] += oi.total
         for asignacion in oi.asignaciones:
-            grupos[clave]["comision"] += _calcular_comision_orden(
-                db, oi, asignacion.comisionista, periodos
-            )
+            if asignacion.liquidacion_id is None:
+                grupos[clave]["comision"] += _calcular_comision_orden(
+                    db, oi, asignacion.comisionista, periodos
+                )
 
     return [
         {
@@ -307,7 +310,8 @@ def global_stats(db: Session = Depends(get_db), current_user: User = Depends(get
     for oi in ordenes_pagadas:
         total_vendido_pagadas += oi.total
         for asig in oi.asignaciones:
-            total_comision_pagadas += _calcular_comision_orden(db, oi, asig.comisionista, periodos)
+            if asig.liquidacion_id is None:
+                total_comision_pagadas += _calcular_comision_orden(db, oi, asig.comisionista, periodos)
 
     return {
         "total_ordenes_pagadas": total_ordenes_pagadas,

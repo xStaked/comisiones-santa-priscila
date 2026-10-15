@@ -12,7 +12,6 @@ from app.schemas.liquidacion import LiquidacionCreate
 from app.services.liquidacion import (
     crear_liquidacion,
     eliminar_liquidacion,
-    restaurar_liquidacion,
 )
 from app.dependencies import get_current_user
 
@@ -126,23 +125,6 @@ def detalle(id: UUID, db: Session = Depends(get_db), current_user: User = Depend
 def eliminar(id: UUID, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     try:
         eliminar_liquidacion(db, id)
-    except ValueError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)
-        ) from exc
-    except Exception as exc:
-        db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(exc),
-        ) from exc
-
-
-@router.post("/{id}/restaurar")
-def restaurar(id: UUID, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    try:
-        nuevos_ids = restaurar_liquidacion(db, id)
-        return {"nuevos_orden_item_ids": nuevos_ids}
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)

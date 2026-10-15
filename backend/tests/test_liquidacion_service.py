@@ -14,7 +14,6 @@ from app.services.liquidacion import (
     _calcular_comision_especifica,
     crear_liquidacion,
     eliminar_liquidacion,
-    restaurar_liquidacion,
 )
 
 
@@ -782,44 +781,6 @@ def test_liquidacion_parcial_mantiene_orden_pagada_hasta_liquidar_todos_los_item
     assert orden.estado == EstadoOrden.liquidada
     assert item_dos.estado == EstadoOrden.liquidada
 
-
-def test_restaurar_liquidacion_recrea_orden_y_items_en_pagada(db_session):
-    orden = Orden(
-        fecha=date.today(),
-        numero_orden="ORD-RESTAURAR-LIQ-001",
-        estado=EstadoOrden.pagada,
-    )
-    db_session.add(orden)
-    db_session.flush()
-
-    orden_item = OrdenItem(
-        orden_id=orden.id,
-        fecha=date.today(),
-        numero_orden="ORD-RESTAURAR-LIQ-001",
-        finca="Finca Test",
-        producto="Producto Test",
-        cantidad=Decimal("10"),
-        unidad="kg",
-        precio_unitario=Decimal("5"),
-        total=Decimal("50"),
-        estado=EstadoOrden.pagada,
-    )
-    db_session.add(orden_item)
-    db_session.commit()
-
-    liquidacion, _ = crear_liquidacion(db_session, "Liq restaurar", [orden_item.id])
-
-    nuevos_ids = restaurar_liquidacion(db_session, liquidacion.id)
-
-    nuevos_items = (
-        db_session.query(OrdenItem)
-        .filter(OrdenItem.id.in_(nuevos_ids))
-        .all()
-    )
-    assert len(nuevos_items) == 1
-    assert nuevos_items[0].estado == EstadoOrden.pagada
-    assert nuevos_items[0].orden is not None
-    assert nuevos_items[0].orden.estado == EstadoOrden.pagada
 
 
 def _setup_umbral(db_session, umbral, valor_sobre_umbral):

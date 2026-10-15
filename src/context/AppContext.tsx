@@ -24,7 +24,6 @@ import {
   fetchLiquidaciones,
   createLiquidacion,
   deleteLiquidacion as apiDeleteLiquidacion,
-  restaurarLiquidacion as apiRestaurarLiquidacion,
   seedDemo,
   fetchClientes,
   createCliente,
@@ -73,7 +72,6 @@ interface AppContextType {
   liquidaciones: Liquidacion[];
   saveLiquidacion: (nombre: string, mes: string, ordenItemIds?: string[], comisionistaIds?: string[]) => void;
   deleteLiquidacion: (id: string) => void;
-  restoreLiquidacion: (id: string) => void;
   resetDemoData: () => void;
 
   clientes: Cliente[];
@@ -436,23 +434,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     },
   });
 
-  const restaurarLiquidacionMutation = useMutation({
-    mutationFn: apiRestaurarLiquidacion,
-    onMutate: () => Promise.all([
-      queryClient.cancelQueries({ queryKey: ['ordenes'] }),
-      queryClient.cancelQueries({ queryKey: ['liquidaciones'] }),
-    ]),
-    onSuccess: () => {
-      toast.success('Liquidación restaurada');
-    },
-    onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ['ordenes'] });
-      queryClient.invalidateQueries({ queryKey: ['liquidaciones'] });
-    },
-    onError: (err: any) => {
-      toast.error(err?.response?.data?.detail || 'Error al restaurar liquidación');
-    },
-  });
 
   const seedDemoMutation = useMutation({
     mutationFn: seedDemo,
@@ -699,12 +680,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [deleteLiquidacionMutation]
   );
 
-  const restoreLiquidacion = useCallback(
-    (id: string) => {
-      restaurarLiquidacionMutation.mutate(id);
-    },
-    [restaurarLiquidacionMutation]
-  );
 
   const resetDemoData = useCallback(() => {
     seedDemoMutation.mutate();
@@ -802,7 +777,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         liquidaciones,
         saveLiquidacion,
         deleteLiquidacion,
-        restoreLiquidacion,
         resetDemoData,
         clientes,
         addCliente,

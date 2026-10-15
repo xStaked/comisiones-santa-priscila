@@ -371,7 +371,9 @@ def limpiar_ordenes(db: Session = Depends(get_db), current_user: User = Depends(
         is not None
     )
     tiene_items_liquidados = (
-        db.query(OrdenItem.id).filter(OrdenItem.estado == EstadoOrden.liquidada).first()
+        db.query(Asignacion.id)
+        .filter(Asignacion.liquidacion_id.isnot(None))
+        .first()
         is not None
     )
     if tiene_ordenes_liquidadas or tiene_items_liquidados:
@@ -435,6 +437,23 @@ def actualizar_orden(
                         comisionista_id=comisionista_id,
                     )
                 )
+        if "estado" in update_data and oi.orden_id:
+            estados = [
+                item.estado
+                for item in db.query(OrdenItem).filter(OrdenItem.orden_id == oi.orden_id).all()
+            ]
+            if EstadoOrden.pendiente in estados:
+                oi.orden.estado = EstadoOrden.pendiente
+                oi.orden.fecha_pago = None
+            elif EstadoOrden.parcialmente_pagada in estados:
+                oi.orden.estado = EstadoOrden.parcialmente_pagada
+                oi.orden.fecha_pago = date.today()
+            elif EstadoOrden.pagada in estados:
+                oi.orden.estado = EstadoOrden.pagada
+                oi.orden.fecha_pago = date.today()
+            else:
+                oi.orden.estado = EstadoOrden.liquidada
+                oi.orden.fecha_pago = date.today()
         db.commit()
         db.refresh(oi)
         return _serializar_item(oi)
@@ -509,7 +528,7 @@ def actualizar_estado_ordenes_masivo(
     actualizadas = 0
     try:
         for orden in ordenes:
-            if any(item.estado == EstadoOrden.liquidada for item in orden.items):
+            if any(item.estado == EstadoOrden.liquidada or _tiene_asignaciones_liquidadas(item) for item in orden.items):
                 omitidas.append(str(orden.id))
                 continue
             orden.estado = nuevo_estado
@@ -551,10 +570,10 @@ def actualizar_estado_orden_grupo(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="El estado liquidada se asigna al guardar una liquidación",
         )
-    if any(item.estado == EstadoOrden.liquidada for item in orden.items):
+    if any(item.estado == EstadoOrden.liquidada or _tiene_asignaciones_liquidadas(item) for item in orden.items):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No se puede cambiar el estado de una orden con ítems liquidados",
+            detail="No se puede cambiar el estado de una orden con ítems liquidados o comisiones ya liquidadas",
         )
 
     try:

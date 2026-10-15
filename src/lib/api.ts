@@ -277,10 +277,6 @@ export async function deleteLiquidacion(id: string) {
   await api.delete(`/api/v1/liquidaciones/${id}`);
 }
 
-export async function restaurarLiquidacion(id: string) {
-  const res = await api.post(`/api/v1/liquidaciones/${id}/restaurar`);
-  return toCamelCase(res.data);
-}
 
 // Reportes
 export async function fetchResumen() {
