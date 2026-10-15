@@ -273,13 +273,15 @@ export function LiquidacionTab() {
     [filteredItems, excludedIds]
   );
 
+  const tituloExport = filterMes ? `Liquidacion ${filterMes}` : 'Liquidacion';
+
   const handleExportPDF = () => {
     if (selectedFiltered.length === 0) {
       toast.error('No hay datos para exportar');
       return;
     }
     const com = filterComisionista ? comisionistaMap.get(filterComisionista) : undefined;
-    exportarPDF(selectedFiltered, comisionistas, 'Liquidacion', com?.nombre, tarifasClienteProducto, undefined, kgPorComisionista);
+    exportarPDF(selectedFiltered, comisionistas, tituloExport, com?.nombre, tarifasClienteProducto, undefined, kgPorComisionista);
     toast.success('PDF generado');
   };
 
@@ -289,7 +291,7 @@ export function LiquidacionTab() {
       return;
     }
     const com = filterComisionista ? comisionistaMap.get(filterComisionista) : undefined;
-    exportarExcel(selectedFiltered, comisionistas, 'Liquidacion', com?.nombre, tarifasClienteProducto, undefined, kgPorComisionista, clientes);
+    exportarExcel(selectedFiltered, comisionistas, tituloExport, com?.nombre, tarifasClienteProducto, undefined, kgPorComisionista, clientes);
     toast.success('Excel generado');
   };
 
@@ -317,7 +319,7 @@ export function LiquidacionTab() {
     const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Totales');
-    XLSX.writeFile(wb, 'Liquidacion_Totales_Comisionistas.xlsx');
+    XLSX.writeFile(wb, `${tituloExport.replace(/\s+/g, '_')}_Totales_Comisionistas.xlsx`);
     toast.success('Totales exportados');
   };
 
