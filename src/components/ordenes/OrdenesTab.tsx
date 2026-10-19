@@ -674,8 +674,8 @@ export function OrdenesTab() {
   // Solo previews sin errores y no ya cargadas son confirmables; las advertencias (corregidas) sí se pueden confirmar.
   const esYaCargada = (preview: { numeroOrden: string }) =>
     numerosCargados.has(preview.numeroOrden.trim().toUpperCase());
-  const itemsConfirmables = useMemo(
-    () => pdfPreviews.filter(p => !tieneProblemas(p) && !esYaCargada(p)).reduce((n, p) => n + p.items.length, 0),
+  const facturasConfirmables = useMemo(
+    () => pdfPreviews.filter(p => !tieneProblemas(p) && !esYaCargada(p)).length,
     [pdfPreviews, numerosCargados]
   );
   const itemsConAdvertencia = useMemo(
@@ -694,6 +694,30 @@ export function OrdenesTab() {
     () => pdfPreviews.filter(p => tieneAdvertencias(p) && !tieneProblemas(p) && !esYaCargada(p)).length,
     [pdfPreviews, numerosCargados]
   );
+
+  // Resumen para el cliente: interesa cuántas facturas se subieron y de qué
+  // razón social son, no cuántos ítems se van a comisionar.
+  const resumenPorRazonSocial = useMemo(() => {
+    const grupos = new Map<string, { nombre: string; facturas: number; listas: number }>();
+    for (const preview of pdfPreviews) {
+      const nombre = (preview.proveedor || '').trim() || 'Sin razón social';
+      const clave = normalizarRazonSocial(nombre) || 'SIN RAZÓN SOCIAL';
+      const lista = !tieneProblemas(preview) && !esYaCargada(preview);
+      const grupo = grupos.get(clave);
+      if (grupo) {
+        grupo.facturas += 1;
+        if (lista) grupo.listas += 1;
+        // Si la misma razón social viene con variantes tipográficas, mostramos
+        // el nombre más completo (normalmente el legal).
+        if (nombre.length > grupo.nombre.length) grupo.nombre = nombre;
+      } else {
+        grupos.set(clave, { nombre, facturas: 1, listas: lista ? 1 : 0 });
+      }
+    }
+    return Array.from(grupos.entries())
+      .map(([clave, grupo]) => ({ clave, ...grupo }))
+      .sort((a, b) => b.facturas - a.facturas || a.nombre.localeCompare(b.nombre, 'es'));
+  }, [pdfPreviews, numerosCargados]);
 
   const initialFecha = useMemo(() => new Date().toISOString().slice(0, 10), []);
 
@@ -1573,7 +1597,36 @@ export function OrdenesTab() {
                   )}
 
                   <div className="flex flex-wrap items-center justify-end gap-2">
-                    <div className="mr-auto flex flex-col gap-1.5 max-w-[380px]">
+                    <div className="mr-auto flex flex-col gap-1.5 max-w-[540px]">
+                      <div className={`rounded-xl border px-3 py-2.5 ${facturasConfirmables > 0 ? 'border-[#D7E7E3] bg-[#F3F9F7]' : 'border-[#F3D9B1] bg-[#FEF8EE]'}`}>
+                        <p className={`flex items-center gap-1.5 text-xs font-semibold ${facturasConfirmables > 0 ? 'text-[#0B5E56]' : 'text-[#9A5B0B]'}`}>
+                          {facturasConfirmables > 0
+                            ? <Check className="h-3.5 w-3.5 shrink-0" />
+                            : <AlertTriangle className="h-3.5 w-3.5 shrink-0" />}
+                          <span>
+                            {facturasConfirmables === pdfPreviews.length
+                              ? `${pdfPreviews.length} ${pdfPreviews.length === 1 ? 'factura lista' : 'facturas listas'} para confirmar`
+                              : `${facturasConfirmables} de ${pdfPreviews.length} facturas listas para confirmar`}
+                          </span>
+                        </p>
+                        <div className={`mt-1.5 space-y-1 border-t pt-1.5 ${facturasConfirmables > 0 ? 'border-[#D7E7E3]' : 'border-[#F3D9B1]'}`}>
+                          {resumenPorRazonSocial.map((grupo) => (
+                            <div key={grupo.clave} className="flex items-baseline justify-between gap-3 text-xs">
+                              <span className="min-w-0 break-words text-[#344054]" title={grupo.nombre}>
+                                {grupo.nombre}
+                              </span>
+                              <span className="shrink-0 font-semibold text-[#0B1220]">
+                                {grupo.facturas} {grupo.facturas === 1 ? 'factura' : 'facturas'}
+                                {grupo.listas !== grupo.facturas && (
+                                  <span className="ml-1 font-normal text-[#9A5B0B]">
+                                    ({grupo.listas} {grupo.listas === 1 ? 'lista' : 'listas'})
+                                  </span>
+                                )}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
                       {facturasYaCargadas > 0 && (
                         <p className="flex items-start gap-1.5 text-xs text-[#B91C1C]">
                           <AlertTriangle className="h-4 w-4 shrink-0 mt-px" />
@@ -1597,17 +1650,15 @@ export function OrdenesTab() {
                           </span>
                         </p>
                       )}
-                      {facturasBloqueadas === 0 && facturasYaCargadas === 0 && facturasConAdvertencia === 0 && pdfPreviews.length > 0 && (
-                        <p className="text-xs text-[#0B5E56]">{itemsConfirmables} ítems listos para confirmar.</p>
-                      )}
                     </div>
                     <Button variant="outline" onClick={handleDiscardPDF} className="rounded-xl border-border">
                       <X className="h-4 w-4 mr-2" />
                       Descartar todo
                     </Button>
-                    <Button onClick={handleConfirmPDF} disabled={isProcessingPDF || itemsConfirmables === 0} className="btn-primary-dark rounded-xl">
+                    <Button onClick={handleConfirmPDF} disabled={isProcessingPDF || facturasConfirmables === 0} className="btn-primary-dark rounded-xl">
                       <Check className="h-4 w-4 mr-2" />
-                      Confirmar y Agregar ({itemsConfirmables})
+                      Confirmar y Agregar
+                      {facturasConfirmables > 0 && ` (${facturasConfirmables} ${facturasConfirmables === 1 ? 'factura' : 'facturas'})`}
                     </Button>
                   </div>
                 </div>
