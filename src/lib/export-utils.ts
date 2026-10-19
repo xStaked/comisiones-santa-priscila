@@ -571,7 +571,9 @@ export function exportarExcel(
   items: OrdenItem[],
   comisionistas: Comisionista[],
   titulo: string,
-  nombreComisionista?: string,
+  // Un nombre (liquidación individual), varios nombres, o los objetos completos
+  // (IDs + nombres) cuando se mezclan comisionistas y hay nombres repetidos.
+  nombreComisionista?: string | string[] | Comisionista[],
   tarifasClienteProducto: TarifaClienteProducto[] = [],
   comisionesSnapshot?: Map<string, { comision: number; tarifasLabel: string }>,
   kgAcumuladoPorComisionista?: Map<string, number>,
@@ -580,13 +582,29 @@ export function exportarExcel(
   const comisionistaMap = new Map(comisionistas.map(c => [c.id, c]));
   const wb = XLSX.utils.book_new();
 
-  // Comisionista que el caller está liquidando. Cuando viene informado (caso
-  // típico del módulo de Liquidación) las líneas se imputan solo a esa persona;
-  // cuando viene vacío (ej. historial de liquidaciones ya guardadas) se usa
-  // el snapshot de comisiones, que ya viene con los valores por ítem.
-  const comisionistaOwner = nombreComisionista
-    ? comisionistas.find(c => c.nombre === nombreComisionista)
-    : undefined;
+  // Comisionista(s) que el caller está liquidando. Cuando vienen informados
+  // (caso típico del módulo de Liquidación) las líneas se imputan solo a esas
+  // personas; cuando vienen vacíos (ej. historial de liquidaciones ya
+  // guardadas) se usa el snapshot de comisiones, que ya trae los valores por
+  // ítem. El módulo de Liquidación puede enviar una mezcla de comisionistas.
+  const seleccionados: (string | Comisionista)[] = Array.isArray(nombreComisionista)
+    ? nombreComisionista
+    : nombreComisionista
+      ? [nombreComisionista]
+      : [];
+  const nombresSeleccionados = seleccionados
+    .map(item => (typeof item === 'string' ? item.trim() : item.nombre.trim()))
+    .filter(Boolean);
+  // Resolver IDs por objeto cuando se reciben completos; las llamadas antiguas
+  // que solo pasan el nombre siguen funcionando.
+  const idsSeleccionados = new Set(
+    seleccionados.flatMap(item => {
+      if (typeof item !== 'string') return [item.id];
+      const encontrado = comisionistas.find(c => c.nombre === item);
+      return encontrado ? [encontrado.id] : [];
+    })
+  );
+  const comisionistasOwner = comisionistas.filter(c => idsSeleccionados.has(c.id));
 
   // ── Estilos de celda ──────────────────────────────────────────────────────
   // Paleta deliberadamente sobria: el reporte va al cliente, no a un dev.
@@ -654,6 +672,13 @@ export function exportarExcel(
       alignment: { horizontal: 'right' as const, vertical: 'center' as const },
       border: borde,
       numFmt: '"$ "#,##0.00',
+    },
+    // La tarifa aplicada es una etiqueta ("10%", "$0.015/kg"), no un monto:
+    // va como texto y sin formato de moneda para que Excel no la confunda.
+    celdaTarifa: {
+      font: { sz: 10 },
+      alignment: { horizontal: 'right' as const, vertical: 'center' as const },
+      border: borde,
     },
     celdaEstado: {
       font: { sz: 10 },
@@ -763,26 +788,43 @@ export function exportarExcel(
     return `${d}/${m}/${a}`;
   })();
 
-  // Línea "COMISIONES: {nombre} - GRUPO {grupo}". Si hay un comisionista
-  // filtrado, se usa ese; si no, se etiqueta como "Varios".
-  const encabezadoComisionista = nombreComisionista || 'Varios';
+  // Línea "COMISIONES: {nombre(s)} - GRUPO {grupo}". Si hay comisionistas
+  // filtrados, se listan; si no, se etiqueta como "Varios".
+  const encabezadoComisionista =
+    nombresSeleccionados.length > 0 ? nombresSeleccionados.join(' + ') : 'Varios';
 
   // ── Comisión y label por ítem ─────────────────────────────────────────────
-  // Devuelve la comisión total (sumando todos los comisionistas asignados al
+  // Devuelve la comisión total (sumando los comisionistas seleccionados del
   // ítem) y un label legible con la tarifa aplicada. Prioridad de fuentes:
   //   1. Snapshot precomputado del caller (caso historial).
-  //   2. Cálculo en vivo para el comisionista filtrado (caso Liquidación).
-  //   3. Suma de todos los comisionistas asignados (caso mixto / sin filtro).
+  //   2. Cálculo en vivo para los comisionistas filtrados (caso Liquidación).
+  //   3. Suma de todos los comisionistas asignados (sin filtro).
   const detalleItem = (item: OrdenItem): { comision: number; tarifasLabel: string } => {
-    if (comisionesSnapshot && comisionistaOwner) {
-      const key = `${item.id}|${comisionistaOwner.id}`;
-      const snap = comisionesSnapshot.get(key);
-      if (snap) return snap;
+    // Solo las personas seleccionadas que realmente están asignadas al ítem:
+    // si se mezclan A y B y la factura es solo de A, B no debe sumar comisión.
+    const ownersDelItem = comisionistasOwner.filter(owner =>
+      item.comisionistas.some(a => a.comisionistaId === owner.id)
+    );
+
+    if (comisionesSnapshot && comisionistasOwner.length > 0) {
+      let comision = 0;
+      let encontrado = false;
+      const labels: string[] = [];
+      for (const owner of ownersDelItem) {
+        const snap = comisionesSnapshot.get(`${item.id}|${owner.id}`);
+        if (!snap) continue;
+        encontrado = true;
+        comision += snap.comision;
+        if (snap.tarifasLabel && snap.tarifasLabel !== '-') labels.push(snap.tarifasLabel);
+      }
+      if (encontrado) {
+        return { comision, tarifasLabel: labels.length > 0 ? labels.join(' + ') : '-' };
+      }
     }
     // Historial: no hay comisionista filtrado, pero el snapshot sí trae la
     // comisión congelada de cada asignación. Se usa tal cual en vez de
     // recalcular con las tarifas de hoy (que daría 0 o un valor distinto).
-    if (comisionesSnapshot && !comisionistaOwner) {
+    if (comisionesSnapshot && comisionistasOwner.length === 0) {
       let comision = 0;
       let encontrado = false;
       const labels: string[] = [];
@@ -797,9 +839,19 @@ export function exportarExcel(
         return { comision, tarifasLabel: labels.length > 0 ? labels.join(' + ') : '-' };
       }
     }
-    if (comisionistaOwner) {
-      const kg = kgAcumuladoPorComisionista?.get(comisionistaOwner.id);
-      return calcularDetalleComision(item, comisionistaOwner, tarifasClienteProducto, kg);
+    if (comisionistasOwner.length > 0) {
+      if (ownersDelItem.length === 0) {
+        return { comision: 0, tarifasLabel: '-' };
+      }
+      let total = 0;
+      const labels: string[] = [];
+      for (const owner of ownersDelItem) {
+        const kg = kgAcumuladoPorComisionista?.get(owner.id);
+        const det = calcularDetalleComision(item, owner, tarifasClienteProducto, kg);
+        total += det.comision;
+        if (det.tarifasLabel && det.tarifasLabel !== '-') labels.push(det.tarifasLabel);
+      }
+      return { comision: total, tarifasLabel: labels.length > 0 ? labels.join(' + ') : '-' };
     }
     if (item.comisionistas.length === 0) {
       return { comision: 0, tarifasLabel: '-' };
@@ -815,6 +867,20 @@ export function exportarExcel(
       if (det.tarifasLabel && det.tarifasLabel !== '-') labels.push(det.tarifasLabel);
     }
     return { comision: total, tarifasLabel: labels.length > 0 ? labels.join(' + ') : '-' };
+  };
+
+  // Comisionistas que se muestran en la columna "Comisionista" del resumen.
+  // Con filtro activo solo se listan los seleccionados asignados al ítem.
+  const nombresComisionistasDelItem = (item: OrdenItem): string => {
+    if (nombresSeleccionados.length === 0) {
+      return getNombresComisionistas(item, comisionistas);
+    }
+    const asignados = item.comisionistas
+      .filter(a => idsSeleccionados.has(a.comisionistaId))
+      .map(a => comisionistaMap.get(a.comisionistaId)?.nombre)
+      .filter((nombre): nombre is string => !!nombre);
+    if (asignados.length > 0) return asignados.join(', ');
+    return item.comisionistas.length === 0 ? nombresSeleccionados.join(', ') : 'Sin asignar';
   };
 
   // ── Agrupación: una hoja por cliente (grupo) × razón social ───────────────
@@ -846,7 +912,9 @@ export function exportarExcel(
   // ── RESUMEN GENERAL (hoja de auditoría rápida) ────────────────────────────
   // Mantenemos esta hoja porque en el historial servía para encontrar líneas
   // sin abrir cada hoja por grupo/razón social. Se llena mientras se arman las hojas.
-  type CeldaResumen = string | number | { v: string | number; s?: XLSX.CellStyle };
+  // `t` fuerza el tipo de dato de la celda. Sin él, xlsx-js-style escribe los
+  // objetos { v, s } como texto y Excel no deja hacer fórmulas con ellos.
+  type CeldaResumen = string | number | { v: string | number; s?: XLSX.CellStyle; t?: 's' | 'n' };
   const resumen: CeldaResumen[][] = [
     ['RESUMEN GENERAL'],
     [],
@@ -860,7 +928,7 @@ export function exportarExcel(
   // totales a cero) o { v, s } con estilo. Definido una sola vez acá arriba
   // para que las tres hojas (cabecera, secciones, gran total) usen la misma
   // estructura y `aoa_to_sheet` no se queje.
-  type Celda = string | { v: string | number; s?: XLSX.CellStyle };
+  type Celda = string | { v: string | number; s?: XLSX.CellStyle; t?: 's' | 'n' };
   type Fila = Celda[];
 
   hojasOrdenadas.forEach(({ grupo: nombreGrupo, razonSocial: nombreRazonSocial, items: itemsHoja }) => {
@@ -938,14 +1006,14 @@ export function exportarExcel(
         }
 
         filas.push([
-          { v: fechaCorta, s: estilos.celdaFecha },
-          { v: item.numeroOrden, s: estilos.celdaTexto },
-          { v: item.producto, s: estilos.celdaTexto },
-          { v: item.cantidad, s: estilos.celdaCantidad },
-          { v: tarifasLabel, s: estilos.celdaComision },
-          { v: comision, s: estilos.celdaComision },
-          { v: item.estado || 'pagada', s: estilos.celdaEstado },
-          { v: sectorDeItem(item) || 'N/A', s: estilos.celdaTexto },
+          { v: fechaCorta, s: estilos.celdaFecha, t: 's' },
+          { v: item.numeroOrden, s: estilos.celdaTexto, t: 's' },
+          { v: item.producto, s: estilos.celdaTexto, t: 's' },
+          { v: item.cantidad, s: estilos.celdaCantidad, t: 'n' },
+          { v: tarifasLabel, s: estilos.celdaTarifa, t: 's' },
+          { v: comision, s: estilos.celdaComision, t: 'n' },
+          { v: item.estado || 'pagada', s: estilos.celdaEstado, t: 's' },
+          { v: sectorDeItem(item) || 'N/A', s: estilos.celdaTexto, t: 's' },
         ]);
 
         // Alimentamos el RESUMEN GENERAL con cada línea.
@@ -958,7 +1026,7 @@ export function exportarExcel(
           comision,
           item.estado || 'pagada',
           sectorDeItem(item) || 'N/A',
-          comisionistaOwner?.nombre || getNombresComisionistas(item, comisionistas),
+          nombresComisionistasDelItem(item),
           grupoDelItem(item),
           razonSocialDelItem(item),
         ]);
@@ -967,14 +1035,14 @@ export function exportarExcel(
       // Fila TOTAL por cliente (label en la columna Cant para alinearla con el
       // formato histórico: "TOTAL" como cuarta columna, monto en la sexta).
       filas.push([
-        { v: '', s: estilos.totalFilaLabel },
-        { v: '', s: estilos.totalFilaLabel },
-        { v: '', s: estilos.totalFilaLabel },
-        { v: 'TOTAL', s: estilos.totalFilaLabel },
-        { v: '', s: estilos.totalFila },
-        { v: totalCliente, s: estilos.totalFila },
-        { v: '', s: estilos.totalFilaLabel },
-        { v: '', s: estilos.totalFilaLabel },
+        { v: '', s: estilos.totalFilaLabel, t: 's' },
+        { v: '', s: estilos.totalFilaLabel, t: 's' },
+        { v: '', s: estilos.totalFilaLabel, t: 's' },
+        { v: 'TOTAL', s: estilos.totalFilaLabel, t: 's' },
+        { v: '', s: estilos.totalFila, t: 's' },
+        { v: totalCliente, s: estilos.totalFila, t: 'n' },
+        { v: '', s: estilos.totalFilaLabel, t: 's' },
+        { v: '', s: estilos.totalFilaLabel, t: 's' },
       ]);
 
       // Separador entre clientes.
@@ -985,14 +1053,14 @@ export function exportarExcel(
 
     // Gran TOTAL de la hoja al pie (caja amarilla como en el modelo).
     filas.push([
-      { v: '', s: estilos.granTotalLabel },
-      { v: '', s: estilos.granTotalLabel },
-      { v: '', s: estilos.granTotalLabel },
-      { v: '', s: estilos.granTotalLabel },
-      { v: `Total ${nombreGrupo}`, s: estilos.granTotalLabel },
-      { v: totalGrupo, s: estilos.granTotal },
-      { v: '', s: estilos.granTotalLabel },
-      { v: '', s: estilos.granTotalLabel },
+      { v: '', s: estilos.granTotalLabel, t: 's' },
+      { v: '', s: estilos.granTotalLabel, t: 's' },
+      { v: '', s: estilos.granTotalLabel, t: 's' },
+      { v: '', s: estilos.granTotalLabel, t: 's' },
+      { v: `Total ${nombreGrupo}`, s: estilos.granTotalLabel, t: 's' },
+      { v: totalGrupo, s: estilos.granTotal, t: 'n' },
+      { v: '', s: estilos.granTotalLabel, t: 's' },
+      { v: '', s: estilos.granTotalLabel, t: 's' },
     ]);
 
     const ws = XLSX.utils.aoa_to_sheet(filas);
@@ -1028,28 +1096,38 @@ export function exportarExcel(
     resumen.push(...encabezado, ...filasDatos);
 
   const resumenEstilizado: CeldaResumen[][] = [
-    [{ v: 'RESUMEN GENERAL', s: estilos.resumenTitulo }, ...Array.from({ length: 10 }, () => '')],
+    [
+      { v: 'RESUMEN GENERAL', s: estilos.resumenTitulo, t: 's' },
+      ...Array.from({ length: 10 }, () => ''),
+    ],
     Array.from({ length: 11 }, () => ''),
-    resumen[2].map(valor => ({ v: String(valor), s: estilos.columnaHeader })),
-    ...filasDatos.map(fila => fila.map((valor, indice) => ({
-      v: typeof valor === 'object' ? valor.v : valor,
-      s: indice === 0
-        ? estilos.resumenFecha
-        : indice === 3
-          ? estilos.resumenCantidad
-          : indice === 5
-            ? estilos.resumenComision
-            : estilos.resumenTexto,
-    }))),
+    resumen[2].map(valor => ({ v: String(valor), s: estilos.columnaHeader, t: 's' })),
+    ...filasDatos.map(fila =>
+      fila.map((valor, indice) => {
+        // Cantidad (3) y Valor Comisión (5) son las columnas numéricas del resumen.
+        const esColumnaNumerica = indice === 3 || indice === 5;
+        return {
+          v: typeof valor === 'object' ? valor.v : valor,
+          s: indice === 0
+            ? estilos.resumenFecha
+            : indice === 3
+              ? estilos.resumenCantidad
+              : indice === 5
+                ? estilos.resumenComision
+                : estilos.resumenTexto,
+          t: esColumnaNumerica ? 'n' as const : 's' as const,
+        };
+      })
+    ),
   ];
   resumenEstilizado.push(
     Array.from({ length: 11 }, () => ''),
     [
-      ...Array.from({ length: 5 }, () => ({ v: '', s: estilos.resumenTotalLabel })),
-      { v: totalGeneral, s: estilos.resumenTotal },
-      ...Array.from({ length: 3 }, () => ({ v: '', s: estilos.resumenTotalLabel })),
-      { v: 'TOTAL GENERAL', s: estilos.resumenTotalLabel },
-      { v: '', s: estilos.resumenTotalLabel },
+      ...Array.from({ length: 5 }, () => ({ v: '', s: estilos.resumenTotalLabel, t: 's' as const })),
+      { v: totalGeneral, s: estilos.resumenTotal, t: 'n' as const },
+      ...Array.from({ length: 3 }, () => ({ v: '', s: estilos.resumenTotalLabel, t: 's' as const })),
+      { v: 'TOTAL GENERAL', s: estilos.resumenTotalLabel, t: 's' as const },
+      { v: '', s: estilos.resumenTotalLabel, t: 's' as const },
     ],
   );
   const wsResumen = XLSX.utils.aoa_to_sheet(resumenEstilizado);

@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { MultiSelect } from '@/components/ui/multi-select';
 import {
   Select,
   SelectContent,
@@ -59,7 +60,9 @@ function etiquetaMes(mes: string) {
 
 export function LiquidacionTab() {
   const { comisionistas, ordenItems, saveLiquidacion, tarifasClienteProducto, clientes, retenciones } = useApp();
-  const [filterComisionista, setFilterComisionista] = useState('');
+  // Vacío = todos. Con varios seleccionados se mezclan sus comisiones y la
+  // exportación sale a nombre del grupo seleccionado.
+  const [filterComisionistas, setFilterComisionistas] = useState<string[]>([]);
   const [filterFactura, setFilterFactura] = useState('');
   const [filterSector, setFilterSector] = useState('');
   // Mes de PAGO de la factura, no el de emisión: una liquidación de junio puede
@@ -88,9 +91,16 @@ export function LiquidacionTab() {
     new Map(comisionistas.map(c => [c.id, c])),
     [comisionistas]
   );
-  const nombreComisionistaFiltro = filterComisionista
-    ? comisionistaMap.get(filterComisionista)?.nombre || 'Comisionista no encontrado'
-    : 'Todos los comisionistas';
+  // Nombres de los comisionistas seleccionados, en el orden del catálogo.
+  // Se usan como encabezado de la exportación ("A + B").
+  const comisionistasFiltro = useMemo(
+    () => comisionistas.filter((comisionista) => filterComisionistas.includes(comisionista.id)),
+    [comisionistas, filterComisionistas]
+  );
+  const nombresComisionistasFiltro = useMemo(
+    () => comisionistasFiltro.map((comisionista) => comisionista.nombre),
+    [comisionistasFiltro]
+  );
 
   // La liquidación es por persona: solo se muestran las asignaciones aún no liquidadas.
   // Un ítem puede reaparecer aquí si a otro comisionista todavía no se le ha pagado.
@@ -133,19 +143,20 @@ export function LiquidacionTab() {
   const filteredItems = useMemo(() => {
     return ordenItemsPagados
       .filter(i => {
-        const matchComisionista = !filterComisionista || i.comisionistas.some(a => a.comisionistaId === filterComisionista);
+        const matchComisionista = filterComisionistas.length === 0 || i.comisionistas.some(a => filterComisionistas.includes(a.comisionistaId));
         const matchFactura = !filterFactura || i.numeroOrden.toLowerCase().includes(filterFactura.toLowerCase());
         const matchMes = !filterMes || mesDePago(i) === filterMes;
         const matchSector = !filterSector || sectorDeItem(i as any) === filterSector;
         return matchComisionista && matchFactura && matchMes && matchSector;
       })
-      // Con filtro por persona, los totales y el guardado deben cubrir solo a esa persona.
+      // Con filtro por personas, los totales y el guardado deben cubrir solo a
+      // las personas seleccionadas (pueden venir varias en la misma factura).
       .map(i =>
-        filterComisionista
-          ? { ...i, comisionistas: i.comisionistas.filter(a => a.comisionistaId === filterComisionista) }
+        filterComisionistas.length > 0
+          ? { ...i, comisionistas: i.comisionistas.filter(a => filterComisionistas.includes(a.comisionistaId)) }
           : i
       );
-  }, [ordenItemsPagados, filterComisionista, filterFactura, filterMes, filterSector]);
+  }, [ordenItemsPagados, filterComisionistas, filterFactura, filterMes, filterSector]);
 
   const cantidadOrdenes = useMemo(() => {
     const ids = new Set(
@@ -281,8 +292,7 @@ export function LiquidacionTab() {
       toast.error('No hay datos para exportar');
       return;
     }
-    const com = filterComisionista ? comisionistaMap.get(filterComisionista) : undefined;
-    exportarPDF(selectedFiltered, comisionistas, tituloExport, com?.nombre, tarifasClienteProducto, undefined, kgPorComisionista);
+    exportarPDF(selectedFiltered, comisionistas, tituloExport, nombresComisionistasFiltro.join(' + ') || undefined, tarifasClienteProducto, undefined, kgPorComisionista);
     toast.success('PDF generado');
   };
 
@@ -291,8 +301,7 @@ export function LiquidacionTab() {
       toast.error('No hay datos para exportar');
       return;
     }
-    const com = filterComisionista ? comisionistaMap.get(filterComisionista) : undefined;
-    exportarExcel(selectedFiltered, comisionistas, tituloExport, com?.nombre, tarifasClienteProducto, undefined, kgPorComisionista, clientes);
+    exportarExcel(selectedFiltered, comisionistas, tituloExport, comisionistasFiltro.length > 0 ? comisionistasFiltro : undefined, tarifasClienteProducto, undefined, kgPorComisionista, clientes);
     toast.success('Excel generado');
   };
 
@@ -355,7 +364,7 @@ export function LiquidacionTab() {
     // Si se paga a todos los pendientes y no hay filtro, se omite la lista: así los ítems
     // sin comisionista asignado también quedan liquidados (comisión 0), como antes.
     const todosLosPendientes =
-      !filterComisionista && comisionistasAPagar.size === resumenPorComisionista.length;
+      filterComisionistas.length === 0 && comisionistasAPagar.size === resumenPorComisionista.length;
     saveLiquidacion(
       nombreLiquidacion,
       mesLiquidacion,
@@ -386,7 +395,9 @@ export function LiquidacionTab() {
     setMesLiquidacion(filterMes && filterMes !== SIN_FECHA_PAGO ? filterMes : mesSugerido);
     setNombreLiquidacion(`Liquidación ${new Date().toLocaleDateString('es-ES')}`);
     // El filtro de la barra superior solo preselecciona; la decisión se toma en el modal.
-    setComisionistasAPagar(new Set(filterComisionista ? [filterComisionista] : []));
+    // Solo se preseleccionan las personas que efectivamente tienen ítems en la selección.
+    const conItems = new Set(resumenPorComisionista.map((c) => c.id));
+    setComisionistasAPagar(new Set(filterComisionistas.filter((id) => conItems.has(id))));
     setPreviewOpen(true);
   };
 
@@ -425,19 +436,19 @@ export function LiquidacionTab() {
       <BarraAcciones>
         <div className="flex h-9 items-center gap-2.5 rounded-[9px] border border-[#E0E4E9] bg-white px-3">
           <span className="text-[11.5px] text-[#7A8798]">Comisionista</span>
-          <Select value={filterComisionista} onValueChange={(value) => setFilterComisionista(value ?? '')}>
-            <SelectTrigger className="h-7 border-0 bg-transparent px-0 text-[12.5px] font-medium text-[#0B1220] shadow-none focus-visible:ring-0">
-              <SelectValue placeholder="Todos">{nombreComisionistaFiltro}</SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="">Todos los comisionistas</SelectItem>
-              {comisionistas.map((c) => (
-                <SelectItem key={c.id} value={c.id}>
-                  {c.nombre}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <MultiSelect
+            options={comisionistas.map(c => ({ value: c.id, label: c.nombre }))}
+            selected={filterComisionistas}
+            onChange={setFilterComisionistas}
+            placeholder="Todos los comisionistas"
+            resumenSeleccion={(seleccionadas) =>
+              seleccionadas.length === 1
+                ? seleccionadas[0].label
+                : `${seleccionadas.length} comisionistas`
+            }
+            triggerClassName="h-7 w-auto min-w-[120px] border-0 bg-transparent px-0 font-medium text-[#0B1220] shadow-none"
+            panelClassName="min-w-[240px]"
+          />
         </div>
 
         <div className="flex h-9 items-center gap-2.5 rounded-[9px] border border-[#E0E4E9] bg-white px-3">

@@ -1,7 +1,6 @@
 'use client';
 
-import { useState, useMemo, useEffect, useRef } from 'react';
-import { createPortal } from 'react-dom';
+import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   BarChart,
@@ -23,7 +22,6 @@ import {
   Fish,
   UserCheck,
   GitCompare,
-  ChevronDown,
   Play,
 } from 'lucide-react';
 import {
@@ -53,7 +51,7 @@ import {
   exportarReporteExcel,
   calcularComisionTotalItem,
 } from '@/lib/export-utils';
-import { Label } from '@/components/ui/label';
+import { MultiSelect } from '@/components/ui/multi-select';
 import { toast } from 'sonner';
 
 const DIMENSIONES = [
@@ -66,127 +64,6 @@ const DIMENSIONES = [
 type Dimension = (typeof DIMENSIONES)[number]['valor'];
 
 const COLS_DESGLOSE = 'grid-cols-[minmax(0,1.6fr)_90px_120px_130px_130px_150px]';
-
-// Selector multi con buscador para listas grandes (productos, comisionistas).
-function MultiSelect({
-  label,
-  icon: Icon,
-  options,
-  selected,
-  onChange,
-}: {
-  label: string;
-  icon: React.ComponentType<{ className?: string }>;
-  options: string[];
-  selected: string[];
-  onChange: (vals: string[]) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const [query, setQuery] = useState('');
-  // Posición del panel: se renderiza en un portal a document.body con position:fixed
-  // para escapar de cualquier overflow/stacking de las tarjetas (bug de z-index).
-  const [coords, setCoords] = useState<{ top: number; left: number; width: number } | null>(null);
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const panelRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const actualizar = () => {
-      const el = triggerRef.current;
-      if (!el) return;
-      const r = el.getBoundingClientRect();
-      setCoords({ top: r.bottom + 4, left: r.left, width: r.width });
-    };
-    actualizar();
-    const onDown = (e: MouseEvent) => {
-      const t = e.target as Node;
-      if (triggerRef.current?.contains(t) || panelRef.current?.contains(t)) return;
-      setOpen(false);
-    };
-    window.addEventListener('scroll', actualizar, true);
-    window.addEventListener('resize', actualizar);
-    document.addEventListener('mousedown', onDown);
-    return () => {
-      window.removeEventListener('scroll', actualizar, true);
-      window.removeEventListener('resize', actualizar);
-      document.removeEventListener('mousedown', onDown);
-    };
-  }, [open]);
-
-  const filtradas = query
-    ? options.filter(o => o.toLowerCase().includes(query.toLowerCase()))
-    : options;
-
-  const toggle = (val: string) => {
-    if (selected.includes(val)) onChange(selected.filter(v => v !== val));
-    else onChange([...selected, val]);
-  };
-
-  const resumen = selected.length === 0
-    ? 'Todos'
-    : selected.length === 1
-    ? selected[0]
-    : `${selected.length} seleccionados`;
-
-  return (
-    <div className="space-y-1.5">
-      <Label className="flex items-center gap-1 text-[11.5px] font-semibold text-[#475467]">
-        <Icon className="h-3 w-3" />
-        {label}
-      </Label>
-      <button
-        ref={triggerRef}
-        type="button"
-        onClick={() => setOpen(o => !o)}
-        className="flex h-9 w-full items-center justify-between gap-2 rounded-[9px] border border-[#E0E4E9] bg-white px-2.5 text-left text-[12.5px]"
-      >
-        <span className={`truncate ${selected.length ? 'text-[#0B1220]' : 'text-[#98A2B3]'}`}>{resumen}</span>
-        <ChevronDown className="size-3.5 shrink-0 text-[#98A2B3]" />
-      </button>
-      {open && coords && createPortal(
-        <div
-          ref={panelRef}
-          style={{ position: 'fixed', top: coords.top, left: coords.left, width: coords.width, zIndex: 1000 }}
-          className="min-w-[220px] rounded-xl border border-border bg-white shadow-lg"
-        >
-          <div className="p-2 border-b border-[#EDEFF2]">
-            <input
-              autoFocus
-              value={query}
-              onChange={e => setQuery(e.target.value)}
-              placeholder="Buscar…"
-              className="w-full h-8 rounded-lg border border-border px-2 text-sm outline-none focus:border-slate-400"
-            />
-          </div>
-          <div className="max-h-60 overflow-y-auto p-1">
-            {filtradas.length === 0 ? (
-              <div className="px-2 py-3 text-center text-xs text-[#98A2B3]">Sin resultados</div>
-            ) : (
-              filtradas.map(opt => (
-                <label key={opt} className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-[#FAFBFC] cursor-pointer text-sm">
-                  <input
-                    type="checkbox"
-                    checked={selected.includes(opt)}
-                    onChange={() => toggle(opt)}
-                    className="h-4 w-4 rounded border-[#C6CDD6]"
-                  />
-                  <span className="truncate">{opt}</span>
-                </label>
-              ))
-            )}
-          </div>
-          {selected.length > 0 && (
-            <div className="p-2 border-t border-[#EDEFF2] flex justify-between">
-              <button type="button" onClick={() => onChange([])} className="text-xs text-[#7A8798] hover:text-[#344054]">Limpiar selección</button>
-              <span className="text-xs text-[#98A2B3]">{selected.length} de {options.length}</span>
-            </div>
-          )}
-        </div>,
-        document.body
-      )}
-    </div>
-  );
-}
 
 export function ReportesTab() {
   const { comisionistas, retenciones } = useApp();
