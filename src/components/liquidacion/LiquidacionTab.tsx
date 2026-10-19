@@ -7,6 +7,7 @@ import * as XLSX from 'xlsx-js-style';
 import { useApp } from '@/context/AppContext';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
 import { exportarPDF, exportarExcel, calcularDetalleComision, getCantidadParaTarifaKg, sectorDeItem } from '@/lib/export-utils';
+import { formatearFechaCarga, formatearFechaHoraCarga } from '@/lib/fechas';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -32,7 +33,7 @@ import {
 import { toast } from 'sonner';
 
 // El número de factura completo ("001-002-000002243") no entra en menos de 190px.
-const COLS = 'grid-cols-[34px_190px_92px_minmax(0,1.3fr)_minmax(0,1fr)_90px_108px_132px]';
+const COLS = 'grid-cols-[34px_190px_92px_92px_minmax(0,1.3fr)_minmax(0,1fr)_90px_108px_132px]';
 
 /** Valor del filtro para las facturas pagadas sin fecha de pago registrada (datos viejos). */
 const SIN_FECHA_PAGO = 'sin-fecha';
@@ -513,6 +514,7 @@ export function LiquidacionTab() {
               </div>
               <div>Factura</div>
               <div>Fecha</div>
+              <div>Carga</div>
               <div>Cliente</div>
               <div>Sector</div>
               <div className="text-right">Cantidad</div>
@@ -572,6 +574,12 @@ export function LiquidacionTab() {
                         </span>
                       </div>
                       <div className="cifra text-[12.5px] text-[#6B7684]">{cab.fecha}</div>
+                      <div
+                        className="cifra truncate text-[12.5px] text-[#6B7684]"
+                        title={cab.createdAt ? `Cargada el ${formatearFechaHoraCarga(cab.createdAt)}` : 'Sin fecha de carga'}
+                      >
+                        {formatearFechaCarga(cab.createdAt)}
+                      </div>
                       <div className="truncate text-[13px] text-[#0B1220]">{cab.cliente?.nombre || '—'}</div>
                       <div className="truncate text-[12.5px] text-[#6B7684]">{sector}</div>
                       <div className="cifra text-right text-[12.5px] text-[#344054]">
@@ -639,6 +647,7 @@ export function LiquidacionTab() {
             <div className={`grid ${COLS} items-center gap-2.5 bg-[#FAFBFC] px-4 py-3`}>
               <div />
               <div className="text-[12px] font-semibold text-[#475467]">Totales</div>
+              <div />
               <div />
               <div />
               <div />

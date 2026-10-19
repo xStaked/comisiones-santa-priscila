@@ -39,6 +39,7 @@ import {
 import { toast } from 'sonner';
 import { uploadPDF, uploadImage, fetchFincas } from '@/lib/api';
 import { generarId } from '@/lib/id';
+import { formatearFechaCarga, formatearFechaHoraCarga, fechaLocalISO } from '@/lib/fechas';
 import { useQuery } from '@tanstack/react-query';
 import { encontrarTarifaEspecifica } from '@/lib/export-utils';
 import { normalizarTexto, normalizarRazonSocial } from '@/lib/normalization';
@@ -59,32 +60,6 @@ const ESTADOS_FILTRO: { value: string; label: string }[] = [
 ];
 
 const ITEMS_PER_PAGE = 15;
-
-/** dd/mm/aaaa en hora local; '—' si el registro no tiene fecha de carga (legacy). */
-function formatearFechaCarga(iso?: string | null): string {
-  if (!iso) return '—';
-  // SQLite/serializaciones sin 'T' no se parsean en todos los navegadores.
-  const fecha = new Date(iso.replace(' ', 'T'));
-  return Number.isNaN(fecha.getTime()) ? '—' : fecha.toLocaleDateString('es-ES');
-}
-
-/** Fecha y hora locales, para el tooltip de la columna Carga. */
-function formatearFechaHoraCarga(iso?: string | null): string {
-  if (!iso) return '';
-  const fecha = new Date(iso.replace(' ', 'T'));
-  return Number.isNaN(fecha.getTime()) ? '' : fecha.toLocaleString('es-ES');
-}
-
-/** YYYY-MM-DD en hora local del navegador, comparable con los <input type="date">.
- *  Al comparar por fecha local se evita el corrimiento de un día por UTC. */
-function fechaLocalISO(iso?: string | null): string {
-  if (!iso) return '';
-  const fecha = new Date(iso.replace(' ', 'T'));
-  if (Number.isNaN(fecha.getTime())) return '';
-  return new Date(fecha.getTime() - fecha.getTimezoneOffset() * 60_000)
-    .toISOString()
-    .slice(0, 10);
-}
 
 const COLS_ORDENES =
   'grid-cols-[34px_minmax(0,132px)_92px_92px_minmax(0,1.35fr)_minmax(0,1fr)_72px_108px_130px_96px_30px]';
