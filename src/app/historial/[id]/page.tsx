@@ -49,6 +49,8 @@ function snapshotItemToOrdenItem(item: any): OrdenItem {
     total: item.totalSnapshot,
     sector: item.sectorSnapshot,
     estado: item.estadoSnapshot,
+    cliente: item.clienteSnapshot ? { id: '', nombre: item.clienteSnapshot } : undefined,
+    proveedor: item.proveedorSnapshot || undefined,
     comisionistas: (item.tarifas || []).map((t: any) => ({ comisionistaId: t.comisionistaId })),
   };
 }

@@ -10,6 +10,7 @@ import {
   normalizarTexto,
   normalizarNombreFinca,
   normalizarNombreProducto,
+  normalizarRazonSocial,
   ratioDifflib,
   UMBRAL_FINCA,
   UMBRAL_PRODUCTO,
@@ -778,6 +779,24 @@ export function exportarExcel(
       const snap = comisionesSnapshot.get(key);
       if (snap) return snap;
     }
+    // Historial: no hay comisionista filtrado, pero el snapshot sí trae la
+    // comisión congelada de cada asignación. Se usa tal cual en vez de
+    // recalcular con las tarifas de hoy (que daría 0 o un valor distinto).
+    if (comisionesSnapshot && !comisionistaOwner) {
+      let comision = 0;
+      let encontrado = false;
+      const labels: string[] = [];
+      for (const asig of item.comisionistas) {
+        const snap = comisionesSnapshot.get(`${item.id}|${asig.comisionistaId}`);
+        if (!snap) continue;
+        encontrado = true;
+        comision += snap.comision;
+        if (snap.tarifasLabel && snap.tarifasLabel !== '-') labels.push(snap.tarifasLabel);
+      }
+      if (encontrado) {
+        return { comision, tarifasLabel: labels.length > 0 ? labels.join(' + ') : '-' };
+      }
+    }
     if (comisionistaOwner) {
       const kg = kgAcumuladoPorComisionista?.get(comisionistaOwner.id);
       return calcularDetalleComision(item, comisionistaOwner, tarifasClienteProducto, kg);
@@ -798,24 +817,35 @@ export function exportarExcel(
     return { comision: total, tarifasLabel: labels.length > 0 ? labels.join(' + ') : '-' };
   };
 
-  // ── Agrupación: una hoja por grupo ────────────────────────────────────────
-  // Antes se partía por grupo × proveedor (ACUARIOS DEL GOLFO - DINACUAMAR /
-  // ACUARIOS DEL GOLFO - ELIZABETH OCHOA) y eso rompía la lectura por cliente.
-  // Ahora cada grupo tiene UNA hoja, y dentro se agrupa por razón social.
-  const itemsPorGrupo = new Map<string, OrdenItem[]>();
+  // ── Agrupación: una hoja por cliente (grupo) × razón social ───────────────
+  // Formato histórico que pide el cliente: cada pestaña es la combinación del
+  // grupo empresarial del cliente con la razón social (proveedor) que emitió la
+  // factura. Ej.: "ACUARIOS DEL GOLFO - DINACUAMAR" y "ACUARIOS DEL GOLFO -
+  // ELIZABETH OCHOA" van en hojas distintas. La razón social se normaliza para
+  // unir variantes tipográficas de la misma empresa (con/sin "CIA.LTDA.") y se
+  // muestra el nombre más largo visto, normalmente la razón social legal.
+  type HojaExportacion = { grupo: string; razonSocial: string; items: OrdenItem[] };
+  const itemsPorHoja = new Map<string, HojaExportacion>();
   items.forEach(item => {
-    const grupo = grupoDelItem(item) === 'N/A' ? 'VARIOS' : grupoDelItem(item);
-    const arr = itemsPorGrupo.get(grupo) || [];
-    arr.push(item);
-    itemsPorGrupo.set(grupo, arr);
+    const grupoItem = grupoDelItem(item);
+    const grupo = !grupoItem || grupoItem === 'N/A' ? 'VARIOS' : grupoItem;
+    const proveedor = item.proveedor?.trim() || 'Sin proveedor';
+    const clave = `${normalizarTexto(grupo)}|${normalizarRazonSocial(proveedor) || 'SIN PROVEEDOR'}`;
+    const hoja = itemsPorHoja.get(clave);
+    if (hoja) {
+      hoja.items.push(item);
+      if (proveedor.length > hoja.razonSocial.length) hoja.razonSocial = proveedor;
+    } else {
+      itemsPorHoja.set(clave, { grupo, razonSocial: proveedor, items: [item] });
+    }
   });
-  const gruposOrdenados = Array.from(itemsPorGrupo.keys()).sort((a, b) =>
-    a.localeCompare(b, 'es')
+  const hojasOrdenadas = Array.from(itemsPorHoja.values()).sort((a, b) =>
+    a.grupo.localeCompare(b.grupo, 'es') || a.razonSocial.localeCompare(b.razonSocial, 'es')
   );
 
   // ── RESUMEN GENERAL (hoja de auditoría rápida) ────────────────────────────
   // Mantenemos esta hoja porque en el historial servía para encontrar líneas
-  // sin abrir cada hoja por grupo. Se llena mientras se arman las hojas.
+  // sin abrir cada hoja por grupo/razón social. Se llena mientras se arman las hojas.
   type CeldaResumen = string | number | { v: string | number; s?: XLSX.CellStyle };
   const resumen: CeldaResumen[][] = [
     ['RESUMEN GENERAL'],
@@ -825,7 +855,7 @@ export function exportarExcel(
   let totalGeneral = 0;
   const nombresHojaUsados = new Set<string>(['RESUMEN GENERAL']);
 
-  // ── Una hoja por grupo ────────────────────────────────────────────────────
+  // ── Una hoja por grupo × razón social ─────────────────────────────────────
   // Tipo compartido por todas las celdas del sheet: string crudo (separadores,
   // totales a cero) o { v, s } con estilo. Definido una sola vez acá arriba
   // para que las tres hojas (cabecera, secciones, gran total) usen la misma
@@ -833,8 +863,8 @@ export function exportarExcel(
   type Celda = string | { v: string | number; s?: XLSX.CellStyle };
   type Fila = Celda[];
 
-  gruposOrdenados.forEach(nombreGrupo => {
-    const itemsGrupo = itemsPorGrupo.get(nombreGrupo)!;
+  hojasOrdenadas.forEach(({ grupo: nombreGrupo, razonSocial: nombreRazonSocial, items: itemsHoja }) => {
+    const itemsGrupo = itemsHoja;
 
     // Estructura de la hoja: filas y celdas con estilos. Mantenemos las dos
     // listas en paralelo para poder resolver estilos al final y construir los
@@ -850,33 +880,36 @@ export function exportarExcel(
     filas.push([{ v: `COMISIONES: ${encabezadoComisionista} - GRUPO ${nombreGrupo}`, s: estilos.tituloComision }]);
     merges.push({ s: { r: filas.length - 1, c: 0 }, e: { r: filas.length - 1, c: numCols - 1 } });
 
+    filas.push([{ v: `RAZÓN SOCIAL: ${nombreRazonSocial}`, s: estilos.tituloComision }]);
+    merges.push({ s: { r: filas.length - 1, c: 0 }, e: { r: filas.length - 1, c: numCols - 1 } });
+
     filas.push([{ v: `AL ${fechaCorte}`, s: estilos.tituloFecha }]);
     merges.push({ s: { r: filas.length - 1, c: 0 }, e: { r: filas.length - 1, c: numCols - 1 } });
 
     // Espacio en blanco para que la cabecera respire antes de los totales / secciones.
     filas.push(Array.from({ length: numCols }, () => ''));
 
-    // ── Secciones por razón social ──
+    // ── Secciones por cliente (razón social del cliente) ──
     const itemsPorCliente = new Map<string, OrdenItem[]>();
     itemsGrupo.forEach(item => {
-      const rs = razonSocialDelItem(item);
-      const arr = itemsPorCliente.get(rs) || [];
+      const nombreCliente = razonSocialDelItem(item);
+      const arr = itemsPorCliente.get(nombreCliente) || [];
       arr.push(item);
-      itemsPorCliente.set(rs, arr);
+      itemsPorCliente.set(nombreCliente, arr);
     });
     const clientesOrdenados = Array.from(itemsPorCliente.entries()).sort((a, b) =>
       a[0].localeCompare(b[0], 'es')
     );
 
     let totalGrupo = 0;
-    clientesOrdenados.forEach(([razonSocial, itemsCliente], idx) => {
+    clientesOrdenados.forEach(([nombreCliente, itemsCliente], idx) => {
       // Cabecera del cliente: amarillo para el primero (cliente principal),
       // verde claro para el resto. Coincide con la hoja histórica del cliente
       // donde el "primer cliente" del grupo va destacado en amarillo.
       const estiloClienteHeader =
         idx === 0 ? estilos.clienteHeaderAmarillo : estilos.clienteHeaderVerde;
 
-      filas.push([{ v: razonSocial, s: estiloClienteHeader }]);
+      filas.push([{ v: nombreCliente, s: estiloClienteHeader }]);
       merges.push({ s: { r: filas.length - 1, c: 0 }, e: { r: filas.length - 1, c: numCols - 1 } });
 
       // Cabecera de columnas
@@ -950,7 +983,7 @@ export function exportarExcel(
       totalGrupo += totalCliente;
     });
 
-    // Gran TOTAL del grupo al pie del sheet (caja amarilla como en el modelo).
+    // Gran TOTAL de la hoja al pie (caja amarilla como en el modelo).
     filas.push([
       { v: '', s: estilos.granTotalLabel },
       { v: '', s: estilos.granTotalLabel },
@@ -974,7 +1007,11 @@ export function exportarExcel(
       { wch: 12 },  // Estado
       { wch: 14 },  // Sector
     ];
-    XLSX.utils.book_append_sheet(wb, ws, nombreHojaValido(nombreGrupo, nombresHojaUsados));
+    XLSX.utils.book_append_sheet(
+      wb,
+      ws,
+      nombreHojaValido(`${nombreGrupo} ${nombreRazonSocial}`, nombresHojaUsados)
+    );
     totalGeneral += totalGrupo;
   });
 

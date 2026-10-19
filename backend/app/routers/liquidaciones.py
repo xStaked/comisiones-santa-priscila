@@ -48,6 +48,10 @@ def _serialize_liquidacion(liquidacion: Liquidacion) -> dict:
                 "sector_snapshot": li.sector_snapshot,
                 "estado_snapshot": li.estado_snapshot,
                 "cliente_snapshot": li.cliente_snapshot,
+                # La razón social emisora no se guardó como snapshot histórico;
+                # se toma de la orden asociada (el proveedor no se edita después
+                # de cargar la factura).
+                "proveedor_snapshot": li.orden.proveedor if li.orden else None,
                 "retencion_porcentaje_snapshot": li.retencion_porcentaje_snapshot,
                 "tarifas": tarifas,
             }
@@ -68,7 +72,10 @@ def listar_liquidaciones(db: Session = Depends(get_db), current_user: User = Dep
         .options(
             selectinload(Liquidacion.items).selectinload(
                 LiquidacionItem.tarifas
-            )
+            ),
+            selectinload(Liquidacion.items).selectinload(
+                LiquidacionItem.orden
+            ),
         )
         .all()
     )
@@ -108,7 +115,10 @@ def detalle(id: UUID, db: Session = Depends(get_db), current_user: User = Depend
         .options(
             selectinload(Liquidacion.items).selectinload(
                 LiquidacionItem.tarifas
-            )
+            ),
+            selectinload(Liquidacion.items).selectinload(
+                LiquidacionItem.orden
+            ),
         )
         .filter(Liquidacion.id == id)
         .first()
