@@ -61,9 +61,9 @@ interface AppContextType {
   updateOrdenItem: (id: string, item: Partial<OrdenItem>) => void;
   updateEstadoOrden: (ordenId: string, estado: EstadoOrden, fechaPago?: string | null) => void;
   updateEstadoOrdenesMasivo: (ordenIds: string[], estado: EstadoOrden, fechaPago?: string | null) => Promise<{ actualizadas: number; omitidas: string[] }>;
-  deleteOrdenItem: (id: string) => void;
+  deleteOrdenItem: (id: string) => Promise<void>;
   deleteOrdenItems: (ids: string[]) => Promise<void>;
-  clearOrdenItems: () => void;
+  clearOrdenItems: () => Promise<void>;
   assignComisionistasGlobal: (comisionistaIds: string[]) => void;
   addComisionistaToItem: (itemId: string, comisionistaId: string) => void;
   removeComisionistaFromItem: (itemId: string, comisionistaId: string) => void;
@@ -605,9 +605,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   );
 
   const deleteOrdenItem = useCallback(
-    (id: string) => {
-      deleteOrdenMutation.mutate(id);
-    },
+    (id: string) => deleteOrdenMutation.mutateAsync(id),
     [deleteOrdenMutation]
   );
 
@@ -630,7 +628,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   );
 
   const clearOrdenItems = useCallback(() => {
-    limpiarOrdenesMutation.mutate();
+    return limpiarOrdenesMutation.mutateAsync();
   }, [limpiarOrdenesMutation]);
 
   const assignComisionistasGlobal = useCallback(

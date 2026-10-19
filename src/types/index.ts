@@ -58,6 +58,8 @@ export interface OrdenItem {
   cliente?: { id: string; nombre: string };
   productoRel?: { id: string; nombre: string; unidadComision: string; tachoKilos?: number; sacoKilos?: number; pesoPorUnidad?: number };
   fincaRel?: { id: string; nombre: string };
+  // Fecha en que la factura se subió al sistema (orden cabecera)
+  createdAt?: string;
 }
 
 export interface Orden {

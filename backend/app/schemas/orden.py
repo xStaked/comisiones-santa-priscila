@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from typing import List, Optional
 from uuid import UUID
@@ -70,6 +70,9 @@ class OrdenItemResponse(OrdenItemBase):
     finca_id: Optional[UUID] = None
     proveedor: Optional[str] = None
     fecha_pago: Optional[date] = None
+    # Fecha en que la factura se subió al sistema (orden cabecera); NULL en
+    # registros legacy sin cabecera.
+    created_at: Optional[datetime] = None
     cliente: Optional[ClienteResponse] = None
     producto_obj: Optional[ProductoResponse] = Field(default=None, alias="productoRel")
     finca_obj: Optional[FincaResponse] = Field(default=None, alias="fincaRel")

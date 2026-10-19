@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect, useMemo } from 'react';
-import { Plus, Trash2, Pencil, UserCheck, Calculator, FileUp, Check, X, ChevronDown, ChevronRight, ChevronLeft, Calendar, ArrowUpDown, AlertTriangle } from 'lucide-react';
+import { Plus, Trash2, Pencil, UserCheck, Calculator, FileUp, Check, X, ChevronDown, ChevronRight, ChevronLeft, Calendar, ArrowUpDown, AlertTriangle, Loader2 } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { EstadoOrden, OrdenItem } from '@/types';
 import { Button } from '@/components/ui/button';
@@ -60,8 +60,34 @@ const ESTADOS_FILTRO: { value: string; label: string }[] = [
 
 const ITEMS_PER_PAGE = 15;
 
+/** dd/mm/aaaa en hora local; '—' si el registro no tiene fecha de carga (legacy). */
+function formatearFechaCarga(iso?: string | null): string {
+  if (!iso) return '—';
+  // SQLite/serializaciones sin 'T' no se parsean en todos los navegadores.
+  const fecha = new Date(iso.replace(' ', 'T'));
+  return Number.isNaN(fecha.getTime()) ? '—' : fecha.toLocaleDateString('es-ES');
+}
+
+/** Fecha y hora locales, para el tooltip de la columna Carga. */
+function formatearFechaHoraCarga(iso?: string | null): string {
+  if (!iso) return '';
+  const fecha = new Date(iso.replace(' ', 'T'));
+  return Number.isNaN(fecha.getTime()) ? '' : fecha.toLocaleString('es-ES');
+}
+
+/** YYYY-MM-DD en hora local del navegador, comparable con los <input type="date">.
+ *  Al comparar por fecha local se evita el corrimiento de un día por UTC. */
+function fechaLocalISO(iso?: string | null): string {
+  if (!iso) return '';
+  const fecha = new Date(iso.replace(' ', 'T'));
+  if (Number.isNaN(fecha.getTime())) return '';
+  return new Date(fecha.getTime() - fecha.getTimezoneOffset() * 60_000)
+    .toISOString()
+    .slice(0, 10);
+}
+
 const COLS_ORDENES =
-  'grid-cols-[34px_minmax(0,132px)_92px_minmax(0,1.35fr)_minmax(0,1fr)_72px_108px_130px_96px_30px]';
+  'grid-cols-[34px_minmax(0,132px)_92px_92px_minmax(0,1.35fr)_minmax(0,1fr)_72px_108px_130px_96px_30px]';
 
 type OrdenAgrupada = {
   id: string;
@@ -72,6 +98,7 @@ type OrdenAgrupada = {
   total: number;
   estado: EstadoOrden;
   fechaPago?: string | null;
+  createdAt: string;
   comisionistaIds: string[];
   items: OrdenItem[];
 };
@@ -129,6 +156,7 @@ function agruparOrdenes(
       total: item.total,
       estado: item.estado || 'pendiente',
       fechaPago: item.fechaPago || null,
+      createdAt: item.createdAt || '',
       comisionistaIds,
       items: [item],
     });
@@ -733,7 +761,15 @@ export function OrdenesTab() {
   const [filterEstado, setFilterEstado] = useState<string>('todos');
   const [filterFechaDesde, setFilterFechaDesde] = useState('');
   const [filterFechaHasta, setFilterFechaHasta] = useState('');
+  const [filterCargaDesde, setFilterCargaDesde] = useState('');
+  const [filterCargaHasta, setFilterCargaHasta] = useState('');
   const [filterComisionistaId, setFilterComisionistaId] = useState<string>('todos');
+  // Borrados en curso: el listado no se actualiza hasta que el backend responde,
+  // así que la fila o el botón muestran un spinner mientras tanto.
+  const [eliminandoItems, setEliminandoItems] = useState<Set<string>>(new Set());
+  const [eliminandoOrdenes, setEliminandoOrdenes] = useState<Set<string>>(new Set());
+  const [eliminandoMasivo, setEliminandoMasivo] = useState(false);
+  const [limpiando, setLimpiando] = useState(false);
   // Marcar como pagada exige elegir la fecha: se pide en este diálogo (una o varias órdenes)
   const [pagoPendiente, setPagoPendiente] = useState<{ estado: EstadoOrden; ordenIds: string[]; masivo: boolean } | null>(null);
   const [fechaPagoInput, setFechaPagoInput] = useState('');
@@ -784,6 +820,15 @@ export function OrdenesTab() {
     if (filterFechaHasta) {
       items = items.filter(item => item.fecha <= filterFechaHasta);
     }
+    if (filterCargaDesde || filterCargaHasta) {
+      items = items.filter(item => {
+        const carga = fechaLocalISO(item.createdAt);
+        if (!carga) return false;
+        if (filterCargaDesde && carga < filterCargaDesde) return false;
+        if (filterCargaHasta && carga > filterCargaHasta) return false;
+        return true;
+      });
+    }
     if (filterEstado !== 'todos') {
       items = items.filter(item => (item.estado || 'pendiente') === filterEstado);
     }
@@ -791,7 +836,7 @@ export function OrdenesTab() {
       items = items.filter(item => item.comisionistas.some(a => a.comisionistaId === filterComisionistaId));
     }
     return items;
-  }, [ordenItems, search, comisionistas, filterFechaDesde, filterFechaHasta, filterEstado, filterComisionistaId]);
+  }, [ordenItems, search, comisionistas, filterFechaDesde, filterFechaHasta, filterCargaDesde, filterCargaHasta, filterEstado, filterComisionistaId]);
 
   const ordenesAgrupadas = agruparOrdenes(filteredOrdenItems, sortField, sortDir);
   const etiquetaFiltroEstado = filterEstado === 'todos'
@@ -848,14 +893,47 @@ export function OrdenesTab() {
     }
     setPagoPendiente(null);
   };
+  // Marca un id como "eliminando" y devuelve la función que lo libera al terminar.
+  const conEliminacionEnCurso = (
+    setear: (updater: (prev: Set<string>) => Set<string>) => void,
+    id: string
+  ): (() => void) => {
+    setear(prev => new Set(prev).add(id));
+    return () => setear(prev => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+  };
+
+  const eliminarItem = (itemId: string) => {
+    const terminar = conEliminacionEnCurso(setEliminandoItems, itemId);
+    deleteOrdenItem(itemId).catch(() => {}).finally(terminar);
+  };
+
+  const eliminarOrden = (orden: OrdenAgrupada) => {
+    if (!confirm('¿Eliminar toda la orden y sus productos?')) return;
+    const terminar = conEliminacionEnCurso(setEliminandoOrdenes, orden.id);
+    // Secuencial (deleteOrdenItems): borrar en paralelo los ítems de una misma
+    // orden hace chocar los DELETE que compiten por eliminar la cabecera.
+    deleteOrdenItems(orden.items.map(item => item.id)).catch(() => {}).finally(terminar);
+  };
+
+  const handleLimpiar = () => {
+    setLimpiando(true);
+    clearOrdenItems().catch(() => {}).finally(() => setLimpiando(false));
+  };
+
   const handleEliminarMasivo = () => {
     const itemIds = ordenesAgrupadas
       .filter(o => selectedOrdenIds.has(o.id))
       .flatMap(o => o.items.map(item => item.id));
     if (!confirm(`¿Eliminar ${selectedOrdenIds.size} orden${selectedOrdenIds.size === 1 ? '' : 'es'} y sus productos?`)) return;
+    setEliminandoMasivo(true);
     deleteOrdenItems(itemIds)
       .then(() => setSelectedOrdenIds(new Set()))
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => setEliminandoMasivo(false));
   };
 
   // Recálculo de comisiones con los catálogos actuales, sin borrar la factura.
@@ -1070,6 +1148,8 @@ export function OrdenesTab() {
     setFilterEstado('todos');
     setFilterFechaDesde('');
     setFilterFechaHasta('');
+    setFilterCargaDesde('');
+    setFilterCargaHasta('');
     setFilterComisionistaId('todos');
   };
 
@@ -1107,6 +1187,14 @@ export function OrdenesTab() {
     filterFechaHasta && {
       label: `Hasta ${filterFechaHasta}`,
       quitar: () => { setFilterFechaHasta(''); setCurrentPage(1); },
+    },
+    filterCargaDesde && {
+      label: `Carga desde ${filterCargaDesde}`,
+      quitar: () => { setFilterCargaDesde(''); setCurrentPage(1); },
+    },
+    filterCargaHasta && {
+      label: `Carga hasta ${filterCargaHasta}`,
+      quitar: () => { setFilterCargaHasta(''); setCurrentPage(1); },
     },
     search && { label: `«${search}»`, quitar: () => { setSearch(''); setCurrentPage(1); } },
   ].filter(Boolean) as { label: string; quitar: () => void }[];
@@ -1634,6 +1722,14 @@ export function OrdenesTab() {
                 <Input type="date" value={filterFechaHasta} onChange={e => { setFilterFechaHasta(e.target.value); setCurrentPage(1); }} className="h-9 rounded-[9px] text-sm" />
               </div>
               <div className="space-y-1">
+                <Label className="text-[11.5px] font-semibold text-[#475467]">Carga desde</Label>
+                <Input type="date" value={filterCargaDesde} onChange={e => { setFilterCargaDesde(e.target.value); setCurrentPage(1); }} className="h-9 rounded-[9px] text-sm" />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-[11.5px] font-semibold text-[#475467]">Carga hasta</Label>
+                <Input type="date" value={filterCargaHasta} onChange={e => { setFilterCargaHasta(e.target.value); setCurrentPage(1); }} className="h-9 rounded-[9px] text-sm" />
+              </div>
+              <div className="space-y-1">
                 <Label className="text-[11.5px] font-semibold text-[#475467]">Comisionista</Label>
                 <Select value={filterComisionistaId} onValueChange={v => { setFilterComisionistaId(v ?? 'todos'); setCurrentPage(1); }}>
                   <SelectTrigger className="h-9 rounded-[9px] text-sm">
@@ -1711,12 +1807,16 @@ export function OrdenesTab() {
               <Button
                 variant="outline"
                 size="sm"
-                disabled={hayItemsLiquidados}
-                onClick={clearOrdenItems}
+                disabled={hayItemsLiquidados || limpiando}
+                onClick={handleLimpiar}
                 className="rounded-lg text-[#B91C1C] hover:bg-[#FDECEC] disabled:text-[#98A2B3]"
               >
-                <Trash2 className="mr-1 h-4 w-4" />
-                Limpiar
+                {limpiando ? (
+                  <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                ) : (
+                  <Trash2 className="mr-1 h-4 w-4" />
+                )}
+                {limpiando ? 'Limpiando…' : 'Limpiar'}
               </Button>
             </div>
           </div>
@@ -1767,9 +1867,13 @@ export function OrdenesTab() {
                   </Button>
                 )}
                 {selectedOrdenIds.size > 0 && (
-                  <Button variant="ghost" size="sm" onClick={handleEliminarMasivo} className="h-7 text-xs text-[#B91C1C] hover:text-[#991B1B] hover:bg-[#FDECEC] rounded-lg">
-                    <Trash2 className="h-3.5 w-3.5 mr-1" />
-                    {`Eliminar (${selectedOrdenIds.size})`}
+                  <Button variant="ghost" size="sm" disabled={eliminandoMasivo} onClick={handleEliminarMasivo} className="h-7 text-xs text-[#B91C1C] hover:text-[#991B1B] hover:bg-[#FDECEC] rounded-lg">
+                    {eliminandoMasivo ? (
+                      <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                    ) : (
+                      <Trash2 className="h-3.5 w-3.5 mr-1" />
+                    )}
+                    {eliminandoMasivo ? 'Eliminando…' : `Eliminar (${selectedOrdenIds.size})`}
                   </Button>
                 )}
               </div>
@@ -1794,6 +1898,7 @@ export function OrdenesTab() {
               <div />
               <div>Factura</div>
               <div>Fecha</div>
+              <div>Carga</div>
               <div>Cliente</div>
               <div>Razón social</div>
               <div className="text-right">Reg.</div>
@@ -1833,6 +1938,12 @@ export function OrdenesTab() {
                             ✓
                           </span>
                         )}
+                      </div>
+                      <div
+                        className="cifra truncate text-[12.5px] text-[#6B7684]"
+                        title={orden.createdAt ? `Cargada el ${formatearFechaHoraCarga(orden.createdAt)}` : 'Sin fecha de carga'}
+                      >
+                        {formatearFechaCarga(orden.createdAt)}
                       </div>
                       <div className="truncate text-[13px] text-[#0B1220]" title={orden.cliente}>
                         {orden.cliente}
@@ -1938,8 +2049,12 @@ export function OrdenesTab() {
                                     <Button variant="ghost" size="icon-xs" disabled={grupoBloqueado} className="text-[#98A2B3] hover:text-[#0B1220] disabled:opacity-40" onClick={() => handleEdit(item)}>
                                       <Pencil className="h-3.5 w-3.5" />
                                     </Button>
-                                    <Button variant="ghost" size="icon-xs" disabled={grupoBloqueado} className="text-[#98A2B3] hover:text-[#B91C1C] disabled:opacity-40" onClick={() => deleteOrdenItem(item.id)}>
-                                      <Trash2 className="h-3.5 w-3.5" />
+                                    <Button variant="ghost" size="icon-xs" disabled={grupoBloqueado || eliminandoItems.has(item.id)} className="text-[#98A2B3] hover:text-[#B91C1C] disabled:opacity-40" onClick={() => eliminarItem(item.id)}>
+                                      {eliminandoItems.has(item.id) ? (
+                                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                      ) : (
+                                        <Trash2 className="h-3.5 w-3.5" />
+                                      )}
                                     </Button>
                                   </div>
                                 </div>
@@ -1988,13 +2103,13 @@ export function OrdenesTab() {
                             <Button variant="ghost" size="sm" disabled={orden.estado === 'liquidada' || orden.items.some(item => item.estado === 'liquidada')} title="Sincroniza asignaciones con las tarifas actuales (quita pendientes que ya no aplican)" className="text-[#6B7684] hover:text-[#0B1220] hover:bg-[#F0F2F5] rounded-lg disabled:opacity-40 disabled:hover:bg-transparent" onClick={() => pedirRecalculo([orden.id], 'sincronizar')}>
                               Sincronizar
                             </Button>
-                            <Button variant="ghost" size="sm" disabled={orden.estado === 'liquidada' || orden.items.some(item => item.estado === 'liquidada')} className="text-[#B91C1C] hover:text-[#991B1B] hover:bg-[#FDECEC] rounded-lg disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-red-300" onClick={() => {
-                              if (confirm('¿Eliminar toda la orden y sus productos?')) {
-                                orden.items.forEach(item => deleteOrdenItem(item.id));
-                              }
-                            }}>
-                              <Trash2 className="h-3.5 w-3.5 mr-1" />
-                              Eliminar orden
+                            <Button variant="ghost" size="sm" disabled={orden.estado === 'liquidada' || orden.items.some(item => item.estado === 'liquidada') || eliminandoOrdenes.has(orden.id)} className="text-[#B91C1C] hover:text-[#991B1B] hover:bg-[#FDECEC] rounded-lg disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-red-300" onClick={() => eliminarOrden(orden)}>
+                              {eliminandoOrdenes.has(orden.id) ? (
+                                <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                              ) : (
+                                <Trash2 className="h-3.5 w-3.5 mr-1" />
+                              )}
+                              {eliminandoOrdenes.has(orden.id) ? 'Eliminando…' : 'Eliminar orden'}
                             </Button>
                           </div>
                         </div>

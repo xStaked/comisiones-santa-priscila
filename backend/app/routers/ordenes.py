@@ -307,6 +307,9 @@ def _serializar_item(item: OrdenItem) -> dict[str, Any]:
     data = OrdenItemResponse.model_validate(item).model_dump(by_alias=True)
     data["proveedor"] = item.orden.proveedor if item.orden else None
     data["fecha_pago"] = item.orden.fecha_pago if item.orden else None
+    # La fecha de carga es la de la factura completa (orden cabecera); los ítems
+    # sueltos legacy sin cabecera conservan la suya.
+    data["created_at"] = (item.orden.created_at if item.orden else None) or item.created_at
     return data
 
 

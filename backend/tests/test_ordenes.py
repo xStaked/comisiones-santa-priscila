@@ -111,6 +111,54 @@ def test_list_ordenes_planas_no_serializa_relaciones_ciclicas(authenticated_clie
     assert "liquidacion_items" not in orden
 
 
+def test_list_ordenes_expone_fecha_de_carga(authenticated_client):
+    """La fecha de carga (created_at de la factura) permite reconocer lo que se
+    acaba de subir: todos los ítems de una factura comparten la de su cabecera."""
+    payload = [{
+        "fecha": str(date.today()),
+        "numero_orden": "ORD-CARGA-001",
+        "finca": "Finca Test",
+        "producto": "Camarón",
+        "cantidad": "100.00",
+        "unidad": "kg",
+        "precio_unitario": "5.50",
+        "total": "550.00",
+        "comisionista_ids": [],
+    }, {
+        "fecha": str(date.today()),
+        "numero_orden": "ORD-CARGA-001",
+        "finca": "Finca Test",
+        "producto": "Tilapia",
+        "cantidad": "50.00",
+        "unidad": "kg",
+        "precio_unitario": "4.00",
+        "total": "200.00",
+        "comisionista_ids": [],
+    }]
+    assert authenticated_client.post("/api/v1/ordenes/", json=payload).status_code == 201
+
+    response = authenticated_client.get("/api/v1/ordenes/")
+    items = [o for o in response.json() if o["numero_orden"] == "ORD-CARGA-001"]
+    assert len(items) == 2
+    assert all(o["created_at"] is not None for o in items)
+    assert items[0]["created_at"] == items[1]["created_at"]
+
+
+def test_item_legacy_sin_cabecera_conserva_su_fecha_de_carga(authenticated_client, db_session):
+    oi = OrdenItem(
+        fecha=date.today(), numero_orden="ORD-LEGACY-001", finca="-", producto="Camarón",
+        cantidad=Decimal("10"), unidad="kg", precio_unitario=Decimal("5"), total=Decimal("50"),
+        estado=EstadoOrden.pendiente,
+    )
+    db_session.add(oi)
+    db_session.commit()
+
+    response = authenticated_client.get("/api/v1/ordenes/")
+
+    item = next(o for o in response.json() if o["numero_orden"] == "ORD-LEGACY-001")
+    assert item["created_at"] is not None
+
+
 def test_create_orden_agrupada_con_multiples_lineas(authenticated_client):
     payload = {
         "fecha": str(date.today()),
