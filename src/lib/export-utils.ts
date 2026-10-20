@@ -645,6 +645,29 @@ export function exportarExcel(
       alignment: { horizontal: 'left' as const, vertical: 'center' as const, indent: 1 },
       border: borde,
     },
+    // Cabecera de sección por comisionista. Cuando se liquidan varias personas
+    // en la misma hoja, cada una abre su propio bloque con este color oscuro.
+    seccionComisionista: {
+      font: { bold: true, sz: 12, color: { rgb: 'FFFFFFFF' } },
+      fill: { fgColor: { rgb: 'FF0F766E' }, patternType: 'solid' as const },
+      alignment: { horizontal: 'left' as const, vertical: 'center' as const, indent: 1 },
+      border: borde,
+    },
+    // Subtotal de cada comisionista: verde claro, distinto del TOTAL por
+    // cliente (amarillo suave) y del total de la hoja (amarillo saturado).
+    seccionTotal: {
+      font: { bold: true, sz: 11, color: { rgb: 'FF0F172A' } },
+      fill: { fgColor: { rgb: 'FFCCFBF1' }, patternType: 'solid' as const },
+      alignment: { horizontal: 'right' as const, vertical: 'center' as const },
+      border: borde,
+      numFmt: '"$ "#,##0.00',
+    },
+    seccionTotalLabel: {
+      font: { bold: true, sz: 11, color: { rgb: 'FF0B5E56' } },
+      fill: { fgColor: { rgb: 'FFCCFBF1' }, patternType: 'solid' as const },
+      alignment: { horizontal: 'left' as const, vertical: 'center' as const, indent: 1 },
+      border: borde,
+    },
     columnaHeader: {
       font: { bold: true, sz: 10, color: { rgb: 'FF0F172A' } },
       fill: { fgColor: { rgb: 'FFE5E7EB' }, patternType: 'solid' as const },
@@ -869,6 +892,21 @@ export function exportarExcel(
     return { comision: total, tarifasLabel: labels.length > 0 ? labels.join(' + ') : '-' };
   };
 
+  // Detalle de un ítem para UNA persona concreta. Se usa en las secciones por
+  // comisionista: una factura compartida aparece en el bloque de cada persona
+  // con su propia comisión, nunca con la suma de ambas.
+  const detalleItemParaComisionista = (
+    item: OrdenItem,
+    comisionista: Comisionista
+  ): { comision: number; tarifasLabel: string } => {
+    if (comisionesSnapshot) {
+      const snap = comisionesSnapshot.get(`${item.id}|${comisionista.id}`);
+      if (snap) return snap;
+    }
+    const kg = kgAcumuladoPorComisionista?.get(comisionista.id);
+    return calcularDetalleComision(item, comisionista, tarifasClienteProducto, kg);
+  };
+
   // Comisionistas que se muestran en la columna "Comisionista" del resumen.
   // Con filtro activo solo se listan los seleccionados asignados al ítem.
   const nombresComisionistasDelItem = (item: OrdenItem): string => {
@@ -957,98 +995,155 @@ export function exportarExcel(
     // Espacio en blanco para que la cabecera respire antes de los totales / secciones.
     filas.push(Array.from({ length: numCols }, () => ''));
 
-    // ── Secciones por cliente (razón social del cliente) ──
-    const itemsPorCliente = new Map<string, OrdenItem[]>();
-    itemsGrupo.forEach(item => {
-      const nombreCliente = razonSocialDelItem(item);
-      const arr = itemsPorCliente.get(nombreCliente) || [];
-      arr.push(item);
-      itemsPorCliente.set(nombreCliente, arr);
-    });
-    const clientesOrdenados = Array.from(itemsPorCliente.entries()).sort((a, b) =>
-      a[0].localeCompare(b[0], 'es')
-    );
+    // ── Secciones: por comisionista (si hay mezcla) y, dentro, por cliente ──
+    // Con varios comisionistas seleccionados cada hoja abre un bloque por
+    // persona. Así una factura compartida aparece en el bloque de cada una con
+    // su propia comisión, en vez de una fila combinada sin dueño claro.
+    const seccionPorComisionista = comisionistasOwner.length > 1;
+    const secciones: { owner: Comisionista | undefined; items: OrdenItem[] }[] =
+      seccionPorComisionista
+        ? comisionistasOwner
+            .map(owner => ({
+              owner,
+              items: itemsGrupo.filter(item =>
+                item.comisionistas.some(a => a.comisionistaId === owner.id)
+              ),
+            }))
+            .filter(seccion => seccion.items.length > 0)
+        : [{ owner: undefined, items: itemsGrupo }];
 
-    let totalGrupo = 0;
-    clientesOrdenados.forEach(([nombreCliente, itemsCliente], idx) => {
-      // Cabecera del cliente: amarillo para el primero (cliente principal),
-      // verde claro para el resto. Coincide con la hoja histórica del cliente
-      // donde el "primer cliente" del grupo va destacado en amarillo.
-      const estiloClienteHeader =
-        idx === 0 ? estilos.clienteHeaderAmarillo : estilos.clienteHeaderVerde;
+    /** Dibuja un bloque (por comisionista o combinado) y devuelve su total. */
+    const renderizarSeccion = (itemsSeccion: OrdenItem[], owner?: Comisionista): number => {
+      // Cabecera del bloque de la persona (solo cuando se mezclan comisionistas).
+      if (owner) {
+        filas.push([{ v: `COMISIONISTA: ${owner.nombre}`, s: estilos.seccionComisionista }]);
+        merges.push({ s: { r: filas.length - 1, c: 0 }, e: { r: filas.length - 1, c: numCols - 1 } });
+      }
 
-      filas.push([{ v: nombreCliente, s: estiloClienteHeader }]);
-      merges.push({ s: { r: filas.length - 1, c: 0 }, e: { r: filas.length - 1, c: numCols - 1 } });
-
-      // Cabecera de columnas
-      const headerCols = ['Fecha', 'Factura', 'Producto', 'Cant', 'Comisión', 'Valor a Comisionar', 'Estado', 'Sector'];
-      filas.push(headerCols.map(c => ({ v: c, s: estilos.columnaHeader })));
-
-      // Filas de datos, ordenadas por fecha → sector → factura (mismo criterio
-      // que el resto de exports para que la auditoría sea consistente).
-      const itemsOrdenados = [...itemsCliente].sort(
-        (a, b) =>
-          a.fecha.localeCompare(b.fecha) ||
-          sectorParaOrden(a, b) ||
-          a.numeroOrden.localeCompare(b.numeroOrden)
+      // ── Secciones por cliente (razón social del cliente) ──
+      const itemsPorCliente = new Map<string, OrdenItem[]>();
+      itemsSeccion.forEach(item => {
+        const nombreCliente = razonSocialDelItem(item);
+        const arr = itemsPorCliente.get(nombreCliente) || [];
+        arr.push(item);
+        itemsPorCliente.set(nombreCliente, arr);
+      });
+      const clientesOrdenados = Array.from(itemsPorCliente.entries()).sort((a, b) =>
+        a[0].localeCompare(b[0], 'es')
       );
 
-      let totalCliente = 0;
-      itemsOrdenados.forEach(item => {
-        const { comision, tarifasLabel } = detalleItem(item);
-        totalCliente += comision;
+      let totalSeccion = 0;
+      clientesOrdenados.forEach(([nombreCliente, itemsCliente], idx) => {
+        // Cabecera del cliente: amarillo para el primero (cliente principal),
+        // verde claro para el resto. Coincide con la hoja histórica del cliente
+        // donde el "primer cliente" del grupo va destacado en amarillo.
+        const estiloClienteHeader =
+          idx === 0 ? estilos.clienteHeaderAmarillo : estilos.clienteHeaderVerde;
 
-        // Fecha en formato dd/mm/aa (cortita, como la hoja histórica).
-        let fechaCorta = '';
-        if (item.fecha) {
-          const [a, m, d] = item.fecha.slice(0, 10).split('-');
-          fechaCorta = `${d}/${m}/${a.slice(2)}`;
-        }
+        filas.push([{ v: nombreCliente, s: estiloClienteHeader }]);
+        merges.push({ s: { r: filas.length - 1, c: 0 }, e: { r: filas.length - 1, c: numCols - 1 } });
 
+        // Cabecera de columnas
+        const headerCols = ['Fecha', 'Factura', 'Producto', 'Cant', 'Comisión', 'Valor a Comisionar', 'Estado', 'Sector'];
+        filas.push(headerCols.map(c => ({ v: c, s: estilos.columnaHeader })));
+
+        // Filas de datos, ordenadas por fecha → sector → factura (mismo criterio
+        // que el resto de exports para que la auditoría sea consistente).
+        const itemsOrdenados = [...itemsCliente].sort(
+          (a, b) =>
+            a.fecha.localeCompare(b.fecha) ||
+            sectorParaOrden(a, b) ||
+            a.numeroOrden.localeCompare(b.numeroOrden)
+        );
+
+        let totalCliente = 0;
+        itemsOrdenados.forEach(item => {
+          // En un bloque por comisionista se calcula solo su parte; nunca se
+          // suman las comisiones de las demás personas de la factura.
+          const { comision, tarifasLabel } = owner
+            ? detalleItemParaComisionista(item, owner)
+            : detalleItem(item);
+          totalCliente += comision;
+
+          // Fecha en formato dd/mm/aa (cortita, como la hoja histórica).
+          let fechaCorta = '';
+          if (item.fecha) {
+            const [a, m, d] = item.fecha.slice(0, 10).split('-');
+            fechaCorta = `${d}/${m}/${a.slice(2)}`;
+          }
+
+          filas.push([
+            { v: fechaCorta, s: estilos.celdaFecha, t: 's' },
+            { v: item.numeroOrden, s: estilos.celdaTexto, t: 's' },
+            { v: item.producto, s: estilos.celdaTexto, t: 's' },
+            { v: item.cantidad, s: estilos.celdaCantidad, t: 'n' },
+            { v: tarifasLabel, s: estilos.celdaTarifa, t: 's' },
+            { v: comision, s: estilos.celdaComision, t: 'n' },
+            { v: item.estado || 'pagada', s: estilos.celdaEstado, t: 's' },
+            { v: sectorDeItem(item) || 'N/A', s: estilos.celdaTexto, t: 's' },
+          ]);
+
+          // Alimentamos el RESUMEN GENERAL con cada línea.
+          resumen.push([
+            item.fecha,
+            item.numeroOrden,
+            item.producto,
+            item.cantidad,
+            tarifasLabel,
+            comision,
+            item.estado || 'pagada',
+            sectorDeItem(item) || 'N/A',
+            owner?.nombre ?? nombresComisionistasDelItem(item),
+            grupoDelItem(item),
+            razonSocialDelItem(item),
+          ]);
+        });
+
+        // Fila TOTAL por cliente (label en la columna Cant para alinearla con el
+        // formato histórico: "TOTAL" como cuarta columna, monto en la sexta).
         filas.push([
-          { v: fechaCorta, s: estilos.celdaFecha, t: 's' },
-          { v: item.numeroOrden, s: estilos.celdaTexto, t: 's' },
-          { v: item.producto, s: estilos.celdaTexto, t: 's' },
-          { v: item.cantidad, s: estilos.celdaCantidad, t: 'n' },
-          { v: tarifasLabel, s: estilos.celdaTarifa, t: 's' },
-          { v: comision, s: estilos.celdaComision, t: 'n' },
-          { v: item.estado || 'pagada', s: estilos.celdaEstado, t: 's' },
-          { v: sectorDeItem(item) || 'N/A', s: estilos.celdaTexto, t: 's' },
+          { v: '', s: estilos.totalFilaLabel, t: 's' },
+          { v: '', s: estilos.totalFilaLabel, t: 's' },
+          { v: '', s: estilos.totalFilaLabel, t: 's' },
+          { v: 'TOTAL', s: estilos.totalFilaLabel, t: 's' },
+          { v: '', s: estilos.totalFila, t: 's' },
+          { v: totalCliente, s: estilos.totalFila, t: 'n' },
+          { v: '', s: estilos.totalFilaLabel, t: 's' },
+          { v: '', s: estilos.totalFilaLabel, t: 's' },
         ]);
 
-        // Alimentamos el RESUMEN GENERAL con cada línea.
-        resumen.push([
-          item.fecha,
-          item.numeroOrden,
-          item.producto,
-          item.cantidad,
-          tarifasLabel,
-          comision,
-          item.estado || 'pagada',
-          sectorDeItem(item) || 'N/A',
-          nombresComisionistasDelItem(item),
-          grupoDelItem(item),
-          razonSocialDelItem(item),
-        ]);
+        // Separador entre clientes.
+        filas.push(Array.from({ length: numCols }, () => ''));
+
+        totalSeccion += totalCliente;
       });
 
-      // Fila TOTAL por cliente (label en la columna Cant para alinearla con el
-      // formato histórico: "TOTAL" como cuarta columna, monto en la sexta).
-      filas.push([
-        { v: '', s: estilos.totalFilaLabel, t: 's' },
-        { v: '', s: estilos.totalFilaLabel, t: 's' },
-        { v: '', s: estilos.totalFilaLabel, t: 's' },
-        { v: 'TOTAL', s: estilos.totalFilaLabel, t: 's' },
-        { v: '', s: estilos.totalFila, t: 's' },
-        { v: totalCliente, s: estilos.totalFila, t: 'n' },
-        { v: '', s: estilos.totalFilaLabel, t: 's' },
-        { v: '', s: estilos.totalFilaLabel, t: 's' },
-      ]);
+      // Subtotal del bloque del comisionista. La etiqueta abarca Fecha..Comisión
+      // y el monto va en la columna "Valor a Comisionar".
+      if (owner) {
+        const filaTotal = filas.length;
+        filas.push([
+          { v: `TOTAL COMISIONISTA: ${owner.nombre}`, s: estilos.seccionTotalLabel, t: 's' },
+          { v: '', s: estilos.seccionTotalLabel, t: 's' },
+          { v: '', s: estilos.seccionTotalLabel, t: 's' },
+          { v: '', s: estilos.seccionTotalLabel, t: 's' },
+          { v: '', s: estilos.seccionTotalLabel, t: 's' },
+          { v: totalSeccion, s: estilos.seccionTotal, t: 'n' },
+          { v: '', s: estilos.seccionTotalLabel, t: 's' },
+          { v: '', s: estilos.seccionTotalLabel, t: 's' },
+        ]);
+        merges.push({ s: { r: filaTotal, c: 0 }, e: { r: filaTotal, c: 4 } });
 
-      // Separador entre clientes.
-      filas.push(Array.from({ length: numCols }, () => ''));
+        // Separador entre comisionistas.
+        filas.push(Array.from({ length: numCols }, () => ''));
+      }
 
-      totalGrupo += totalCliente;
+      return totalSeccion;
+    };
+
+    let totalGrupo = 0;
+    secciones.forEach(({ owner, items: itemsSeccion }) => {
+      totalGrupo += renderizarSeccion(itemsSeccion, owner);
     });
 
     // Gran TOTAL de la hoja al pie (caja amarilla como en el modelo).
