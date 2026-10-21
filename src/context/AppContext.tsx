@@ -389,6 +389,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['ordenes'] });
+      // El recálculo solo reasigna comisionistas; los montos se calculan en el
+      // export con las tarifas específicas. Invalidarlas evita que se exporte
+      // con una tarifa vieja si se corrigió por SQL/seed sin pasar por la UI.
+      queryClient.invalidateQueries({ queryKey: ['tarifas-cliente-producto'] });
+      queryClient.invalidateQueries({ queryKey: ['comisionistas'] });
     },
   });
 
