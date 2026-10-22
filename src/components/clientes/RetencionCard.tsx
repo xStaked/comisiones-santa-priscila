@@ -13,9 +13,11 @@ import { BotonSecundario, Panel, PanelTitulo } from '@/components/ui/dc';
 import { toast } from 'sonner';
 import { createRetencion, deleteRetencion } from '@/lib/api';
 
+const TOAST_RETENCION_ID = 'retencion';
+
 function mostrarError(error: unknown, mensaje: string) {
   const detalle = isAxiosError<{ detail?: string }>(error) ? error.response?.data?.detail : undefined;
-  toast.error(detalle || mensaje);
+  toast.error(detalle || mensaje, { id: TOAST_RETENCION_ID });
 }
 
 /** Tarjeta de gestión de la retención global por periodos de vigencia.
@@ -35,20 +37,26 @@ export function RetencionCard() {
 
   const crearMutation = useMutation({
     mutationFn: createRetencion,
+    onMutate: () => {
+      toast.loading('Agregando tramo de retención…', { id: TOAST_RETENCION_ID });
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['retenciones'] });
       setOpen(false);
       setForm({ vigenteDesde: '', porcentaje: '' });
-      toast.success('Tramo de retención agregado');
+      toast.success('Tramo de retención agregado', { id: TOAST_RETENCION_ID });
     },
     onError: (error) => mostrarError(error, 'No se pudo agregar el tramo'),
   });
 
   const eliminarMutation = useMutation({
     mutationFn: deleteRetencion,
+    onMutate: () => {
+      toast.loading('Eliminando tramo de retención…', { id: TOAST_RETENCION_ID });
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['retenciones'] });
-      toast.success('Tramo de retención eliminado');
+      toast.success('Tramo de retención eliminado', { id: TOAST_RETENCION_ID });
     },
     onError: (error) => mostrarError(error, 'No se pudo eliminar el tramo'),
   });

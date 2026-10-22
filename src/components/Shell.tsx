@@ -9,6 +9,7 @@ import { gruposNav, esActiva } from './nav';
 import { useAuth } from '@/context/AuthContext';
 import { useApp } from '@/context/AppContext';
 import { Loader2 } from 'lucide-react';
+import { GlobalMutationBar } from './GlobalMutationBar';
 
 function Sidebar() {
   const pathname = usePathname();
@@ -120,6 +121,7 @@ function Contenido({ children }: { children: React.ReactNode }) {
 export function Shell({ children }: { children: React.ReactNode }) {
   return (
     <AuthGuard>
+      <GlobalMutationBar />
       <div className="flex min-h-screen items-stretch bg-background">
         <Sidebar />
         <main className="flex min-w-0 flex-1 flex-col">

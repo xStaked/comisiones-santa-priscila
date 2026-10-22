@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { isAxiosError } from 'axios';
-import { Plus, Pencil, Trash2, Building2, X, PlusCircle, ToggleLeft, ToggleRight, Tag } from 'lucide-react';
+import { Plus, Pencil, Trash2, Building2, X, PlusCircle, ToggleLeft, ToggleRight, Tag, Loader2 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useApp } from '@/context/AppContext';
 import { Cliente, Finca, Grupo } from '@/types';
@@ -36,10 +36,12 @@ import { fetchFincas, createFinca, updateFinca as apiUpdateFinca, deleteFinca as
 const COLS =
   'grid-cols-[minmax(0,1.5fr)_110px_minmax(0,1.1fr)_minmax(0,1fr)_minmax(0,1.4fr)_90px]';
 
-function mostrarErrorFinca(error: unknown, mensaje: string) {
+function mostrarErrorFinca(error: unknown, mensaje: string, toastId?: string) {
   const detalle = isAxiosError<{ detail?: string }>(error) ? error.response?.data?.detail : undefined;
-  toast.error(detalle || mensaje);
+  toast.error(detalle || mensaje, toastId ? { id: toastId } : undefined);
 }
+
+const TOAST_GRUPO_ID = 'grupo';
 
 export function ClientesTab() {
   const queryClient = useQueryClient();
@@ -48,6 +50,7 @@ export function ClientesTab() {
   const [editing, setEditing] = useState<Cliente | null>(null);
   const [fincasOriginales, setFincasOriginales] = useState<Finca[]>([]);
   const [open, setOpen] = useState(false);
+  const [guardando, setGuardando] = useState(false);
   const [form, setForm] = useState<{
     nombre: string;
     tipo: 'grupo' | 'individual';
@@ -75,22 +78,28 @@ export function ClientesTab() {
 
   const crearGrupoMutation = useMutation({
     mutationFn: createGrupo,
+    onMutate: () => {
+      toast.loading('Creando grupo…', { id: TOAST_GRUPO_ID });
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['grupos'] });
       setNuevoGrupo('');
-      toast.success('Grupo creado');
+      toast.success('Grupo creado', { id: TOAST_GRUPO_ID });
     },
-    onError: (err) => mostrarErrorFinca(err, 'Error al crear grupo'),
+    onError: (err) => mostrarErrorFinca(err, 'Error al crear grupo', TOAST_GRUPO_ID),
   });
 
   const eliminarGrupoMutation = useMutation({
     mutationFn: deleteGrupo,
+    onMutate: () => {
+      toast.loading('Eliminando grupo…', { id: TOAST_GRUPO_ID });
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['grupos'] });
       queryClient.invalidateQueries({ queryKey: ['clientes'] });
-      toast.success('Grupo eliminado');
+      toast.success('Grupo eliminado', { id: TOAST_GRUPO_ID });
     },
-    onError: (err) => mostrarErrorFinca(err, 'Error al eliminar grupo'),
+    onError: (err) => mostrarErrorFinca(err, 'Error al eliminar grupo', TOAST_GRUPO_ID),
   });
 
   const handleCrearGrupo = (e: React.FormEvent) => {
@@ -181,9 +190,10 @@ export function ClientesTab() {
       alias: form.alias.filter((a) => a.trim() !== ''),
     };
 
-    if (editing) {
-      updateCliente(editing.id, payload);
-      try {
+    setGuardando(true);
+    try {
+      if (editing) {
+        await updateCliente(editing.id, payload);
         const fincasFormIds = form.fincas.map((f) => f.id).filter(Boolean) as string[];
         const eliminaciones = fincasOriginales
           .filter((f) => !fincasFormIds.includes(f.id))
@@ -205,17 +215,19 @@ export function ClientesTab() {
           return [];
         });
         await Promise.all([...eliminaciones, ...actualizaciones]);
-      } catch {
-        return;
+      } else {
+        // Para crear, no podemos crear fincas hasta tener el clienteId
+        // Por simplicidad, solo creamos el cliente y las fincas se agregan después editando
+        await addCliente(payload);
+        toast.info('Cliente creado. Edítalo para agregar sectores.');
       }
-    } else {
-      // Para crear, no podemos crear fincas hasta tener el clienteId
-      // Por simplicidad, solo creamos el cliente y las fincas se agregan después editando
-      addCliente(payload);
-      toast.info('Cliente creado. Edítalo para agregar sectores.');
+      resetForm();
+      setOpen(false);
+    } catch {
+      // Los toasts de error los muestran las mutaciones; dejamos el formulario abierto.
+    } finally {
+      setGuardando(false);
     }
-    resetForm();
-    setOpen(false);
   };
 
   const handleEdit = (c: Cliente) => {
@@ -237,7 +249,7 @@ export function ClientesTab() {
 
   const handleDelete = (id: string) => {
     if (confirm('¿Eliminar este cliente?')) {
-      deleteCliente(id);
+      void deleteCliente(id).catch(() => {});
     }
   };
 
@@ -286,7 +298,7 @@ export function ClientesTab() {
         >
           <Plus className="size-3.5" /> Nuevo cliente
         </BotonPrimario>
-        <Dialog open={open} onOpenChange={setOpen}>
+        <Dialog open={open} onOpenChange={(abierto) => { if (!guardando) setOpen(abierto); }}>
           <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
             <DialogHeader>
               <DialogTitle>{editing ? 'Editar Cliente' : 'Nuevo Cliente'}</DialogTitle>
@@ -463,12 +475,22 @@ export function ClientesTab() {
                     resetForm();
                     setOpen(false);
                   }}
+                  disabled={guardando}
                   className="rounded-xl"
                 >
                   Cancelar
                 </Button>
-                <Button type="submit" className="rounded-xl">
-                  {editing ? 'Guardar cambios' : 'Crear cliente'}
+                <Button type="submit" disabled={guardando} className="rounded-xl">
+                  {guardando ? (
+                    <>
+                      <Loader2 className="mr-2 size-4 animate-spin" />
+                      Guardando…
+                    </>
+                  ) : editing ? (
+                    'Guardar cambios'
+                  ) : (
+                    'Crear cliente'
+                  )}
                 </Button>
               </div>
             </form>

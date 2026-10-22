@@ -57,28 +57,28 @@ interface AppContextType {
   deleteComisionista: (id: string) => void;
 
   ordenItems: OrdenItem[];
-  addOrdenItems: (items: OrdenItem[]) => void;
-  updateOrdenItem: (id: string, item: Partial<OrdenItem>) => void;
-  updateEstadoOrden: (ordenId: string, estado: EstadoOrden, fechaPago?: string | null) => void;
+  addOrdenItems: (items: OrdenItem[]) => Promise<void>;
+  updateOrdenItem: (id: string, item: Partial<OrdenItem>) => Promise<void>;
+  updateEstadoOrden: (ordenId: string, estado: EstadoOrden, fechaPago?: string | null) => Promise<void>;
   updateEstadoOrdenesMasivo: (ordenIds: string[], estado: EstadoOrden, fechaPago?: string | null) => Promise<{ actualizadas: number; omitidas: string[] }>;
   deleteOrdenItem: (id: string) => Promise<void>;
   deleteOrdenItems: (ids: string[]) => Promise<void>;
   clearOrdenItems: () => Promise<void>;
-  assignComisionistasGlobal: (comisionistaIds: string[]) => void;
+  assignComisionistasGlobal: (comisionistaIds: string[]) => Promise<void>;
   addComisionistaToItem: (itemId: string, comisionistaId: string) => void;
   removeComisionistaFromItem: (itemId: string, comisionistaId: string) => void;
   recalcularComisiones: (ordenIds: string[], modo?: ModoRecalculo) => Promise<ResultadoRecalculo>;
   recalculandoComisiones: boolean;
 
   liquidaciones: Liquidacion[];
-  saveLiquidacion: (nombre: string, mes: string, ordenItemIds?: string[], comisionistaIds?: string[]) => void;
+  saveLiquidacion: (nombre: string, mes: string, ordenItemIds?: string[], comisionistaIds?: string[]) => Promise<void>;
   deleteLiquidacion: (id: string) => void;
   resetDemoData: () => void;
 
   clientes: Cliente[];
-  addCliente: (c: Omit<Cliente, 'id' | 'createdAt'>) => void;
-  updateCliente: (id: string, c: Partial<Cliente>) => void;
-  deleteCliente: (id: string) => void;
+  addCliente: (c: Omit<Cliente, 'id' | 'createdAt'>) => Promise<void>;
+  updateCliente: (id: string, c: Partial<Cliente>) => Promise<void>;
+  deleteCliente: (id: string) => Promise<void>;
 
   productos: Producto[];
   addProducto: (p: Omit<Producto, 'id' | 'createdAt'>) => void;
@@ -96,8 +96,20 @@ interface AppContextType {
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
-/** Id compartido para que el toast de "Recalculando…" se reemplace por el resultado. */
+/** Ids compartidos para que el toast de "…" se reemplace por el resultado. */
 const TOAST_RECALCULO_ID = 'recalculo-comisiones';
+const TOAST_GUARDAR_ORDENES_ID = 'guardar-ordenes';
+const TOAST_ACTUALIZAR_ORDEN_ID = 'actualizar-orden';
+const TOAST_ESTADO_ORDEN_ID = 'estado-orden';
+const TOAST_ASIGNAR_GLOBAL_ID = 'asignar-global';
+const TOAST_GUARDAR_LIQUIDACION_ID = 'guardar-liquidacion';
+const TOAST_ELIMINAR_LIQUIDACION_ID = 'eliminar-liquidacion';
+const TOAST_CARGAR_DATOS_ID = 'cargar-datos';
+const TOAST_TARIFAS_MASIVO_ID = 'tarifas-masivo';
+const TOAST_COMISIONISTA_ID = 'comisionista';
+const TOAST_CLIENTE_ID = 'cliente';
+const TOAST_PRODUCTO_ID = 'producto';
+const TOAST_TARIFA_ID = 'tarifa';
 
 function ordenItemToCreatePayload(item: OrdenItem) {
   return {
@@ -187,101 +199,138 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // Mutations: Comisionistas
   const createComisionistaMutation = useMutation({
     mutationFn: createComisionista,
+    onMutate: () => {
+      toast.loading('Creando comisionista…', { id: TOAST_COMISIONISTA_ID });
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['comisionistas'] });
-      toast.success('Comisionista creado');
+      toast.success('Comisionista creado', { id: TOAST_COMISIONISTA_ID });
     },
     onError: (err: any) => {
-      toast.error(err?.response?.data?.detail || 'Error al crear comisionista');
+      toast.error(err?.response?.data?.detail || 'Error al crear comisionista', {
+        id: TOAST_COMISIONISTA_ID,
+      });
     },
   });
 
   const updateComisionistaMutation = useMutation({
     mutationFn: ({ id, data }: { id: string; data: Partial<Comisionista> }) => apiUpdateComisionista(id, data),
+    onMutate: () => {
+      toast.loading('Guardando comisionista…', { id: TOAST_COMISIONISTA_ID });
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['comisionistas'] });
-      toast.success('Comisionista actualizado');
+      toast.success('Comisionista actualizado', { id: TOAST_COMISIONISTA_ID });
     },
     onError: (err: any) => {
-      toast.error(err?.response?.data?.detail || 'Error al actualizar comisionista');
+      toast.error(err?.response?.data?.detail || 'Error al actualizar comisionista', {
+        id: TOAST_COMISIONISTA_ID,
+      });
     },
   });
 
   const deleteComisionistaMutation = useMutation({
     mutationFn: apiDeleteComisionista,
-    onMutate: () => queryClient.cancelQueries({ queryKey: ['ordenes'] }),
+    onMutate: () => {
+      toast.loading('Eliminando comisionista…', { id: TOAST_COMISIONISTA_ID });
+      return queryClient.cancelQueries({ queryKey: ['ordenes'] });
+    },
     onSuccess: () => {
-      toast.success('Comisionista eliminado');
+      toast.success('Comisionista eliminado', { id: TOAST_COMISIONISTA_ID });
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['comisionistas'] });
       queryClient.invalidateQueries({ queryKey: ['ordenes'] });
     },
     onError: (err: any) => {
-      toast.error(err?.response?.data?.detail || 'Error al eliminar comisionista');
+      toast.error(err?.response?.data?.detail || 'Error al eliminar comisionista', {
+        id: TOAST_COMISIONISTA_ID,
+      });
     },
   });
 
   // Mutations: Ordenes
   const createOrdenesMutation = useMutation({
     mutationFn: (items: OrdenItem[]) => createOrdenes(items.map(ordenItemToCreatePayload)),
-    onMutate: () => queryClient.cancelQueries({ queryKey: ['ordenes'] }),
+    onMutate: () => {
+      toast.loading('Guardando órdenes…', { id: TOAST_GUARDAR_ORDENES_ID });
+      return queryClient.cancelQueries({ queryKey: ['ordenes'] });
+    },
     onSuccess: () => {
-      toast.success('Órdenes agregadas');
+      toast.success('Órdenes agregadas', { id: TOAST_GUARDAR_ORDENES_ID });
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['ordenes'] });
     },
     onError: (err: any) => {
-      toast.error(err?.response?.data?.detail || 'Error al agregar órdenes');
+      toast.error(err?.response?.data?.detail || 'Error al agregar órdenes', {
+        id: TOAST_GUARDAR_ORDENES_ID,
+      });
     },
   });
 
   const updateOrdenMutation = useMutation({
     mutationFn: ({ id, data }: { id: string; data: Partial<OrdenItem> }) => apiUpdateOrden(id, data),
-    onMutate: () => queryClient.cancelQueries({ queryKey: ['ordenes'] }),
+    onMutate: () => {
+      toast.loading('Guardando cambios…', { id: TOAST_ACTUALIZAR_ORDEN_ID });
+      return queryClient.cancelQueries({ queryKey: ['ordenes'] });
+    },
     onSuccess: () => {
-      toast.success('Orden actualizada');
+      toast.success('Orden actualizada', { id: TOAST_ACTUALIZAR_ORDEN_ID });
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['ordenes'] });
     },
     onError: (err: any) => {
-      toast.error(err?.response?.data?.detail || 'Error al actualizar orden');
+      toast.error(err?.response?.data?.detail || 'Error al actualizar orden', {
+        id: TOAST_ACTUALIZAR_ORDEN_ID,
+      });
     },
   });
 
   const updateEstadoOrdenMutation = useMutation({
     mutationFn: ({ ordenId, estado, fechaPago }: { ordenId: string; estado: EstadoOrden; fechaPago?: string | null }) =>
       apiUpdateEstadoOrdenGrupo(ordenId, estado, fechaPago),
-    onMutate: () => queryClient.cancelQueries({ queryKey: ['ordenes'] }),
+    onMutate: () => {
+      toast.loading('Actualizando estado…', { id: TOAST_ESTADO_ORDEN_ID });
+      return queryClient.cancelQueries({ queryKey: ['ordenes'] });
+    },
     onSuccess: () => {
-      toast.success('Estado de orden actualizado');
+      toast.success('Estado de orden actualizado', { id: TOAST_ESTADO_ORDEN_ID });
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['ordenes'] });
     },
     onError: (err: any) => {
-      toast.error(err?.response?.data?.detail || 'Error al actualizar estado de orden');
+      toast.error(err?.response?.data?.detail || 'Error al actualizar estado de orden', {
+        id: TOAST_ESTADO_ORDEN_ID,
+      });
     },
   });
 
   const updateEstadoOrdenesMasivoMutation = useMutation({
     mutationFn: ({ ordenIds, estado, fechaPago }: { ordenIds: string[]; estado: EstadoOrden; fechaPago?: string | null }) =>
       apiUpdateEstadoOrdenesMasivo(ordenIds, estado, fechaPago),
-    onMutate: () => queryClient.cancelQueries({ queryKey: ['ordenes'] }),
+    onMutate: () => {
+      toast.loading('Actualizando órdenes…', { id: TOAST_ESTADO_ORDEN_ID });
+      return queryClient.cancelQueries({ queryKey: ['ordenes'] });
+    },
     onSuccess: (data) => {
       if (data.omitidas.length > 0) {
-        toast.success(`${data.actualizadas} orden(es) actualizadas; ${data.omitidas.length} omitida(s) por tener ítems liquidados`);
+        toast.success(`${data.actualizadas} orden(es) actualizadas; ${data.omitidas.length} omitida(s) por tener ítems liquidados`, {
+          id: TOAST_ESTADO_ORDEN_ID,
+        });
       } else {
-        toast.success(`${data.actualizadas} orden(es) actualizadas`);
+        toast.success(`${data.actualizadas} orden(es) actualizadas`, { id: TOAST_ESTADO_ORDEN_ID });
       }
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['ordenes'] });
     },
     onError: (err: any) => {
-      toast.error(err?.response?.data?.detail || 'Error al actualizar órdenes');
+      toast.error(err?.response?.data?.detail || 'Error al actualizar órdenes', {
+        id: TOAST_ESTADO_ORDEN_ID,
+      });
     },
   });
 
@@ -334,15 +383,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const asignarGlobalMutation = useMutation({
     mutationFn: ({ ordenIds, comisionistaIds }: { ordenIds: string[]; comisionistaIds: string[] }) =>
       apiAsignarGlobal(ordenIds, comisionistaIds),
-    onMutate: () => queryClient.cancelQueries({ queryKey: ['ordenes'] }),
+    onMutate: () => {
+      toast.loading('Asignando comisionistas…', { id: TOAST_ASIGNAR_GLOBAL_ID });
+      return queryClient.cancelQueries({ queryKey: ['ordenes'] });
+    },
     onSuccess: () => {
-      toast.success('Comisionistas asignados globalmente');
+      toast.success('Comisionistas asignados globalmente', { id: TOAST_ASIGNAR_GLOBAL_ID });
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['ordenes'] });
     },
     onError: (err: any) => {
-      toast.error(err?.response?.data?.detail || 'Error al asignar comisionistas');
+      toast.error(err?.response?.data?.detail || 'Error al asignar comisionistas', {
+        id: TOAST_ASIGNAR_GLOBAL_ID,
+      });
     },
   });
 
@@ -380,8 +434,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         ? apiRecalcularOrden(ordenIds[0], modo)
         : apiRecalcularOrdenesMasivo({ ordenIds, modo }),
     onMutate: () => {
-      queryClient.cancelQueries({ queryKey: ['ordenes'] });
       toast.loading('Recalculando comisiones…', { id: TOAST_RECALCULO_ID });
+      return queryClient.cancelQueries({ queryKey: ['ordenes'] });
     },
     onSuccess: (data) => {
       const partes: string[] = [];
@@ -410,15 +464,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const createLiquidacionMutation = useMutation({
     mutationFn: ({ nombre, mes, ordenItemIds, comisionistaIds }: { nombre: string; mes: string; ordenItemIds: string[]; comisionistaIds?: string[] }) =>
       createLiquidacion({ nombre, mes, ordenItemIds, comisionistaIds }),
-    onMutate: () => Promise.all([
-      queryClient.cancelQueries({ queryKey: ['ordenes'] }),
-      queryClient.cancelQueries({ queryKey: ['liquidaciones'] }),
-    ]),
+    onMutate: () => {
+      toast.loading('Guardando liquidación…', { id: TOAST_GUARDAR_LIQUIDACION_ID });
+      return Promise.all([
+        queryClient.cancelQueries({ queryKey: ['ordenes'] }),
+        queryClient.cancelQueries({ queryKey: ['liquidaciones'] }),
+      ]);
+    },
     onSuccess: (data: any) => {
       if (data.omitidos && data.omitidos.length > 0) {
-        toast.success(`Liquidación guardada. Se omitieron ${data.omitidos.length} ítem(s) que ya no están pagados.`);
+        toast.success(`Liquidación guardada. Se omitieron ${data.omitidos.length} ítem(s) que ya no están pagados.`, {
+          id: TOAST_GUARDAR_LIQUIDACION_ID,
+        });
       } else {
-        toast.success('Liquidación guardada');
+        toast.success('Liquidación guardada', { id: TOAST_GUARDAR_LIQUIDACION_ID });
       }
     },
     onSettled: () => {
@@ -426,159 +485,217 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       queryClient.invalidateQueries({ queryKey: ['liquidaciones'] });
     },
     onError: (err: any) => {
-      toast.error(err?.response?.data?.detail || 'Error al guardar liquidación');
+      toast.error(err?.response?.data?.detail || 'Error al guardar liquidación', {
+        id: TOAST_GUARDAR_LIQUIDACION_ID,
+      });
     },
   });
 
   const deleteLiquidacionMutation = useMutation({
     mutationFn: apiDeleteLiquidacion,
-    onMutate: () => Promise.all([
-      queryClient.cancelQueries({ queryKey: ['ordenes'] }),
-      queryClient.cancelQueries({ queryKey: ['liquidaciones'] }),
-    ]),
+    onMutate: () => {
+      toast.loading('Eliminando liquidación…', { id: TOAST_ELIMINAR_LIQUIDACION_ID });
+      return Promise.all([
+        queryClient.cancelQueries({ queryKey: ['ordenes'] }),
+        queryClient.cancelQueries({ queryKey: ['liquidaciones'] }),
+      ]);
+    },
     onSuccess: () => {
-      toast.success('Liquidación eliminada');
+      toast.success('Liquidación eliminada', { id: TOAST_ELIMINAR_LIQUIDACION_ID });
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['ordenes'] });
       queryClient.invalidateQueries({ queryKey: ['liquidaciones'] });
     },
     onError: (err: any) => {
-      toast.error(err?.response?.data?.detail || 'Error al eliminar liquidación');
+      toast.error(err?.response?.data?.detail || 'Error al eliminar liquidación', {
+        id: TOAST_ELIMINAR_LIQUIDACION_ID,
+      });
     },
   });
 
 
   const seedDemoMutation = useMutation({
     mutationFn: seedDemo,
-    onMutate: () => queryClient.cancelQueries({ queryKey: ['ordenes'] }),
+    onMutate: () => {
+      toast.loading('Cargando datos reales…', { id: TOAST_CARGAR_DATOS_ID });
+      return queryClient.cancelQueries({ queryKey: ['ordenes'] });
+    },
     onSuccess: () => {
-      toast.success('Datos reales cargados');
+      toast.success('Datos reales cargados', { id: TOAST_CARGAR_DATOS_ID });
     },
     onSettled: () => {
       queryClient.invalidateQueries();
     },
     onError: (err: any) => {
-      toast.error(err?.response?.data?.detail || 'Error al cargar datos reales');
+      toast.error(err?.response?.data?.detail || 'Error al cargar datos reales', {
+        id: TOAST_CARGAR_DATOS_ID,
+      });
     },
   });
 
   // Mutations: Clientes
   const createClienteMutation = useMutation({
     mutationFn: createCliente,
+    onMutate: () => {
+      toast.loading('Creando cliente…', { id: TOAST_CLIENTE_ID });
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['clientes'] });
-      toast.success('Cliente creado');
+      toast.success('Cliente creado', { id: TOAST_CLIENTE_ID });
     },
     onError: (err: any) => {
-      toast.error(err?.response?.data?.detail || 'Error al crear cliente');
+      toast.error(err?.response?.data?.detail || 'Error al crear cliente', { id: TOAST_CLIENTE_ID });
     },
   });
 
   const updateClienteMutation = useMutation({
     mutationFn: ({ id, data }: { id: string; data: Partial<Cliente> }) => apiUpdateCliente(id, data),
-    onMutate: () => queryClient.cancelQueries({ queryKey: ['ordenes'] }),
+    onMutate: () => {
+      toast.loading('Guardando cliente…', { id: TOAST_CLIENTE_ID });
+      return queryClient.cancelQueries({ queryKey: ['ordenes'] });
+    },
     onSuccess: () => {
-      toast.success('Cliente actualizado');
+      toast.success('Cliente actualizado', { id: TOAST_CLIENTE_ID });
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['clientes'] });
       queryClient.invalidateQueries({ queryKey: ['ordenes'] });
     },
     onError: (err: any) => {
-      toast.error(err?.response?.data?.detail || 'Error al actualizar cliente');
+      toast.error(err?.response?.data?.detail || 'Error al actualizar cliente', {
+        id: TOAST_CLIENTE_ID,
+      });
     },
   });
 
   const deleteClienteMutation = useMutation({
     mutationFn: apiDeleteCliente,
+    onMutate: () => {
+      toast.loading('Eliminando cliente…', { id: TOAST_CLIENTE_ID });
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['clientes'] });
       queryClient.invalidateQueries({ queryKey: ['fincas'] });
-      toast.success('Cliente eliminado');
+      toast.success('Cliente eliminado', { id: TOAST_CLIENTE_ID });
     },
     onError: (err: any) => {
-      toast.error(err?.response?.data?.detail || 'Error al eliminar cliente');
+      toast.error(err?.response?.data?.detail || 'Error al eliminar cliente', {
+        id: TOAST_CLIENTE_ID,
+      });
     },
   });
 
   // Mutations: Productos
   const createProductoMutation = useMutation({
     mutationFn: createProducto,
+    onMutate: () => {
+      toast.loading('Creando producto…', { id: TOAST_PRODUCTO_ID });
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['productos'] });
-      toast.success('Producto creado');
+      toast.success('Producto creado', { id: TOAST_PRODUCTO_ID });
     },
     onError: (err: any) => {
-      toast.error(err?.response?.data?.detail || 'Error al crear producto');
+      toast.error(err?.response?.data?.detail || 'Error al crear producto', {
+        id: TOAST_PRODUCTO_ID,
+      });
     },
   });
 
   const updateProductoMutation = useMutation({
     mutationFn: ({ id, data }: { id: string; data: Partial<Producto> }) => apiUpdateProducto(id, data),
+    onMutate: () => {
+      toast.loading('Guardando producto…', { id: TOAST_PRODUCTO_ID });
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['productos'] });
-      toast.success('Producto actualizado');
+      toast.success('Producto actualizado', { id: TOAST_PRODUCTO_ID });
     },
     onError: (err: any) => {
-      toast.error(err?.response?.data?.detail || 'Error al actualizar producto');
+      toast.error(err?.response?.data?.detail || 'Error al actualizar producto', {
+        id: TOAST_PRODUCTO_ID,
+      });
     },
   });
 
   const deleteProductoMutation = useMutation({
     mutationFn: apiDeleteProducto,
+    onMutate: () => {
+      toast.loading('Eliminando producto…', { id: TOAST_PRODUCTO_ID });
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['productos'] });
-      toast.success('Producto eliminado');
+      toast.success('Producto eliminado', { id: TOAST_PRODUCTO_ID });
     },
     onError: (err: any) => {
-      toast.error(err?.response?.data?.detail || 'Error al eliminar producto');
+      toast.error(err?.response?.data?.detail || 'Error al eliminar producto', {
+        id: TOAST_PRODUCTO_ID,
+      });
     },
   });
 
   // Mutations: Tarifas Cliente Producto
   const createTarifaMutation = useMutation({
     mutationFn: createTarifaClienteProducto,
+    onMutate: () => {
+      toast.loading('Creando comisión…', { id: TOAST_TARIFA_ID });
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tarifas-cliente-producto'] });
-      toast.success('Comisión creada');
+      toast.success('Comisión creada', { id: TOAST_TARIFA_ID });
     },
     onError: (err: any) => {
-      toast.error(err?.response?.data?.detail || 'Error al crear comisión');
+      toast.error(err?.response?.data?.detail || 'Error al crear comisión', { id: TOAST_TARIFA_ID });
     },
   });
 
   const updateTarifaMutation = useMutation({
     mutationFn: ({ id, data }: { id: string; data: Partial<TarifaClienteProducto> }) => apiUpdateTarifaClienteProducto(id, data),
+    onMutate: () => {
+      toast.loading('Guardando comisión…', { id: TOAST_TARIFA_ID });
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tarifas-cliente-producto'] });
-      toast.success('Comisión actualizada');
+      toast.success('Comisión actualizada', { id: TOAST_TARIFA_ID });
     },
     onError: (err: any) => {
-      toast.error(err?.response?.data?.detail || 'Error al actualizar comisión');
+      toast.error(err?.response?.data?.detail || 'Error al actualizar comisión', {
+        id: TOAST_TARIFA_ID,
+      });
     },
   });
 
   const updateTarifasMasivoMutation = useMutation({
     mutationFn: ({ ids, cambios }: { ids: string[]; cambios: { tipo?: string; valor?: number; activo?: boolean; umbralKg?: number | null; valorSobreUmbral?: number | null; vigenteDesde?: string | null; vigenteHasta?: string | null; proveedoresExcluidos?: string[] } }) =>
       apiUpdateTarifasMasivo(ids, cambios),
+    onMutate: ({ ids }) => {
+      toast.loading(`Actualizando ${ids.length} comisión(es)…`, { id: TOAST_TARIFAS_MASIVO_ID });
+    },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['tarifas-cliente-producto'] });
-      toast.success(`${data.actualizadas} comisiones actualizadas`);
+      toast.success(`${data.actualizadas} comisiones actualizadas`, { id: TOAST_TARIFAS_MASIVO_ID });
     },
     onError: (err: any) => {
-      toast.error(err?.response?.data?.detail || 'Error al actualizar comisiones');
+      toast.error(err?.response?.data?.detail || 'Error al actualizar comisiones', {
+        id: TOAST_TARIFAS_MASIVO_ID,
+      });
     },
   });
 
   const deleteTarifaMutation = useMutation({
     mutationFn: apiDeleteTarifaClienteProducto,
+    onMutate: () => {
+      toast.loading('Eliminando comisión…', { id: TOAST_TARIFA_ID });
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tarifas-cliente-producto'] });
-      toast.success('Comisión eliminada');
+      toast.success('Comisión eliminada', { id: TOAST_TARIFA_ID });
     },
     onError: (err: any) => {
-      toast.error(err?.response?.data?.detail || 'Error al eliminar comisión');
+      toast.error(err?.response?.data?.detail || 'Error al eliminar comisión', {
+        id: TOAST_TARIFA_ID,
+      });
     },
   });
 
@@ -605,16 +722,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   );
 
   const addOrdenItems = useCallback(
-    (items: OrdenItem[]) => {
-      createOrdenesMutation.mutate(items);
-    },
+    (items: OrdenItem[]) => createOrdenesMutation.mutateAsync(items),
     [createOrdenesMutation]
   );
 
   const updateOrdenItem = useCallback(
-    (id: string, item: Partial<OrdenItem>) => {
-      updateOrdenMutation.mutate({ id, data: item });
-    },
+    (id: string, item: Partial<OrdenItem>) =>
+      updateOrdenMutation.mutateAsync({ id, data: item }),
     [updateOrdenMutation]
   );
 
@@ -629,9 +743,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   );
 
   const updateEstadoOrden = useCallback(
-    (ordenId: string, estado: EstadoOrden, fechaPago?: string | null) => {
-      updateEstadoOrdenMutation.mutate({ ordenId, estado, fechaPago });
-    },
+    (ordenId: string, estado: EstadoOrden, fechaPago?: string | null) =>
+      updateEstadoOrdenMutation.mutateAsync({ ordenId, estado, fechaPago }),
     [updateEstadoOrdenMutation]
   );
 
@@ -648,7 +761,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const assignComisionistasGlobal = useCallback(
     (comisionistaIds: string[]) => {
       const ordenIds = ordenItems.map((o) => o.id);
-      asignarGlobalMutation.mutate({ ordenIds, comisionistaIds });
+      return asignarGlobalMutation.mutateAsync({ ordenIds, comisionistaIds });
     },
     [asignarGlobalMutation, ordenItems]
   );
@@ -674,13 +787,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   );
 
   const saveLiquidacion = useCallback(
-    (nombre: string, mes: string, ordenItemIds?: string[], comisionistaIds?: string[]) => {
+    async (nombre: string, mes: string, ordenItemIds?: string[], comisionistaIds?: string[]) => {
       const ids = ordenItemIds ?? ordenItems.filter((o) => o.estado === 'pagada').map((o) => o.id);
       if (ids.length === 0) {
         toast.error('No hay órdenes pagadas para guardar');
         return;
       }
-      createLiquidacionMutation.mutate({ nombre, mes, ordenItemIds: ids, comisionistaIds });
+      await createLiquidacionMutation.mutateAsync({ nombre, mes, ordenItemIds: ids, comisionistaIds });
     },
     [createLiquidacionMutation, ordenItems]
   );
@@ -698,23 +811,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [seedDemoMutation]);
 
   const addCliente = useCallback(
-    (c: Omit<Cliente, 'id' | 'createdAt'>) => {
-      createClienteMutation.mutate(c);
-    },
+    (c: Omit<Cliente, 'id' | 'createdAt'>) => createClienteMutation.mutateAsync(c),
     [createClienteMutation]
   );
 
   const updateCliente = useCallback(
-    (id: string, c: Partial<Cliente>) => {
-      updateClienteMutation.mutate({ id, data: c });
-    },
+    (id: string, c: Partial<Cliente>) =>
+      updateClienteMutation.mutateAsync({ id, data: c }),
     [updateClienteMutation]
   );
 
   const deleteCliente = useCallback(
-    (id: string) => {
-      deleteClienteMutation.mutate(id);
-    },
+    (id: string) => deleteClienteMutation.mutateAsync(id),
     [deleteClienteMutation]
   );
 

@@ -772,6 +772,12 @@ export function OrdenesTab() {
   // Qué botón de recálculo está en curso: `modo:ids`. Permite mostrar el spinner
   // en la fila correcta sin bloquear visualmente los demás botones.
   const [recalculandoKey, setRecalculandoKey] = useState<string | null>(null);
+  // Acciones que esperan al backend y mantienen visible su diálogo/panel:
+  // el botón muestra spinner y queda deshabilitado hasta que termina.
+  const [guardandoOrden, setGuardandoOrden] = useState(false);
+  const [asignandoGlobal, setAsignandoGlobal] = useState(false);
+  const [guardandoEstado, setGuardandoEstado] = useState(false);
+  const [guardandoEdicion, setGuardandoEdicion] = useState(false);
   // Marcar como pagada exige elegir la fecha: se pide en este diálogo (una o varias órdenes)
   const [pagoPendiente, setPagoPendiente] = useState<{ estado: EstadoOrden; ordenIds: string[]; masivo: boolean } | null>(null);
   const [fechaPagoInput, setFechaPagoInput] = useState('');
@@ -861,11 +867,10 @@ export function OrdenesTab() {
   const toggleSeleccionarTodas = () => {
     setSelectedOrdenIds(todasSeleccionadas ? new Set() : new Set(ordenesSeleccionables.map(o => o.id)));
   };
-  const aplicarEstadoMasivo = (estado: EstadoOrden, fechaPago?: string | null) => {
+  const aplicarEstadoMasivo = async (estado: EstadoOrden, fechaPago?: string | null) => {
     // Limpiar la selección solo si la mutación tiene éxito; el toast de error ya lo maneja el contexto
-    updateEstadoOrdenesMasivo(Array.from(selectedOrdenIds), estado, fechaPago)
-      .then(() => setSelectedOrdenIds(new Set()))
-      .catch(() => {});
+    await updateEstadoOrdenesMasivo(Array.from(selectedOrdenIds), estado, fechaPago);
+    setSelectedOrdenIds(new Set());
   };
 
   const hoy = () => new Date().toISOString().slice(0, 10);
@@ -878,22 +883,32 @@ export function OrdenesTab() {
     fechaActual?: string | null
   ) => {
     if (estado === 'pendiente') {
-      if (masivo) aplicarEstadoMasivo(estado);
-      else updateEstadoOrden(ordenIds[0], estado, null);
+      if (masivo) {
+        void aplicarEstadoMasivo(estado).catch(() => {});
+      } else {
+        void updateEstadoOrden(ordenIds[0], estado, null).catch(() => {});
+      }
       return;
     }
     setFechaPagoInput(fechaActual || hoy());
     setPagoPendiente({ estado, ordenIds, masivo });
   };
 
-  const confirmarFechaDePago = () => {
+  const confirmarFechaDePago = async () => {
     if (!pagoPendiente || !fechaPagoInput) return;
-    if (pagoPendiente.masivo) {
-      aplicarEstadoMasivo(pagoPendiente.estado, fechaPagoInput);
-    } else {
-      updateEstadoOrden(pagoPendiente.ordenIds[0], pagoPendiente.estado, fechaPagoInput);
+    setGuardandoEstado(true);
+    try {
+      if (pagoPendiente.masivo) {
+        await aplicarEstadoMasivo(pagoPendiente.estado, fechaPagoInput);
+      } else {
+        await updateEstadoOrden(pagoPendiente.ordenIds[0], pagoPendiente.estado, fechaPagoInput);
+      }
+      setPagoPendiente(null);
+    } catch {
+      // El toast de error lo muestra AppContext; dejamos el diálogo abierto.
+    } finally {
+      setGuardandoEstado(false);
     }
-    setPagoPendiente(null);
   };
   // Marca un id como "eliminando" y devuelve la función que lo libera al terminar.
   const conEliminacionEnCurso = (
@@ -1012,7 +1027,7 @@ export function OrdenesTab() {
     });
   };
 
-  const handleConfirmManual = () => {
+  const handleConfirmManual = async () => {
     if (stagedItems.length === 0) return;
     if (!manualHeader.numeroOrden) {
       toast.error('Ingrese el número de factura/orden');
@@ -1025,8 +1040,15 @@ export function OrdenesTab() {
       clienteId: manualHeader.clienteId || undefined,
       proveedor: manualHeader.proveedor || undefined,
     }));
-    addOrdenItems(itemsWithHeader);
-    resetManualForm();
+    setGuardandoOrden(true);
+    try {
+      await addOrdenItems(itemsWithHeader);
+      resetManualForm();
+    } catch {
+      // El toast de error lo muestra AppContext; no limpiamos el formulario.
+    } finally {
+      setGuardandoOrden(false);
+    }
   };
 
   const removeStagedItem = (id: string) => {
@@ -1083,7 +1105,7 @@ export function OrdenesTab() {
     if (okCount > 0) toast.success(`${okCount} orden(es), ${totalItems} productos extraídos`);
   };
 
-  const handleConfirmPDF = () => {
+  const handleConfirmPDF = async () => {
     // Una factura con ítems sin resolver o ya cargada no entra. Cargarla igual deja datos que
     // nunca van a generar comisión y el faltante recién aparece cuando no cuadra
     // la liquidación; las bloqueadas se quedan a la vista con su motivo.
@@ -1108,9 +1130,16 @@ export function OrdenesTab() {
     }
     if (itemsConCliente.length === 0) return;
 
-    addOrdenItems(itemsConCliente);
-    setPdfPreviews(bloqueadas);
-    if (bloqueadas.length === 0) setPdfClienteId('');
+    setGuardandoOrden(true);
+    try {
+      await addOrdenItems(itemsConCliente);
+      setPdfPreviews(bloqueadas);
+      if (bloqueadas.length === 0) setPdfClienteId('');
+    } catch {
+      // El toast de error lo muestra AppContext; dejamos la vista previa intacta.
+    } finally {
+      setGuardandoOrden(false);
+    }
   };
 
   const handleDiscardPDF = () => {
@@ -1128,18 +1157,25 @@ export function OrdenesTab() {
     setEditOpen(true);
   };
 
-  const handleSaveEdit = () => {
+  const handleSaveEdit = async () => {
     if (!editingId) return;
     const updatedEditForm = { ...editForm };
     if (updatedEditForm.cantidad && updatedEditForm.precioUnitario) {
       updatedEditForm.total = updatedEditForm.cantidad * updatedEditForm.precioUnitario;
     }
-    updateOrdenItem(editingId, {
-      ...updatedEditForm,
-      comisionistaIds: (updatedEditForm.comisionistas || []).map(a => a.comisionistaId),
-    } as Partial<OrdenItem> & { comisionistaIds: string[] });
-    setEditOpen(false);
-    setEditingId(null);
+    setGuardandoEdicion(true);
+    try {
+      await updateOrdenItem(editingId, {
+        ...updatedEditForm,
+        comisionistaIds: (updatedEditForm.comisionistas || []).map(a => a.comisionistaId),
+      } as Partial<OrdenItem> & { comisionistaIds: string[] });
+      setEditOpen(false);
+      setEditingId(null);
+    } catch {
+      // El toast de error lo muestra AppContext; dejamos el diálogo abierto.
+    } finally {
+      setGuardandoEdicion(false);
+    }
   };
 
   const totalGeneral = ordenItems.reduce((s, i) => s + i.total, 0);
@@ -1220,7 +1256,7 @@ export function OrdenesTab() {
   return (
     <div className="flex max-w-[1360px] flex-col gap-3.5">
       {/* Carga de facturas: panel lateral (rediseño) */}
-      <Sheet open={sheetAbierto} onOpenChange={setSheetAbierto}>
+      <Sheet open={sheetAbierto} onOpenChange={(abierto) => { if (!abierto && guardandoOrden) return; setSheetAbierto(abierto); }}>
         {/* La variante por defecto limita a max-w-sm; se sobreescribe con el mismo
             selector para que tailwind-merge la deduplique y respete los 660px. */}
         <SheetContent className="data-[side=right]:w-[660px] data-[side=right]:max-w-[92vw] data-[side=right]:sm:max-w-[92vw]">
@@ -1428,13 +1464,17 @@ export function OrdenesTab() {
                   </div>
 
                   <div className="flex justify-end gap-2">
-                    <Button variant="outline" onClick={resetManualForm} className="rounded-xl border-border">
+                    <Button variant="outline" onClick={resetManualForm} disabled={guardandoOrden} className="rounded-xl border-border">
                       <X className="h-4 w-4 mr-2" />
                       Descartar
                     </Button>
-                    <Button onClick={handleConfirmManual} className="btn-primary-dark rounded-xl">
-                      <Check className="h-4 w-4 mr-2" />
-                      Confirmar y Agregar
+                    <Button onClick={handleConfirmManual} disabled={guardandoOrden} className="btn-primary-dark rounded-xl">
+                      {guardandoOrden ? (
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      ) : (
+                        <Check className="h-4 w-4 mr-2" />
+                      )}
+                      {guardandoOrden ? 'Guardando…' : 'Confirmar y Agregar'}
                     </Button>
                   </div>
                 </div>
@@ -1661,14 +1701,18 @@ export function OrdenesTab() {
                         </p>
                       )}
                     </div>
-                    <Button variant="outline" onClick={handleDiscardPDF} className="rounded-xl border-border">
+                    <Button variant="outline" onClick={handleDiscardPDF} disabled={guardandoOrden} className="rounded-xl border-border">
                       <X className="h-4 w-4 mr-2" />
                       Descartar todo
                     </Button>
-                    <Button onClick={handleConfirmPDF} disabled={isProcessingPDF || facturasConfirmables === 0} className="btn-primary-dark rounded-xl">
-                      <Check className="h-4 w-4 mr-2" />
-                      Confirmar y Agregar
-                      {facturasConfirmables > 0 && ` (${facturasConfirmables} ${facturasConfirmables === 1 ? 'factura' : 'facturas'})`}
+                    <Button onClick={handleConfirmPDF} disabled={isProcessingPDF || facturasConfirmables === 0 || guardandoOrden} className="btn-primary-dark rounded-xl">
+                      {guardandoOrden ? (
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      ) : (
+                        <Check className="h-4 w-4 mr-2" />
+                      )}
+                      {guardandoOrden ? 'Guardando…' : 'Confirmar y Agregar'}
+                      {!guardandoOrden && facturasConfirmables > 0 && ` (${facturasConfirmables} ${facturasConfirmables === 1 ? 'factura' : 'facturas'})`}
                     </Button>
                   </div>
                 </div>
@@ -1803,8 +1847,8 @@ export function OrdenesTab() {
                 <Button
                   size="sm"
                   variant="outline"
-                  disabled={hayItemsLiquidados}
-                  onClick={() => {
+                  disabled={hayItemsLiquidados || asignandoGlobal}
+                  onClick={async () => {
                     if (hayItemsLiquidados) {
                       toast.error('No se pueden modificar órdenes con ítems liquidados');
                       return;
@@ -1813,23 +1857,31 @@ export function OrdenesTab() {
                       toast.error('Selecciona al menos un comisionista');
                       return;
                     }
-                    assignComisionistasGlobal(globalComisionistaIds);
-                    const sinTarifa: string[] = [];
-                    ordenItems.forEach(item => {
-                      globalComisionistaIds.forEach(comId => {
-                        if (item.clienteId && item.productoId && !encontrarTarifaEspecifica(item, comId, tarifasClienteProducto)) {
-                          const com = comisionistas.find(c => c.id === comId);
-                          sinTarifa.push(`${com?.nombre || comId} → ${item.productoRel?.nombre || item.producto}`);
-                        }
+                    setAsignandoGlobal(true);
+                    try {
+                      await assignComisionistasGlobal(globalComisionistaIds);
+                      const sinTarifa: string[] = [];
+                      ordenItems.forEach(item => {
+                        globalComisionistaIds.forEach(comId => {
+                          if (item.clienteId && item.productoId && !encontrarTarifaEspecifica(item, comId, tarifasClienteProducto)) {
+                            const com = comisionistas.find(c => c.id === comId);
+                            sinTarifa.push(`${com?.nombre || comId} → ${item.productoRel?.nombre || item.producto}`);
+                          }
+                        });
                       });
-                    });
-                    if (sinTarifa.length > 0) {
-                      toast.warning(`Algunas asignaciones carecen de tarifa específica: ${sinTarifa.slice(0, 3).join(', ')}${sinTarifa.length > 3 ? '...' : ''}`);
+                      if (sinTarifa.length > 0) {
+                        toast.warning(`Algunas asignaciones carecen de tarifa específica: ${sinTarifa.slice(0, 3).join(', ')}${sinTarifa.length > 3 ? '...' : ''}`);
+                      }
+                    } catch {
+                      // El toast de error lo muestra AppContext.
+                    } finally {
+                      setAsignandoGlobal(false);
                     }
                   }}
                   className="shrink-0 rounded-lg"
                 >
-                  Asignar
+                  {asignandoGlobal && <Loader2 className="mr-1 size-3.5 animate-spin" />}
+                  {asignandoGlobal ? 'Asignando…' : 'Asignar'}
                 </Button>
               </div>
             </div>
@@ -2131,7 +2183,7 @@ export function OrdenesTab() {
                                   type="date"
                                   value={orden.fechaPago || ''}
                                   disabled={orden.estado === 'liquidada'}
-                                  onChange={(e) => e.target.value && updateEstadoOrden(orden.id, orden.estado, e.target.value)}
+                                  onChange={(e) => { const fecha = e.target.value; if (fecha) void updateEstadoOrden(orden.id, orden.estado, fecha).catch(() => {}); }}
                                   className="h-7 rounded-lg border border-border bg-white px-2 text-xs text-[#344054] disabled:opacity-50"
                                 />
                               </label>
@@ -2223,7 +2275,7 @@ export function OrdenesTab() {
         />
       )}
 
-      <Dialog open={pagoPendiente !== null} onOpenChange={(abierto) => !abierto && setPagoPendiente(null)}>
+      <Dialog open={pagoPendiente !== null} onOpenChange={(abierto) => { if (!abierto && !guardandoEstado) setPagoPendiente(null); }}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
             <DialogTitle>¿Cuándo se pagó?</DialogTitle>
@@ -2242,19 +2294,27 @@ export function OrdenesTab() {
                 required
                 value={fechaPagoInput}
                 onChange={(e) => setFechaPagoInput(e.target.value)}
+                disabled={guardandoEstado}
               />
             </div>
             <div className="flex justify-end gap-2 pt-1">
-              <Button variant="ghost" onClick={() => setPagoPendiente(null)}>Cancelar</Button>
-              <Button className="btn-primary-dark" disabled={!fechaPagoInput} onClick={confirmarFechaDePago}>
-                Guardar
+              <Button variant="ghost" onClick={() => setPagoPendiente(null)} disabled={guardandoEstado}>Cancelar</Button>
+              <Button className="btn-primary-dark" disabled={!fechaPagoInput || guardandoEstado} onClick={confirmarFechaDePago}>
+                {guardandoEstado ? (
+                  <>
+                    <Loader2 className="mr-2 size-4 animate-spin" />
+                    Guardando…
+                  </>
+                ) : (
+                  'Guardar'
+                )}
               </Button>
             </div>
           </div>
         </DialogContent>
       </Dialog>
 
-      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+      <Dialog open={editOpen} onOpenChange={(abierto) => { if (!abierto && !guardandoEdicion) { setEditOpen(false); setEditingId(null); } }}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Editar Registro</DialogTitle>
@@ -2370,8 +2430,17 @@ export function OrdenesTab() {
               </div>
             </div>
             <div className="flex justify-end gap-2 pt-2">
-              <Button variant="outline" onClick={() => setEditOpen(false)} className="rounded-xl border-border">Cancelar</Button>
-              <Button onClick={handleSaveEdit} className="btn-primary-dark rounded-xl">Guardar</Button>
+              <Button variant="outline" onClick={() => { setEditOpen(false); setEditingId(null); }} disabled={guardandoEdicion} className="rounded-xl border-border">Cancelar</Button>
+              <Button onClick={handleSaveEdit} disabled={guardandoEdicion} className="btn-primary-dark rounded-xl">
+                {guardandoEdicion ? (
+                  <>
+                    <Loader2 className="mr-2 size-4 animate-spin" />
+                    Guardando…
+                  </>
+                ) : (
+                  'Guardar'
+                )}
+              </Button>
             </div>
           </div>
         </DialogContent>

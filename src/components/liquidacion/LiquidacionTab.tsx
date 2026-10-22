@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { FileText, FileSpreadsheet, Save, Calculator, ChevronRight } from 'lucide-react';
+import { FileText, FileSpreadsheet, Save, Calculator, ChevronRight, Loader2 } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import * as XLSX from 'xlsx-js-style';
 import { useApp } from '@/context/AppContext';
@@ -72,6 +72,7 @@ export function LiquidacionTab() {
   const [nombreLiquidacion, setNombreLiquidacion] = useState('');
   const [mesLiquidacion, setMesLiquidacion] = useState('');
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [guardandoLiquidacion, setGuardandoLiquidacion] = useState(false);
   // A quién se le paga en esta liquidación. Vacío = nadie: hay que elegir explícitamente.
   const [comisionistasAPagar, setComisionistasAPagar] = useState<Set<string>>(new Set());
   // La selección es por ORDEN (no por ítem): destildar saca la orden completa con todos sus productos.
@@ -353,30 +354,38 @@ export function LiquidacionTab() {
       return;
     }
     // Refrescar datos para reducir el riesgo de enviar ítems stale; el backend revalida el estado.
-    await queryClient.refetchQueries({ queryKey: ['ordenes'] });
-    const ordenesActualizadas = queryClient.getQueryData<typeof ordenItems>(['ordenes']) ?? ordenItems;
-    const seleccionados = new Set(selectedFiltered.map(i => i.id));
-    const ids = ordenesActualizadas
-      .filter(item => item.estado === 'pagada')
-      .filter(item => seleccionados.has(item.id))
-      .map((i) => i.id);
-    if (ids.length === 0) {
-      toast.error('No hay órdenes pagadas seleccionadas para guardar');
-      return;
+    setGuardandoLiquidacion(true);
+    try {
+      await queryClient.refetchQueries({ queryKey: ['ordenes'] });
+      const ordenesActualizadas = queryClient.getQueryData<typeof ordenItems>(['ordenes']) ?? ordenItems;
+      const seleccionados = new Set(selectedFiltered.map(i => i.id));
+      const ids = ordenesActualizadas
+        .filter(item => item.estado === 'pagada')
+        .filter(item => seleccionados.has(item.id))
+        .map((i) => i.id);
+      if (ids.length === 0) {
+        toast.error('No hay órdenes pagadas seleccionadas para guardar');
+        return;
+      }
+      // Si se paga a todos los pendientes y no hay filtro, se omite la lista: así los ítems
+      // sin comisionista asignado también quedan liquidados (comisión 0), como antes.
+      const todosLosPendientes =
+        filterComisionistas.length === 0 && comisionistasAPagar.size === resumenPorComisionista.length;
+      await saveLiquidacion(
+        nombreLiquidacion,
+        mesLiquidacion,
+        ids,
+        todosLosPendientes ? undefined : Array.from(comisionistasAPagar)
+      );
+      setNombreLiquidacion('');
+      setMesLiquidacion('');
+      setPreviewOpen(false);
+    } catch {
+      // El toast de error lo muestra la mutación de AppContext; dejamos el
+      // diálogo abierto para que el usuario pueda corregir y reintentar.
+    } finally {
+      setGuardandoLiquidacion(false);
     }
-    // Si se paga a todos los pendientes y no hay filtro, se omite la lista: así los ítems
-    // sin comisionista asignado también quedan liquidados (comisión 0), como antes.
-    const todosLosPendientes =
-      filterComisionistas.length === 0 && comisionistasAPagar.size === resumenPorComisionista.length;
-    saveLiquidacion(
-      nombreLiquidacion,
-      mesLiquidacion,
-      ids,
-      todosLosPendientes ? undefined : Array.from(comisionistasAPagar)
-    );
-    setNombreLiquidacion('');
-    setMesLiquidacion('');
-    setPreviewOpen(false);
   };
 
   /** Mes de pago más frecuente entre lo seleccionado: el candidato obvio a liquidar. */
@@ -760,7 +769,7 @@ export function LiquidacionTab() {
       </div>
 
       {/* Diálogo de confirmación */}
-      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+      <Dialog open={previewOpen} onOpenChange={(abierto) => { if (!guardandoLiquidacion) setPreviewOpen(abierto); }}>
         <DialogContent className="flex max-h-[90vh] flex-col overflow-hidden sm:max-w-[620px]">
           <DialogHeader>
             <DialogTitle>Confirmar liquidación</DialogTitle>
@@ -887,19 +896,27 @@ export function LiquidacionTab() {
           </div>
 
           <div className="flex justify-end gap-2.5 border-t border-[#EDEFF2] pt-3.5">
-            <Button variant="outline" onClick={() => setPreviewOpen(false)} className="rounded-[9px]">
+            <Button variant="outline" onClick={() => setPreviewOpen(false)} disabled={guardandoLiquidacion} className="rounded-[9px]">
               Cancelar
             </Button>
             <Button
               onClick={handleSave}
               disabled={
+                guardandoLiquidacion ||
                 (resumenPorComisionista.length > 0 && comisionistasAPagar.size === 0) ||
                 !nombreLiquidacion.trim() ||
                 !/^\d{4}-(0[1-9]|1[0-2])$/.test(mesLiquidacion)
               }
               className="rounded-[9px]"
             >
-              Confirmar y guardar
+              {guardandoLiquidacion ? (
+                <>
+                  <Loader2 className="mr-2 size-4 animate-spin" />
+                  Guardando…
+                </>
+              ) : (
+                'Confirmar y guardar'
+              )}
             </Button>
           </div>
         </DialogContent>

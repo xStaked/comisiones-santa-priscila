@@ -23,6 +23,7 @@ import {
   UserCheck,
   GitCompare,
   Play,
+  Loader2,
 } from 'lucide-react';
 import {
   BarraProgreso,
@@ -95,6 +96,7 @@ export function ReportesTab() {
   const [comparar, setComparar] = useState(false);
   const [anioB, setAnioB] = useState(anioActual);
   const [trimB, setTrimB] = useState(trimActual);
+  const [generandoPDF, setGenerandoPDF] = useState(false);
 
   // Filtros APLICADOS: solo cambian al pulsar "Generar reporte" (el usuario no confía
   // en el filtrado automático). Todo el reporte se deriva de aquí, no del borrador.
@@ -285,11 +287,14 @@ export function ReportesTab() {
       return;
     }
     try {
+      setGenerandoPDF(true);
       await exportarReportePDF(itemsFiltrados, comisionistas, 'Reporte_Comisiones', filtros, tarifasEspecificas);
       toast.success('PDF generado');
     } catch (e) {
       console.error(e);
       toast.error('No se pudo generar el PDF');
+    } finally {
+      setGenerandoPDF(false);
     }
   };
 
@@ -387,8 +392,13 @@ export function ReportesTab() {
           <BotonSecundario onClick={limpiar}>Limpiar</BotonSecundario>
 
           <div className="flex-1" />
-          <BotonSecundario onClick={handleExportPDF}>
-            <FileText className="size-3.5 text-[#B91C1C]" /> PDF
+          <BotonSecundario onClick={handleExportPDF} disabled={generandoPDF}>
+            {generandoPDF ? (
+              <Loader2 className="size-3.5 animate-spin" />
+            ) : (
+              <FileText className="size-3.5 text-[#B91C1C]" />
+            )}
+            {generandoPDF ? 'Generando…' : 'PDF'}
           </BotonSecundario>
           <BotonSecundario onClick={handleExportExcel}>
             <FileSpreadsheet className="size-3.5 text-primary" /> Excel
