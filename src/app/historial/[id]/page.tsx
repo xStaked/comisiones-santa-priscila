@@ -27,7 +27,7 @@ import {
   Cell,
 } from 'recharts';
 import { useApp } from '@/context/AppContext';
-import { exportarPDF, exportarExcel, getTarifaLabel } from '@/lib/export-utils';
+import { exportarPDF, exportarExcel, getTarifaLabel, unirTarifasLabel } from '@/lib/export-utils';
 import { fetchLiquidacion } from '@/lib/api';
 import { Comisionista, OrdenItem } from '@/types';
 import { Shell } from '@/components/Shell';
@@ -142,7 +142,7 @@ export default function LiquidacionDetallePage() {
       string,
       {
         nombre: string;
-        tarifas: string;
+        tarifas: Set<string>;
         ordenes: number;
         totalComision: number;
         totalOrden: number;
@@ -160,10 +160,11 @@ export default function LiquidacionDetallePage() {
           existente.ordenes += 1;
           existente.totalComision += comision;
           existente.totalOrden += itemTotal;
+          existente.tarifas.add(tarifaLabel);
         } else {
           map.set(t.comisionistaId, {
             nombre: t.comisionistaNombreSnapshot,
-            tarifas: tarifaLabel,
+            tarifas: new Set([tarifaLabel]),
             ordenes: 1,
             totalComision: comision,
             totalOrden: itemTotal,
@@ -171,9 +172,9 @@ export default function LiquidacionDetallePage() {
         }
       });
     });
-    return Array.from(map.values()).sort(
-      (a, b) => b.totalComision - a.totalComision
-    );
+    return Array.from(map.values())
+      .map(({ tarifas, ...rest }) => ({ ...rest, tarifas: unirTarifasLabel(tarifas) }))
+      .sort((a, b) => b.totalComision - a.totalComision);
   }, [rawLiquidacion]);
 
   if (!liquidacion) {
@@ -269,6 +270,13 @@ export default function LiquidacionDetallePage() {
                   className="bg-[#F0F2F5] text-[#344054] border-0"
                 >
                   {liquidacion.mes}
+                </Badge>
+                <Badge
+                  variant="secondary"
+                  className="bg-[#FEF3E2] text-[#9A5B0B] border-0"
+                  title="Los valores se congelan al guardar la liquidación; no se recalculan con tarifas nuevas."
+                >
+                  Valores históricos
                 </Badge>
                 <span className="text-xs text-[#7A8798] flex items-center gap-1">
                   <Calendar className="h-3 w-3" />
@@ -516,7 +524,7 @@ export default function LiquidacionDetallePage() {
                         <td className="px-4 py-3 text-[#0B1220] font-medium">
                           {r.nombre}
                         </td>
-                        <td className="px-4 py-3 text-[#7A8798]">{r.tarifas}</td>
+                        <td className="px-4 py-3 text-[#7A8798]" title={r.tarifas}>{r.tarifas}</td>
                         <td className="px-4 py-3 text-right text-[#344054]">
                           {r.ordenes}
                         </td>

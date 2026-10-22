@@ -346,6 +346,18 @@ export function getTarifasLabel(comisionista: Comisionista): string {
   return comisionista.tarifas.map(getTarifaLabel).join(' + ');
 }
 
+/**
+ * Une las etiquetas de tarifa de un mismo comisionista. Si tiene varias
+ * (p. ej. AGUA $0,50/kg y SALUD $1,00/kg), mostrar solo la primera haría
+ * parecer que toda la liquidación se pagó a esa tarifa.
+ */
+export function unirTarifasLabel(labels: Iterable<string>): string {
+  const unicas = Array.from(new Set(Array.from(labels).filter(Boolean)));
+  if (unicas.length === 0) return '—';
+  if (unicas.length === 1) return unicas[0];
+  return `Varias (${unicas.join(' + ')})`;
+}
+
 export function calcularDetalleComision(
   item: OrdenItem,
   comisionista: Comisionista,

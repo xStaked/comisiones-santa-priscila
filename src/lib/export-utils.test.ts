@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import type { OrdenItem, TarifaClienteProducto } from '@/types';
-import { encontrarTarifaEspecifica } from './export-utils';
+import { encontrarTarifaEspecifica, unirTarifasLabel } from './export-utils';
 import { esCoincidenciaSegura, UMBRAL_FINCA, UMBRAL_PRODUCTO } from './normalization';
 
 const COMISIONISTA = 'com-1';
@@ -198,6 +198,16 @@ test('PASTILLAS TH no toma PASTILLAS GRANDES', () => {
   );
 
   assert.equal(encontrada?.id, tarifaTh.id);
+});
+
+test('el resumen no reduce varias tarifas a la primera', () => {
+  assert.equal(unirTarifasLabel(['$0.500/kg']), '$0.500/kg');
+  assert.equal(unirTarifasLabel(['$0.500/kg', '$0.500/kg']), '$0.500/kg');
+  assert.equal(
+    unirTarifasLabel(['$0.500/kg', '$1.000/kg']),
+    'Varias ($0.500/kg + $1.000/kg)'
+  );
+  assert.equal(unirTarifasLabel([]), '—');
 });
 
 test('PASTILLAS GRANDES no toma PASTILLAS TH', () => {

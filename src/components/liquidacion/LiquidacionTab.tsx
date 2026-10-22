@@ -6,7 +6,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import * as XLSX from 'xlsx-js-style';
 import { useApp } from '@/context/AppContext';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
-import { exportarPDF, exportarExcel, calcularDetalleComision, getCantidadParaTarifaKg, sectorDeItem } from '@/lib/export-utils';
+import { exportarPDF, exportarExcel, calcularDetalleComision, getCantidadParaTarifaKg, sectorDeItem, unirTarifasLabel } from '@/lib/export-utils';
 import { formatearFechaCarga, formatearFechaHoraCarga } from '@/lib/fechas';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -244,25 +244,28 @@ export function LiquidacionTab() {
   }, [itemsConComision]);
 
   const resumenPorComisionista = useMemo(() => {
-    const map = new Map<string, { id: string; nombre: string; tarifasLabel: string; items: number; comision: number }>();
+    const map = new Map<string, { id: string; nombre: string; tarifas: Set<string>; items: number; comision: number }>();
     selectedItemsConComision.forEach(item => {
       item.comisionesAsignadas.forEach(com => {
         const existente = map.get(com.id);
         if (existente) {
           existente.items += 1;
           existente.comision += com.comision;
+          existente.tarifas.add(com.tarifasLabel);
         } else {
           map.set(com.id, {
             id: com.id,
             nombre: com.nombre,
-            tarifasLabel: com.tarifasLabel,
+            tarifas: new Set([com.tarifasLabel]),
             items: 1,
             comision: com.comision,
           });
         }
       });
     });
-    return Array.from(map.values()).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
+    return Array.from(map.values())
+      .map(({ tarifas, ...rest }) => ({ ...rest, tarifasLabel: unirTarifasLabel(tarifas) }))
+      .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
   }, [selectedItemsConComision]);
 
   /** Base facturada sobre la que se calculó la comisión de cada persona. */
@@ -710,7 +713,7 @@ export function LiquidacionTab() {
                     <Avatar nombre={com.nombre} id={com.id} />
                     <span className="truncate text-[13px] text-[#0B1220]">{com.nombre}</span>
                   </div>
-                  <div className="truncate text-[12.5px] text-[#6B7684]">{com.tarifasLabel}</div>
+                  <div className="truncate text-[12.5px] text-[#6B7684]" title={com.tarifasLabel}>{com.tarifasLabel}</div>
                   <div className="cifra text-right text-[12.5px] text-[#6B7684]">{com.items}</div>
                   <div className="cifra text-right text-[12.5px] text-[#344054]">
                     {money(basePorComisionista.get(com.id) ?? 0)}
