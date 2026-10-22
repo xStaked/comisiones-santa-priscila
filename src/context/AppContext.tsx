@@ -68,6 +68,7 @@ interface AppContextType {
   addComisionistaToItem: (itemId: string, comisionistaId: string) => void;
   removeComisionistaFromItem: (itemId: string, comisionistaId: string) => void;
   recalcularComisiones: (ordenIds: string[], modo?: ModoRecalculo) => Promise<ResultadoRecalculo>;
+  recalculandoComisiones: boolean;
 
   liquidaciones: Liquidacion[];
   saveLiquidacion: (nombre: string, mes: string, ordenItemIds?: string[], comisionistaIds?: string[]) => void;
@@ -94,6 +95,9 @@ interface AppContextType {
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
+
+/** Id compartido para que el toast de "Recalculando…" se reemplace por el resultado. */
+const TOAST_RECALCULO_ID = 'recalculo-comisiones';
 
 function ordenItemToCreatePayload(item: OrdenItem) {
   return {
@@ -375,17 +379,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       ordenIds.length === 1
         ? apiRecalcularOrden(ordenIds[0], modo)
         : apiRecalcularOrdenesMasivo({ ordenIds, modo }),
-    onMutate: () => queryClient.cancelQueries({ queryKey: ['ordenes'] }),
+    onMutate: () => {
+      queryClient.cancelQueries({ queryKey: ['ordenes'] });
+      toast.loading('Recalculando comisiones…', { id: TOAST_RECALCULO_ID });
+    },
     onSuccess: (data) => {
       const partes: string[] = [];
       if (data.agregadas > 0) partes.push(`${data.agregadas} asignación(es) agregada(s)`);
       if (data.quitadas > 0) partes.push(`${data.quitadas} asignación(es) quitada(s)`);
       if (data.omitidas.length > 0) partes.push(`${data.omitidas.length} omitida(s) por liquidada`);
-      toast.success(partes.length > 0 ? `Recálculo: ${partes.join(' · ')}` : 'Recálculo sin cambios');
+      toast.success(partes.length > 0 ? `Recálculo: ${partes.join(' · ')}` : 'Recálculo sin cambios', {
+        id: TOAST_RECALCULO_ID,
+      });
     },
     onError: (err: unknown) => {
       const detalle = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
-      toast.error(detalle || 'Error al recalcular comisiones');
+      toast.error(detalle || 'Error al recalcular comisiones', { id: TOAST_RECALCULO_ID });
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['ordenes'] });
@@ -777,6 +786,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         addComisionistaToItem,
         removeComisionistaFromItem,
         recalcularComisiones,
+        recalculandoComisiones: recalcularComisionesMutation.isPending,
         liquidaciones,
         saveLiquidacion,
         deleteLiquidacion,

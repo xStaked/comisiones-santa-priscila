@@ -481,7 +481,7 @@ function CorrectorSectorMasivo({
 }
 
 export function OrdenesTab() {
-  const { comisionistas, ordenItems, addOrdenItems, updateOrdenItem, updateEstadoOrden, updateEstadoOrdenesMasivo, deleteOrdenItem, deleteOrdenItems, clearOrdenItems, assignComisionistasGlobal, recalcularComisiones, clientes, productos, tarifasClienteProducto } = useApp();
+  const { comisionistas, ordenItems, addOrdenItems, updateOrdenItem, updateEstadoOrden, updateEstadoOrdenesMasivo, deleteOrdenItem, deleteOrdenItems, clearOrdenItems, assignComisionistasGlobal, recalcularComisiones, recalculandoComisiones, clientes, productos, tarifasClienteProducto } = useApp();
   const [activeForm, setActiveForm] = useState<'manual' | 'pdf'>('manual');
   // La carga vive en un panel lateral (rediseño), no en una tarjeta siempre visible.
   const [sheetAbierto, setSheetAbierto] = useState(false);
@@ -769,6 +769,9 @@ export function OrdenesTab() {
   const [eliminandoOrdenes, setEliminandoOrdenes] = useState<Set<string>>(new Set());
   const [eliminandoMasivo, setEliminandoMasivo] = useState(false);
   const [limpiando, setLimpiando] = useState(false);
+  // Qué botón de recálculo está en curso: `modo:ids`. Permite mostrar el spinner
+  // en la fila correcta sin bloquear visualmente los demás botones.
+  const [recalculandoKey, setRecalculandoKey] = useState<string | null>(null);
   // Marcar como pagada exige elegir la fecha: se pide en este diálogo (una o varias órdenes)
   const [pagoPendiente, setPagoPendiente] = useState<{ estado: EstadoOrden; ordenIds: string[]; masivo: boolean } | null>(null);
   const [fechaPagoInput, setFechaPagoInput] = useState('');
@@ -938,11 +941,18 @@ export function OrdenesTab() {
   // Recálculo de comisiones con los catálogos actuales, sin borrar la factura.
   // `agregar` solo inserta asignaciones faltantes; `sincronizar` además quita
   // las pendientes que ya no aplican (puede quitar una asignación manual).
-  const pedirRecalculo = (ordenIds: string[], modo: 'agregar' | 'sincronizar', limpiarSeleccion = false) => {
+  const pedirRecalculo = async (ordenIds: string[], modo: 'agregar' | 'sincronizar', limpiarSeleccion = false) => {
     if (modo === 'sincronizar' && !confirm('Sincronizar quita las asignaciones pendientes que ya no aplican (puede quitar una asignación manual). ¿Continuar?')) return;
-    recalcularComisiones(ordenIds, modo)
-      .then(() => { if (limpiarSeleccion) setSelectedOrdenIds(new Set()); })
-      .catch(() => {});
+    const key = `${modo}:${ordenIds.join(',')}`;
+    setRecalculandoKey(key);
+    try {
+      await recalcularComisiones(ordenIds, modo);
+      if (limpiarSeleccion) setSelectedOrdenIds(new Set());
+    } catch {
+      // El error ya se muestra en el toast global de AppContext.
+    } finally {
+      setRecalculandoKey(null);
+    }
   };
 
   const resetManualForm = () => {
@@ -1887,9 +1897,13 @@ export function OrdenesTab() {
                   </Select>
                 )}
                 {selectedOrdenIds.size > 0 && (
-                  <Button variant="ghost" size="sm" onClick={() => pedirRecalculo(Array.from(selectedOrdenIds), 'agregar', true)} className="h-7 text-xs text-[#0B5E56] hover:text-[#0A4A44] hover:bg-[#E6F2F0] rounded-lg">
-                    <Calculator className="h-3.5 w-3.5 mr-1" />
-                    {`Recalcular (${selectedOrdenIds.size})`}
+                  <Button variant="ghost" size="sm" disabled={recalculandoComisiones} onClick={() => pedirRecalculo(Array.from(selectedOrdenIds), 'agregar', true)} className="h-7 text-xs text-[#0B5E56] hover:text-[#0A4A44] hover:bg-[#E6F2F0] rounded-lg disabled:opacity-40 disabled:hover:bg-transparent">
+                    {recalculandoComisiones ? (
+                      <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                    ) : (
+                      <Calculator className="h-3.5 w-3.5 mr-1" />
+                    )}
+                    {recalculandoComisiones ? 'Recalculando…' : `Recalcular (${selectedOrdenIds.size})`}
                   </Button>
                 )}
                 {selectedOrdenIds.size > 0 && (
@@ -1937,6 +1951,8 @@ export function OrdenesTab() {
             <div>
               {paginatedOrdenes.map(orden => {
                 const collapsed = !expandedOrdenIds.has(orden.id);
+                const recalculandoEstaOrden = recalculandoKey === `agregar:${orden.id}`;
+                const sincronizandoEstaOrden = recalculandoKey === `sincronizar:${orden.id}`;
                 return (
                   <div key={orden.id} className="group">
                     <div
@@ -2122,12 +2138,19 @@ export function OrdenesTab() {
                             )}
                           </div>
                           <div className="flex flex-wrap items-center gap-2">
-                            <Button variant="ghost" size="sm" disabled={orden.estado === 'liquidada' || orden.items.some(item => item.estado === 'liquidada')} title="Agrega las asignaciones faltantes según las tarifas actuales (no quita nada)" className="text-[#0B5E56] hover:text-[#0A4A44] hover:bg-[#E6F2F0] rounded-lg disabled:opacity-40 disabled:hover:bg-transparent" onClick={() => pedirRecalculo([orden.id], 'agregar')}>
-                              <Calculator className="h-3.5 w-3.5 mr-1" />
-                              Recalcular
+                            <Button variant="ghost" size="sm" disabled={recalculandoComisiones || orden.estado === 'liquidada' || orden.items.some(item => item.estado === 'liquidada')} title="Agrega las asignaciones faltantes según las tarifas actuales (no quita nada)" className="text-[#0B5E56] hover:text-[#0A4A44] hover:bg-[#E6F2F0] rounded-lg disabled:opacity-40 disabled:hover:bg-transparent" onClick={() => pedirRecalculo([orden.id], 'agregar')}>
+                              {recalculandoEstaOrden ? (
+                                <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                              ) : (
+                                <Calculator className="h-3.5 w-3.5 mr-1" />
+                              )}
+                              {recalculandoEstaOrden ? 'Recalculando…' : 'Recalcular'}
                             </Button>
-                            <Button variant="ghost" size="sm" disabled={orden.estado === 'liquidada' || orden.items.some(item => item.estado === 'liquidada')} title="Sincroniza asignaciones con las tarifas actuales (quita pendientes que ya no aplican)" className="text-[#6B7684] hover:text-[#0B1220] hover:bg-[#F0F2F5] rounded-lg disabled:opacity-40 disabled:hover:bg-transparent" onClick={() => pedirRecalculo([orden.id], 'sincronizar')}>
-                              Sincronizar
+                            <Button variant="ghost" size="sm" disabled={recalculandoComisiones || orden.estado === 'liquidada' || orden.items.some(item => item.estado === 'liquidada')} title="Sincroniza asignaciones con las tarifas actuales (quita pendientes que ya no aplican)" className="text-[#6B7684] hover:text-[#0B1220] hover:bg-[#F0F2F5] rounded-lg disabled:opacity-40 disabled:hover:bg-transparent" onClick={() => pedirRecalculo([orden.id], 'sincronizar')}>
+                              {sincronizandoEstaOrden && (
+                                <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                              )}
+                              {sincronizandoEstaOrden ? 'Sincronizando…' : 'Sincronizar'}
                             </Button>
                             <Button variant="ghost" size="sm" disabled={orden.estado === 'liquidada' || orden.items.some(item => item.estado === 'liquidada') || eliminandoOrdenes.has(orden.id)} className="text-[#B91C1C] hover:text-[#991B1B] hover:bg-[#FDECEC] rounded-lg disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-red-300" onClick={() => eliminarOrden(orden)}>
                               {eliminandoOrdenes.has(orden.id) ? (
