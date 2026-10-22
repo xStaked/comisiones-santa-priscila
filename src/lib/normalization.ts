@@ -46,6 +46,8 @@ export function normalizarNombreFinca(valor?: string): string | undefined {
 export const UMBRAL_FINCA = 0.80;
 export const UMBRAL_PRODUCTO = 0.85;
 export const UMBRAL_CLIENTE = 0.85;
+export const UMBRAL_TOKEN = 0.85;
+const MARGEN_AMBIGUEDAD = 0.02;
 
 // Ratio difflib SequenceMatcher (paridad con Python). 2*M / T donde M = chars coincidentes en bloques contiguos.
 export function ratioDifflib(a: string, b: string): number {
@@ -82,10 +84,71 @@ export function ratioDifflib(a: string, b: string): number {
   return (2 * matched) / (a.length + b.length);
 }
 
+/**
+ * Coincidencia difusa SEGURA.
+ *
+ * Solo acepta diferencias que parezcan un typo dentro de una misma palabra.
+ * Nunca acepta que una palabra completa se sustituya por otra: AGUA no es
+ * SALUD, PAST TH no es PASTILLAS GRANDES, CORVINERO A no es CORVINERO C.
+ * Esas variantes se resuelven por ID o por nombre normalizado exacto.
+ *
+ * Paridad obligatoria con backend/app/services/fuzzy_matching.py.
+ */
+export function esCoincidenciaSegura(
+  a: string,
+  b: string,
+  umbralGlobal: number,
+  umbralToken = UMBRAL_TOKEN
+): boolean {
+  if (!a || !b) return false;
+  if (a === b) return true;
+  if (ratioDifflib(a, b) < umbralGlobal) return false;
+
+  const tokensA = a.replace(/[-/]/g, ' ').split(' ').filter(Boolean);
+  const tokensB = b.replace(/[-/]/g, ' ').split(' ').filter(Boolean);
+  if (tokensA.length !== tokensB.length) return false;
+
+  for (let i = 0; i < tokensA.length; i++) {
+    const ta = tokensA[i];
+    const tb = tokensB[i];
+    if (ta === tb) continue;
+    const maxLen = Math.max(ta.length, tb.length);
+    const minLen = Math.min(ta.length, tb.length);
+    // Un typo no cambia drásticamente el largo de la palabra.
+    if (minLen < maxLen * 0.6) return false;
+    if (ratioDifflib(ta, tb) < umbralToken) return false;
+  }
+  return true;
+}
+
 export function similitudFinca(a: string, b: string): number {
   const na = normalizarNombreFinca(a) || '';
   const nb = normalizarNombreFinca(b) || '';
   return ratioDifflib(na, nb);
+}
+
+function mejorCoincidenciaSegura(
+  objetivo: string,
+  candidatos: { original: string; normalizado: string }[],
+  umbral: number
+): { nombre: string; ratio: number } | null {
+  let mejor: { nombre: string; ratio: number } | null = null;
+  let empatados = 0;
+
+  for (const candidato of candidatos) {
+    if (!candidato.normalizado) continue;
+    if (!esCoincidenciaSegura(objetivo, candidato.normalizado, umbral)) continue;
+
+    const ratio = ratioDifflib(objetivo, candidato.normalizado);
+    if (!mejor || ratio > mejor.ratio + 1e-9) {
+      mejor = { nombre: candidato.original, ratio };
+      empatados = 1;
+    } else if (Math.abs(ratio - mejor.ratio) <= MARGEN_AMBIGUEDAD) {
+      empatados++;
+    }
+  }
+
+  return mejor && empatados === 1 ? mejor : null;
 }
 
 export function buscarFincaCercana(
@@ -99,19 +162,11 @@ export function buscarFincaCercana(
   for (const c of candidatos) {
     if ((normalizarNombreFinca(c) || '') === objetivo) return { nombre: c, ratio: 1 };
   }
-  let mejor: string | null = null;
-  let mejorRatio = 0;
-  for (const c of candidatos) {
-    const cn = normalizarNombreFinca(c) || '';
-    if (!cn) continue;
-    const r = ratioDifflib(objetivo, cn);
-    if (r > mejorRatio) {
-      mejorRatio = r;
-      mejor = c;
-    }
-  }
-  if (mejor && mejorRatio >= umbral) return { nombre: mejor, ratio: mejorRatio };
-  return null;
+  return mejorCoincidenciaSegura(
+    objetivo,
+    candidatos.map((c) => ({ original: c, normalizado: normalizarNombreFinca(c) || '' })),
+    umbral
+  );
 }
 
 export function buscarProductoCercano(
@@ -124,19 +179,11 @@ export function buscarProductoCercano(
   for (const c of candidatos) {
     if ((normalizarNombreProducto(c) || '') === objetivo) return { nombre: c, ratio: 1 };
   }
-  let mejor: string | null = null;
-  let mejorRatio = 0;
-  for (const c of candidatos) {
-    const cn = normalizarNombreProducto(c) || '';
-    if (!cn) continue;
-    const r = ratioDifflib(objetivo, cn);
-    if (r > mejorRatio) {
-      mejorRatio = r;
-      mejor = c;
-    }
-  }
-  if (mejor && mejorRatio >= umbral) return { nombre: mejor, ratio: mejorRatio };
-  return null;
+  return mejorCoincidenciaSegura(
+    objetivo,
+    candidatos.map((c) => ({ original: c, normalizado: normalizarNombreProducto(c) || '' })),
+    umbral
+  );
 }
 
 export function normalizarNombreProducto(valor?: string): string | undefined {
@@ -150,18 +197,26 @@ export function normalizarNombreProducto(valor?: string): string | undefined {
       normalizado.startsWith('ECU B ') ||
       normalizado.includes('ECU B'));
 
+  const tokens = normalizado.split(' ');
+  const tienePastillas = /\bPASTILLAS?\b/.test(normalizado);
+  if (tienePastillas) {
+    // Las facturas pueden omitir el prefijo ECU-BACILLUS y escribir solo
+    // "PASTILLAS TH" / "PASTILLAS GRANDES". La variante manda.
+    if (tokens.includes('TH')) {
+      return 'PAST TH';
+    }
+    if (tokens.includes('ALIMENTADOR') || tokens.includes('ALIMENTACION') || tokens.includes('ALIM')) {
+      return 'PAST ALIM';
+    }
+    if (/\bGRANDES?\b/.test(normalizado)) {
+      return 'ECU BACILLUS SUELO PASTILLA';
+    }
+  }
+
   if (esEcuBacillus) {
-    // Las facturas escriben PASTILLAS en plural: sin la S opcional, C1TH y
-    // C1PA caían al fallback SUELO, que es otro producto con otra tarifa.
-    if (/\bPASTILLAS?\b/.test(normalizado)) {
-      if (/\bTH\b/.test(normalizado)) {
-        return 'PAST TH';
-      }
-      if (/\b(ALIMENTADOR|ALIMENTACION|ALIM)\b/.test(normalizado)) {
-        return 'PAST ALIM';
-      }
-      // "PASTILLAS GRANDES" y "SUELO PASTILLA" son el mismo producto: cada
-      // cliente lo tiene cargado con un nombre distinto en su sistema.
+    if (tienePastillas) {
+      // "ECU-BACILLUS PASTILLAS" sin variante: el catálogo lo llama
+      // PASTILLAS GRANDES.
       return 'ECU BACILLUS SUELO PASTILLA';
     }
     if (normalizado.includes('ALIMENTACION') || normalizado.includes('ALIM')) {
@@ -182,7 +237,7 @@ export function normalizarNombreProducto(valor?: string): string | undefined {
   if (['PAST TH', 'PAST ALIM'].includes(normalizado)) {
     return normalizado;
   }
-  if (normalizado === 'PAST GRAN') {
+  if (normalizado === 'PAST GRAN' || normalizado === 'PAST GRANDES') {
     return 'ECU BACILLUS SUELO PASTILLA';
   }
   if (normalizado === 'AGUA' || normalizado === 'ECU BACILLUS AGUA') {

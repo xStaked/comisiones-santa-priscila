@@ -16,6 +16,21 @@ def test_normaliza_suelo_polvo_hacia_ecu_bacillus_suelo():
     assert normalizar_nombre_producto("ECU-BACILLUS SUELO POLVO") == "ECU-BACILLUS SUELO"
 
 
+def test_normaliza_pastillas_grandes_th_y_alimentador_sin_prefijo():
+    # Los PDFs a veces omiten "ECU-BACILLUS"; la variante debe mandar.
+    assert normalizar_nombre_producto("PASTILLAS GRANDES") == "ECU BACILLUS SUELO PASTILLA"
+    assert normalizar_nombre_producto("PASTILLAS TH") == "PAST TH"
+    assert normalizar_nombre_producto("PASTILLAS ALIMENTADOR") == "PAST ALIM"
+
+
+def test_normaliza_pastillas_con_prefijo_ecu():
+    assert (
+        normalizar_nombre_producto("ECU-BACILLUS PASTILLAS GRANDES")
+        == "ECU BACILLUS SUELO PASTILLA"
+    )
+    assert normalizar_nombre_producto("ECU-BACILLUS SUELO PASTILLA TH") == "PAST TH"
+
+
 def test_normalizar_razon_social_ignora_sufijos_societarios():
     from app.services.catalog_normalization import normalizar_razon_social
 

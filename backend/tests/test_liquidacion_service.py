@@ -1101,3 +1101,54 @@ def test_vigencia_se_mide_por_fecha_de_pago_no_de_factura(db_session):
     assert _buscar_tarifa_especifica(db_session, item_pagado_tarde, comisionista.id) is None
     assert _buscar_tarifa_especifica(db_session, item_pagado_a_tiempo, comisionista.id) is not None
     assert _buscar_tarifa_especifica(db_session, item_sin_pagar, comisionista.id) is not None
+
+
+def test_no_confunde_agua_con_salud_en_producto_legado(db_session):
+    cliente = Cliente(nombre="Santa Priscila", tipo="grupo")
+    comisionista = Comisionista(nombre="ARROYO BORIS")
+    agua = Producto(nombre="ECU-BACILLUS AGUA", unidad_comision="kg")
+    salud = Producto(nombre="ECU-BACILLUS SALUD", unidad_comision="kg")
+    db_session.add_all([cliente, comisionista, agua, salud])
+    db_session.flush()
+
+    finca = Finca(nombre="AFRICA", cliente_id=cliente.id)
+    db_session.add(finca)
+    db_session.flush()
+
+    tarifa_agua = TarifaClienteProducto(
+        comisionista_id=comisionista.id,
+        cliente_id=cliente.id,
+        producto_id=agua.id,
+        finca_id=finca.id,
+        tipo=TipoTarifa.fijo_kg,
+        valor=Decimal("0.50"),
+    )
+    tarifa_salud = TarifaClienteProducto(
+        comisionista_id=comisionista.id,
+        cliente_id=cliente.id,
+        producto_id=salud.id,
+        finca_id=finca.id,
+        tipo=TipoTarifa.fijo_kg,
+        valor=Decimal("1.00"),
+    )
+    # Factura legada: sin producto_id/finca_id. "AGU" es typo de AGUA; no
+    # debe caer en SALUD, que comparte casi todo el nombre.
+    orden_item = OrdenItem(
+        fecha=date.today(),
+        numero_orden="AGUA-SALUD-001",
+        finca="AFRICA",
+        producto="ECU BACILLUS AGU",
+        cantidad=Decimal("10"),
+        unidad="kg",
+        precio_unitario=Decimal("48"),
+        total=Decimal("480"),
+        cliente_id=cliente.id,
+    )
+    db_session.add_all([tarifa_agua, tarifa_salud, orden_item])
+    db_session.commit()
+
+    encontrada = _buscar_tarifa_especifica(db_session, orden_item, comisionista.id)
+
+    assert encontrada is not None
+    assert encontrada.id == tarifa_agua.id
+    assert encontrada.valor == Decimal("0.50")

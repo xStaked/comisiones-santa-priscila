@@ -11,7 +11,7 @@ import {
   normalizarNombreFinca,
   normalizarNombreProducto,
   normalizarRazonSocial,
-  ratioDifflib,
+  esCoincidenciaSegura,
   UMBRAL_FINCA,
   UMBRAL_PRODUCTO,
 } from './normalization';
@@ -24,6 +24,15 @@ const KG_POR_SACO = 25;
 const KG_POR_CANECA = 20;
 
 const ENVASES = ['tacho', 'saco', 'caneca'];
+
+/**
+ * jspdf-autotable agrega `lastAutoTable` al documento, pero sus tipos no
+ * siempre lo declaran. Evitamos `any` con una intersección mínima.
+ */
+function finalYDeTabla(doc: jsPDF, fallback: number): number {
+  const last = (doc as jsPDF & { lastAutoTable?: { finalY?: number } }).lastAutoTable;
+  return last?.finalY ?? fallback;
+}
 
 function esEnvase(unidad: string): boolean {
   return ENVASES.some((envase) => unidad.includes(envase));
@@ -180,33 +189,42 @@ export function encontrarTarifaEspecifica(
   const nombreFincaItem = item.fincaRel?.nombre || (item.finca !== '-' ? item.finca : item.sector);
   const proveedorOrden = normalizarTexto(item.proveedor || '');
 
+  // Si ambos lados tienen ID, el ID manda. Antes, cuando los IDs no
+  // coincidían se caía a nombre/difuso, y un ítem de AGUA podía terminar con
+  // la tarifa de SALUD (comparten el prefijo "ECU-BACILLUS") o uno de
+  // CORVINERO A con la tarifa de CORVINERO C. El backend resuelve por
+  // producto_id/finca_id exactos; esto mantiene la paridad.
   const coincideCliente = (tarifa: TarifaClienteProducto) => {
-    if (tarifa.clienteId && item.clienteId && tarifa.clienteId === item.clienteId) return true;
+    if (tarifa.clienteId && item.clienteId) return tarifa.clienteId === item.clienteId;
     const nt = normalizarTexto(nombreRelacion(tarifa.cliente));
     const ni = normalizarTexto(nombreClienteItem);
     return !!nt && !!ni && nt === ni;
   };
 
   const coincideProducto = (tarifa: TarifaClienteProducto) => {
-    // Solo coincidir por ID si ambos están definidos; de lo contrario usar matching por nombre
-    if (tarifa.productoId && item.productoId && tarifa.productoId === item.productoId) return true;
+    // Si ambos tienen ID, solo cuenta el ID; no se cae a nombre/difuso.
+    if (tarifa.productoId && item.productoId) return tarifa.productoId === item.productoId;
     const nt = normalizarNombreProducto(nombreRelacion(tarifa.producto));
     const ni = normalizarNombreProducto(item.productoRel?.nombre || item.producto);
-    if (!!nt && !!ni && nt === ni) return true;
-    // Fallback difuso para typos en facturas ya emitidas (ej. "ECU BACILUS" → "ECU BACILLUS")
-    if (!!nt && !!ni && ratioDifflib(nt, ni) >= UMBRAL_PRODUCTO) return true;
-    return false;
+    if (!nt || !ni) return false;
+    if (nt === ni) return true;
+    // Fallback difuso solo cuando falta un ID (facturas legacy). La
+    // comparación segura no acepta cambios de variante (AGUA ≠ SALUD,
+    // PAST TH ≠ PASTILLAS GRANDES, CALCIUM ≠ CALCINIT).
+    return esCoincidenciaSegura(nt, ni, UMBRAL_PRODUCTO);
   };
 
   const coincideFinca = (tarifa: TarifaClienteProducto) => {
     if (!tarifa.fincaId) return true; // tarifa sin finca aplica a cualquier finca
-    if (tarifa.fincaId && item.fincaId && tarifa.fincaId === item.fincaId) return true;
+    // Si el ítem trae finca_id, el ID manda: CORVINERO A no es CORVINERO C.
+    if (item.fincaId) return tarifa.fincaId === item.fincaId;
     const nt = normalizarNombreFinca(nombreRelacion(tarifa.finca));
     const ni = normalizarNombreFinca(nombreFincaItem);
-    if (!!nt && !!ni && nt === ni) return true;
-    // Fallback difuso para typos de sector (ej. "CALIFRONIA" → "CALIFORNIA", "califromia" → "california")
-    if (!!nt && !!ni && ratioDifflib(nt, ni) >= UMBRAL_FINCA) return true;
-    return false;
+    if (!nt || !ni) return false;
+    if (nt === ni) return true;
+    // Fallback difuso solo para typos dentro de una palabra. No confunde
+    // fincas hermanas (CORVINERO A/B/C, CALIFORNIA A/B, TAURA A-D).
+    return esCoincidenciaSegura(nt, ni, UMBRAL_FINCA);
   };
 
   const tarifaAplicaParaProveedor = (tarifa: TarifaClienteProducto) => {
@@ -530,7 +548,7 @@ export function exportarPDF(
         margin: { left: margin, right: margin },
       });
 
-      yPos = (doc as any).lastAutoTable.finalY + 12;
+      yPos = finalYDeTabla(doc, yPos) + 12;
     });
   });
 
@@ -1644,7 +1662,7 @@ export async function exportarReportePDF(
       bodyStyles: { fontSize: 8 },
       margin: { left: margin, right: margin },
     });
-    yPos = (doc as any).lastAutoTable.finalY + 8;
+    yPos = finalYDeTabla(doc, yPos) + 8;
   }
 
   // Tabla por comisionista
@@ -1670,7 +1688,7 @@ export async function exportarReportePDF(
       bodyStyles: { fontSize: 8 },
       margin: { left: margin, right: margin },
     });
-    yPos = (doc as any).lastAutoTable.finalY + 8;
+    yPos = finalYDeTabla(doc, yPos) + 8;
   }
 
   // Tabla por producto

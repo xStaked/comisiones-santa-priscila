@@ -25,6 +25,8 @@ from app.services.catalog_normalization import (
 UMBRAL_FINCA = 0.80
 UMBRAL_PRODUCTO = 0.85  # productos con familias críticas, más estricto
 UMBRAL_CLIENTE = 0.85
+UMBRAL_TOKEN = 0.85
+MARGEN_AMBIGUEDAD = 0.02
 
 
 def ratio(a: str, b: str) -> float:
@@ -34,28 +36,83 @@ def ratio(a: str, b: str) -> float:
     return difflib.SequenceMatcher(None, a, b).ratio()
 
 
+def _tokens(valor: str) -> list[str]:
+    return [token for token in valor.replace("-", " ").replace("/", " ").split() if token]
+
+
+def es_coincidencia_segura(
+    a: str,
+    b: str,
+    umbral: float,
+    umbral_token: float = UMBRAL_TOKEN,
+) -> bool:
+    """Coincidencia difusa SEGURA.
+
+    Solo acepta diferencias que parezcan un typo dentro de una misma palabra.
+    Nunca acepta que una palabra completa se sustituya por otra: AGUA no es
+    SALUD, PAST TH no es PASTILLAS GRANDES, CORVINERO A no es CORVINERO C.
+    Esas variantes se resuelven por ID o por nombre normalizado exacto.
+
+    Paridad obligatoria con src/lib/normalization.ts (esCoincidenciaSegura).
+    """
+    if not a or not b:
+        return False
+    if a == b:
+        return True
+    if ratio(a, b) < umbral:
+        return False
+
+    tokens_a = _tokens(a)
+    tokens_b = _tokens(b)
+    if len(tokens_a) != len(tokens_b):
+        return False
+
+    for ta, tb in zip(tokens_a, tokens_b):
+        if ta == tb:
+            continue
+        max_len = max(len(ta), len(tb))
+        min_len = min(len(ta), len(tb))
+        # Un typo no cambia drásticamente el largo de la palabra.
+        if min_len < max_len * 0.6:
+            return False
+        if ratio(ta, tb) < umbral_token:
+            return False
+    return True
+
+
 def _mejor_coincidencia(
     objetivo_normalizado: str,
     candidatos: dict[str, object],
     umbral: float,
 ) -> tuple[object | None, float, str | None]:
-    """Busca el candidato con mayor ratio >= umbral.
+    """Busca el candidato seguro con mayor ratio.
 
-    candidatos: dict {nombre_normalizado: objeto_original}
-    Retorna (objeto, ratio, nombre_normalizado)
+    Un candidato solo entra si ``es_coincidencia_segura`` lo acepta. Si hay
+    dos candidatos seguros prácticamente empatados, devuelve None: es mejor
+    no asignar tarifa que asignar la variante equivocada.
     """
-    mejor = None
-    mejor_ratio = 0.0
-    mejor_clave = None
+    mejor_ratio_crudo = 0.0
+    seguros: list[tuple[float, object, str]] = []
+
     for clave_norm, obj in candidatos.items():
         r = ratio(objetivo_normalizado, clave_norm)
-        if r > mejor_ratio:
-            mejor_ratio = r
-            mejor = obj
-            mejor_clave = clave_norm
-    if mejor is not None and mejor_ratio >= umbral:
-        return mejor, mejor_ratio, mejor_clave
-    return None, mejor_ratio, None
+        mejor_ratio_crudo = max(mejor_ratio_crudo, r)
+        if not es_coincidencia_segura(objetivo_normalizado, clave_norm, umbral):
+            continue
+        seguros.append((r, obj, clave_norm))
+
+    if not seguros:
+        return None, mejor_ratio_crudo, None
+
+    seguros.sort(key=lambda item: item[0], reverse=True)
+    mejor_ratio, mejor, mejor_clave = seguros[0]
+    if (
+        len(seguros) > 1
+        and seguros[0][1] is not seguros[1][1]
+        and abs(mejor_ratio - seguros[1][0]) < MARGEN_AMBIGUEDAD
+    ):
+        return None, mejor_ratio, None
+    return mejor, mejor_ratio, mejor_clave
 
 
 def buscar_finca_cercana(

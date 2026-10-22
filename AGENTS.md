@@ -39,6 +39,7 @@ docker-compose -f docker-compose.prod.yml up --build -d
 
 - **Backend tests** (`backend/tests/`): `pytest` sin PostgreSQL — conftest.py reemplaza el engine por SQLite `:memory:` con `StaticPool`. El CI instala `pytest-asyncio` pero no se usa (los fixtures son síncronos).
 - **E2E** (`e2e/`): Playwright solo contra Chromium. `webServer` en config levanta `pnpm dev` (frontend), pero el backend debe estar corriendo aparte.
+- **Matcher frontend** (`src/lib/export-utils.test.ts`): `pnpm test:matcher` — cubre AGUA/SALUD, PASTILLAS TH/GRANDES y fincas hermanas; corre en CI.
 - Ejecutar un test individual: `pytest backend/tests/test_auth.py::test_login_success -v`
 
 ## Convenciones que difieren del default
@@ -61,6 +62,13 @@ El matching de entidades (cliente, producto, finca) usa normalización de texto 
 - `backend/app/services/catalog_normalization.py` (backend)
 
 Si modificas uno, replica el cambio en el otro. Funciones clave: `normalizarTexto()`, `normalizarNombreFinca()`, `normalizarNombreProducto()`.
+
+### Matching de tarifas: IDs primero, difuso solo para typos
+
+- Si ambos lados traen ID (`clienteId`, `productoId`, `fincaId`), **el ID manda**. No se cae a nombre ni a difuso cuando los IDs difieren.
+- El fallback difuso solo aplica a datos legacy sin ID y solo acepta typos dentro de una misma palabra. **Nunca** acepta sustituir una variante completa: `AGUA ≠ SALUD`, `PAST TH ≠ PASTILLAS GRANDES`, `CALCIUM ≠ CALCINIT`, `CORVINERO A ≠ CORVINERO C`.
+- Implementación en paridad: `src/lib/normalization.ts` (`esCoincidenciaSegura`) y `backend/app/services/fuzzy_matching.py` (`es_coincidencia_segura`).
+- Regresión cubierta por `pnpm test:matcher` y `backend/tests/test_fuzzy_matching.py`.
 
 ## Retención — por periodo de vigencia
 

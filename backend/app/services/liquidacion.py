@@ -322,7 +322,11 @@ def _consultar_tarifa_especifica(
     # 4b. Fallback difuso para typos en facturas ya emitidas (CALIFRONIA → CALIFORNIA)
     if not finca_id and nombre_finca_orden:
         try:
-            from app.services.fuzzy_matching import UMBRAL_FINCA, ratio as ratio_fuzzy
+            from app.services.fuzzy_matching import (
+                UMBRAL_FINCA,
+                es_coincidencia_segura,
+                ratio as ratio_fuzzy,
+            )
 
             nombre_finca_norm = normalizar_nombre_finca(nombre_finca_orden) or ""
             if nombre_finca_norm:
@@ -345,8 +349,11 @@ def _consultar_tarifa_especifica(
                 for t in tarifas_fuzzy:
                     if not t.finca:
                         continue
-                    r = ratio_fuzzy(nombre_finca_norm, normalizar_nombre_finca(t.finca.nombre) or "")
-                    if r >= UMBRAL_FINCA and r > mejor_r and _tarifa_aplica_para_proveedor(t):
+                    norm_tarifa = normalizar_nombre_finca(t.finca.nombre) or ""
+                    if not es_coincidencia_segura(nombre_finca_norm, norm_tarifa, UMBRAL_FINCA):
+                        continue
+                    r = ratio_fuzzy(nombre_finca_norm, norm_tarifa)
+                    if r > mejor_r and _tarifa_aplica_para_proveedor(t):
                         mejor_r = r
                         mejor = t
                 if mejor:
@@ -355,8 +362,11 @@ def _consultar_tarifa_especifica(
                 for t in tarifas_fuzzy:
                     if not t.finca:
                         continue
-                    r = ratio_fuzzy(nombre_finca_norm, normalizar_nombre_finca(t.finca.nombre) or "")
-                    if r >= UMBRAL_FINCA and r > mejor_r:
+                    norm_tarifa = normalizar_nombre_finca(t.finca.nombre) or ""
+                    if not es_coincidencia_segura(nombre_finca_norm, norm_tarifa, UMBRAL_FINCA):
+                        continue
+                    r = ratio_fuzzy(nombre_finca_norm, norm_tarifa)
+                    if r > mejor_r:
                         # solo wildcard (sin proveedor) — ya filtrado arriba, buscar segundo pase
                         if t.proveedor and not es_proveedor_comodin(t.proveedor):
                             continue
@@ -409,34 +419,9 @@ def _consultar_tarifa_especifica(
     if tarifa and _tarifa_aplica_para_proveedor(tarifa):
         return tarifa
 
-    # 7. Producto difuso (typo en nombre de producto)
-    if not producto_id and orden_item.producto:
-        try:
-            from app.services.fuzzy_matching import UMBRAL_PRODUCTO, ratio as ratio_prod
-
-            nombre_prod_norm = normalizar_nombre_producto(orden_item.producto) or ""
-            if nombre_prod_norm:
-                productos = catalogo_cache.productos(db)
-                # buscar producto cercano ya hace fallback difuso, reintentar con tarifa
-                for prod_cand in productos:
-                    if ratio_prod(nombre_prod_norm, normalizar_nombre_producto(prod_cand.nombre) or "") >= UMBRAL_PRODUCTO:
-                        prod_ids_alt = obtener_productos_equivalentes(db, prod_cand)
-                        tarifa_alt = (
-                            db.query(TarifaClienteProducto)
-                            .filter(
-                                TarifaClienteProducto.comisionista_id == comisionista_id,
-                                TarifaClienteProducto.cliente_id == cliente_id,
-                                TarifaClienteProducto.producto_id.in_(prod_ids_alt),
-                                TarifaClienteProducto.activo.is_(True),
-                                _vigente_en(_fecha_efectiva(orden_item)),
-                            )
-                            .order_by(TarifaClienteProducto.vigente_desde.desc().nullslast())
-                            .first()
-                        )
-                        if tarifa_alt and _tarifa_aplica_para_proveedor(tarifa_alt):
-                            return tarifa_alt
-        except Exception:
-            pass
+    # El fallback difuso por producto ya se resolvió antes (por ID o por
+    # nombre normalizado/búsqueda segura). No se repite aquí para no aceptar
+    # variantes parecidas como AGUA/SALUD.
     return None
 
 

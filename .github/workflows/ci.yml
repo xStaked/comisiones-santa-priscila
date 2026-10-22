@@ -82,6 +82,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Run matcher tests
+        run: pnpm run test:matcher
+
       - name: Build Next.js app
         run: pnpm run build
 
