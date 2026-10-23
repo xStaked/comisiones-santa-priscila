@@ -2,6 +2,7 @@ from datetime import date
 from decimal import Decimal
 from pathlib import Path
 
+import fitz
 import pytest
 
 from app.models.cliente import Cliente, Finca
@@ -178,4 +179,105 @@ def test_pdf_real_asigna_comisionistas_por_cliente_producto_y_finca(db_session):
         ("GOLFO", "ECU-BACILLUS SALUD")
     ]["comisionistas"] == [
         {"comisionistaId": str(comisionista_dos.id)},
+    ]
+
+
+def _insertar_fila_item(
+    pagina,
+    y: int,
+    codigo: str,
+    producto: str,
+    unidad: str,
+    cantidad: str,
+    precio: str,
+    total: str,
+) -> None:
+    """Coloca una fila con las X que espera el parser posicional de Santa Priscila."""
+    pagina.insert_text((75, y), codigo, fontsize=8)
+    pagina.insert_text((116, y), producto, fontsize=8)
+    pagina.insert_text((281, y), cantidad, fontsize=8)
+    pagina.insert_text((304, y), unidad, fontsize=8)
+    pagina.insert_text((372, y), precio, fontsize=8)
+    pagina.insert_text((497, y), total, fontsize=8)
+
+
+def _pdf_santa_priscila_dos_paginas() -> bytes:
+    doc = fitz.open()
+    pagina1 = doc.new_page()
+    pagina1.insert_text(
+        (72, 30), "INDUSTRIAL PESQUERA SANTA PRISCILA S.A.", fontsize=7
+    )
+    pagina1.insert_text((72, 50), "07 de agosto de 2026", fontsize=8)
+    pagina1.insert_text((75, 100), "CHANDUY", fontsize=8)
+    _insertar_fila_item(
+        pagina1,
+        120,
+        "1132",
+        "CITRIUS-011",
+        "CANECA DE 20 LITROS",
+        "15.00",
+        "110.00000",
+        "1,650.00",
+    )
+    _insertar_fila_item(
+        pagina1,
+        150,
+        "715",
+        "NITRATO DE CALCIO",
+        "SACOS 25 KG",
+        "1,700.00",
+        "26.50000",
+        "45,050.00",
+    )
+
+    pagina2 = doc.new_page()
+    pagina2.insert_text((75, 100), "GOLFO", fontsize=8)
+    _insertar_fila_item(
+        pagina2,
+        120,
+        "1133",
+        "CITRIUS-012",
+        "CANECA DE 20 LITROS",
+        "10.00",
+        "110.00000",
+        "1,100.00",
+    )
+    _insertar_fila_item(
+        pagina2,
+        150,
+        "716",
+        "NITRATO DE CALCIO",
+        "SACOS 25 KG",
+        "1,000.00",
+        "26.50000",
+        "26,500.00",
+    )
+    return doc.tobytes()
+
+
+def test_extrae_items_de_todas_las_paginas_santa_priscila():
+    """Una factura de dos hojas no debe perder los ítems de la segunda."""
+    respuesta = extraer_orden_de_pdf(
+        _pdf_santa_priscila_dos_paginas(),
+        nombre_archivo="factura_dos_paginas.pdf",
+    )
+
+    assert len(respuesta["items"]) == 4
+    assert [item["finca"] for item in respuesta["items"]] == [
+        "CHANDUY",
+        "CHANDUY",
+        "GOLFO",
+        "GOLFO",
+    ]
+    assert [item["producto"] for item in respuesta["items"]] == [
+        "CITRIUS-011",
+        "NITRATO DE CALCIO",
+        "CITRIUS-012",
+        "NITRATO DE CALCIO",
+    ]
+    assert [item["total"] for item in respuesta["items"]] == [
+        Decimal("1650.00"),
+        Decimal("45050.00"),
+        Decimal("1100.00"),
+        Decimal("26500.00"),
     ]

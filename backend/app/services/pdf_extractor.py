@@ -240,8 +240,19 @@ def extraer_orden_de_pdf(
 
     try:
         with fitz.open(stream=contenido, filetype="pdf") as doc:
-            pagina = doc[0]
-            palabras = pagina.get_text("words")
+            # Las facturas de Santa Priscila pueden repartir la tabla en varias
+            # páginas. Antes se leía solo doc[0] y se perdían los ítems de la
+            # segunda hoja. Se recorren todas las páginas y se desplaza la Y de
+            # cada una para que el agrupamiento por filas no mezcle páginas.
+            palabras: list[tuple[Any, ...]] = []
+            offset_y = 0.0
+            for pagina in doc:
+                for palabra in pagina.get_text("words"):
+                    x0, y0, x1, y1, texto, *resto = palabra
+                    palabras.append(
+                        (x0, y0 + offset_y, x1, y1 + offset_y, texto, *resto)
+                    )
+                offset_y += pagina.rect.height + 100
     except Exception:
         if usar_ia:
             return _extraer_con_ia(
@@ -303,7 +314,10 @@ def extraer_orden_de_pdf(
         "diciembre": "12",
     }
 
-    for fila in filas:
+    # `filas` viene de abajo hacia arriba; se recorre al revés para que el
+    # encabezado de la página 1 tenga prioridad sobre cualquier texto de las
+    # páginas siguientes (fechas de pie, glosas, etc.).
+    for fila in reversed(filas):
         linea = " ".join(c["text"] for c in fila["cells"])
         if not fecha and re.search(r"\d{1,2}\s+de\s+\w+\s+de\s+\d{4}", linea):
             match = re.search(r"(\d{1,2})\s+de\s+(\w+)\s+de\s+(\d{4})", linea)

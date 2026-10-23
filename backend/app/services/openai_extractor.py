@@ -71,6 +71,16 @@ PROMPT_EXTRACCION = """
 Extrae una orden de compra acuicola desde el texto o imagen proporcionada.
 Devuelve solo datos visibles en el documento. No inventes campos ausentes.
 Usa formato de fecha YYYY-MM-DD cuando sea posible.
+
+El documento puede tener VARIAS PAGINAS. Recorre todas, no solo la primera: la
+tabla de items puede continuar en la pagina 2 o siguiente. No ignores las filas
+de las paginas siguientes.
+
+Transcribe TODAS las filas de la tabla, una por una. No agrupes, no resumas y
+no elimines filas repetidas: dos filas pueden tener el mismo producto y la
+misma cantidad y aun asi ser items distintos, porque corresponden a fincas
+distintas que solo se nombran en la glosa. Si la glosa nombra N fincas con la
+misma cantidad y producto, debe haber N items en la respuesta.
 Los campos "cantidadTexto", "precioUnitarioTexto" y "totalTexto" son la
 transcripcion LITERAL del numero como aparece impreso, con sus puntos y comas y
 sin convertir nada ("22.500,00", "1,180000"). No los normalices: de ahi sale el
