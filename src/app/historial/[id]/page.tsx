@@ -27,6 +27,7 @@ import {
   Cell,
 } from 'recharts';
 import { useApp } from '@/context/AppContext';
+import { useAuth } from '@/context/AuthContext';
 import { exportarPDF, exportarExcel, getTarifaLabel, unirTarifasLabel } from '@/lib/export-utils';
 import { fetchLiquidacion } from '@/lib/api';
 import { Comisionista, OrdenItem } from '@/types';
@@ -81,11 +82,12 @@ export default function LiquidacionDetallePage() {
   const params = useParams();
   const id = params.id as string;
   const { deleteLiquidacion, clientes } = useApp();
+  const { isAuthenticated } = useAuth();
 
   const { data: rawLiquidacion } = useQuery({
     queryKey: ['liquidacion', id],
     queryFn: () => fetchLiquidacion(id),
-    enabled: !!id,
+    enabled: !!id && isAuthenticated,
   });
 
   const liquidacion = useMemo(() => {

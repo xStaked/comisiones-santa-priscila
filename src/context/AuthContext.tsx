@@ -1,6 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { api, login as apiLogin, logout as apiLogout, fetchMe } from '@/lib/api';
 
 interface User {
@@ -24,6 +25,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const queryClient = useQueryClient();
 
   const loadUser = useCallback(async () => {
     if (typeof window === 'undefined') return;
@@ -49,8 +51,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = useCallback(async (username: string, password: string) => {
     const data = await apiLogin(username, password);
+    // Fuerza datos frescos en cada inicio de sesión. Las consultas están
+    // deshabilitadas hasta que `setUser` se aplica, así que esto solo las marca
+    // como viejas y se piden en cuanto `isAuthenticated` pasa a true.
+    void queryClient.invalidateQueries();
     setUser(data.user);
-  }, []);
+  }, [queryClient]);
 
   const logout = useCallback(async () => {
     await apiLogout();

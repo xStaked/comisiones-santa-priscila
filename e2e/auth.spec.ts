@@ -35,4 +35,32 @@ test.describe('Autenticación', () => {
     await page.waitForURL('/login');
     await expect(page.locator('#username')).toBeVisible();
   });
+
+  test('no consulta endpoints protegidos antes de iniciar sesión', async ({ page }) => {
+    const llamadas: string[] = [];
+    page.on('request', (request) => {
+      if (request.url().includes('/api/v1/')) llamadas.push(request.url());
+    });
+
+    await page.goto('/login');
+    await page.waitForTimeout(2000);
+
+    expect(llamadas).toEqual([]);
+  });
+
+  test('carga los catálogos al primer login en un navegador nuevo', async ({ page }) => {
+    // Regresión: antes las consultas corrían en /login sin token, fallaban con
+    // 403 y no se repetían al entrar; todo quedaba en cero hasta recargar.
+    const catalogo = page.waitForResponse(
+      (response) =>
+        response.url().includes('/api/v1/comisionistas/') &&
+        response.request().method() === 'GET'
+    );
+
+    await loginViaUI(page);
+
+    const respuesta = await catalogo;
+    expect(respuesta.status()).toBe(200);
+    await expect(page.getByText('Cargando datos…')).toHaveCount(0);
+  });
 });

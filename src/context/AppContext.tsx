@@ -45,11 +45,16 @@ import {
   type ResultadoRecalculo,
 } from '@/lib/api';
 import { setPeriodosRetencion } from '@/lib/export-utils';
+import { useAuth } from '@/context/AuthContext';
 
 interface AppContextType {
   /** Primera carga de los catálogos. Hasta que termine, las pantallas no pueden
    *  distinguir "todavía no llegó" de "no hay nada". */
   cargando: boolean;
+  /** Alguna de las consultas iniciales falló. Sin esto las pantallas muestran
+   *  ceros como si no hubiera datos. */
+  errorCarga: boolean;
+  recargarDatos: () => void;
 
   comisionistas: Comisionista[];
   addComisionista: (c: Omit<Comisionista, 'id'>) => void;
@@ -133,45 +138,55 @@ function ordenItemToCreatePayload(item: OrdenItem) {
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const queryClient = useQueryClient();
+  const { isAuthenticated } = useAuth();
 
-  // Queries
+  // Queries. `enabled` es obligatorio: sin sesión no hay token y el backend
+  // responde 403. Si se dejan correr en /login, React Query agota sus reintentos
+  // y las deja en error; al entrar después nadie las vuelve a pedir y todas las
+  // pantallas quedan en cero hasta recargar el navegador.
   const comisionistasQuery = useQuery({
     queryKey: ['comisionistas'],
     queryFn: fetchComisionistas,
+    enabled: isAuthenticated,
   });
 
   const ordenesQuery = useQuery({
     queryKey: ['ordenes'],
     queryFn: () => fetchOrdenes(),
+    enabled: isAuthenticated,
   });
 
   const liquidacionesQuery = useQuery({
     queryKey: ['liquidaciones'],
     queryFn: fetchLiquidaciones,
+    enabled: isAuthenticated,
   });
 
   const clientesQuery = useQuery({
     queryKey: ['clientes'],
     queryFn: fetchClientes,
+    enabled: isAuthenticated,
   });
 
   const productosQuery = useQuery({
     queryKey: ['productos'],
     queryFn: fetchProductos,
+    enabled: isAuthenticated,
   });
 
   const tarifasClienteProductoQuery = useQuery({
     queryKey: ['tarifas-cliente-producto'],
     queryFn: () => fetchTarifasClienteProducto(),
+    enabled: isAuthenticated,
   });
 
   const retencionesQuery = useQuery({
     queryKey: ['retenciones'],
     queryFn: fetchRetenciones,
+    enabled: isAuthenticated,
   });
 
-  // isLoading (no isFetching): un refetch de fondo no debe tapar la pantalla.
-  const cargando = [
+  const consultas = [
     comisionistasQuery,
     ordenesQuery,
     liquidacionesQuery,
@@ -179,7 +194,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     productosQuery,
     tarifasClienteProductoQuery,
     retencionesQuery,
-  ].some(q => q.isLoading);
+  ];
+
+  // isLoading (no isFetching): un refetch de fondo no debe tapar la pantalla.
+  const cargando = consultas.some(q => q.isLoading);
+  const errorCarga = consultas.some(q => q.isError);
+
+  const recargarDatos = useCallback(() => {
+    void queryClient.refetchQueries({ type: 'active' });
+  }, [queryClient]);
 
   const comisionistas: Comisionista[] = comisionistasQuery.data ?? [];
   const ordenItems: OrdenItem[] = ordenesQuery.data ?? [];
@@ -887,6 +910,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         updateEstadoOrden,
         updateEstadoOrdenesMasivo,
         cargando,
+        errorCarga,
+        recargarDatos,
         deleteOrdenItem,
         deleteOrdenItems,
         clearOrdenItems,

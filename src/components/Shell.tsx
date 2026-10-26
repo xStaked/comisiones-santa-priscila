@@ -8,7 +8,8 @@ import { AuthGuard } from './AuthGuard';
 import { gruposNav, esActiva } from './nav';
 import { useAuth } from '@/context/AuthContext';
 import { useApp } from '@/context/AppContext';
-import { Loader2 } from 'lucide-react';
+import { AlertTriangle, Loader2 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { GlobalMutationBar } from './GlobalMutationBar';
 
 function Sidebar() {
@@ -108,14 +109,35 @@ function Sidebar() {
  *  ponytail: espera a las 7 queries juntas. Si alguna se vuelve lenta (ordenes
  *  cuando crezca), conviene un loader por pantalla en vez de este global. */
 function Contenido({ children }: { children: React.ReactNode }) {
-  const { cargando } = useApp();
-  if (!cargando) return <>{children}</>;
-  return (
-    <div className="flex min-h-[320px] flex-col items-center justify-center gap-3 text-[#98A2B3]">
-      <Loader2 className="size-7 animate-spin" />
-      <span className="text-[13px]">Cargando datos…</span>
-    </div>
-  );
+  const { cargando, errorCarga, recargarDatos } = useApp();
+
+  if (cargando) {
+    return (
+      <div className="flex min-h-[320px] flex-col items-center justify-center gap-3 text-[#98A2B3]">
+        <Loader2 className="size-7 animate-spin" />
+        <span className="text-[13px]">Cargando datos…</span>
+      </div>
+    );
+  }
+
+  // Si una consulta falla, `isLoading` pasa a false y sin este aviso la pantalla
+  // mostraría ceros como si realmente no hubiera datos.
+  if (errorCarga) {
+    return (
+      <div className="flex min-h-[320px] flex-col items-center justify-center gap-3 text-[#98A2B3]">
+        <AlertTriangle className="size-7 text-[#B45309]" />
+        <span className="text-[13px] font-medium text-[#475467]">No se pudieron cargar los datos</span>
+        <span className="max-w-sm text-center text-[12px]">
+          Revisa la conexión e inténtalo de nuevo.
+        </span>
+        <Button variant="outline" size="sm" onClick={recargarDatos}>
+          Reintentar
+        </Button>
+      </div>
+    );
+  }
+
+  return <>{children}</>;
 }
 
 export function Shell({ children }: { children: React.ReactNode }) {
