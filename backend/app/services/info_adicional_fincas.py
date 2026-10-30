@@ -83,7 +83,40 @@ def _bloque_glosa(texto_pdf: str) -> str:
         if clave in {"DESCRIPCION", "INFORMACIONADICIONAL", ""}:
             continue
         partes.append(linea.strip())
-    return " ".join(partes)
+    # Se conservan los saltos de línea: el PDF corta palabras justo ahí
+    # ("GOL" / "FO") y sin esa frontera no se pueden rearmar.
+    return "\n".join(partes)
+
+
+def _palabras(bloque: str, catalogo: dict[tuple[str, ...], str]) -> list[tuple[str, int, int, str]]:
+    """Palabras del bloque con las que el documento partió en dos rearmadas.
+
+    El texto sale del PDF/celda cortado donde termina el renglón ("GOL" + "FO",
+    "CORVI" + "NERO"): sin rearmarlas el sector no se reconoce y sus cantidades
+    quedan en el tramo del sector anterior. Solo se unen si el resultado sigue
+    siendo el comienzo de una palabra del catálogo, así que "DAULAR CURAZAO"
+    (dos palabras de verdad) no se convierte en una sola.
+    """
+    conocidos = {token for clave in catalogo for token in clave}
+    palabras: list[tuple[str, int, int, str]] = []
+    for palabra in re.finditer(r"[^\W_]+", bloque):
+        clave = normalizar_nombre_finca(palabra.group())
+        if not clave:
+            continue
+        if palabras:
+            hueco = bloque[palabras[-1][2] : palabra.start()]
+            unida = palabras[-1][0] + clave
+            # Solo huecos de maquetación (salto de línea, espacio, celda que
+            # parte con guion): un punto no parte palabras, y sin este filtro
+            # "S.A." se rearmaba como "SA".
+            if re.fullmatch(r"[\s-]*", hueco) and any(
+                conocido.startswith(unida) for conocido in conocidos
+            ):
+                _, inicio, _fin, _ = palabras[-1]
+                palabras[-1] = (unida, inicio, palabra.end(), bloque[inicio : palabra.end()])
+                continue
+        palabras.append((clave, palabra.start(), palabra.end(), palabra.group()))
+    return palabras
 
 
 def _menciones(
@@ -100,11 +133,7 @@ def _menciones(
     """
     import difflib
 
-    tokens = [
-        (clave, palabra.start(), palabra.end(), palabra.group())
-        for palabra in re.finditer(r"[^\W_]+", bloque)
-        if (clave := normalizar_nombre_finca(palabra.group()))
-    ]
+    tokens = _palabras(bloque, catalogo)
     largo_max = max((len(clave) for clave in catalogo), default=0)
 
     menciones: list[tuple[str, int, int, bool, str, float]] = []

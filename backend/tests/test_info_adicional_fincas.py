@@ -517,3 +517,52 @@ def test_el_envase_de_la_glosa_no_entra_como_cantidad():
         SECTORES,
     )
     assert [i.finca for i in orden.items] == ["CHANDUY", "GOLFO"]
+
+
+def test_sector_partido_entre_renglones_no_hereda_el_anterior():
+    """El PDF corta el sector donde termina el renglón ("GOL" / "FO", "CORVI" /
+    "NERO"). Sin rearmarlo la cantidad cae en el tramo del sector anterior y
+    termina con su finca: GOLFO se le asignaba a DAULAR."""
+    orden = OrdenValidada(
+        fecha="2026-09-04",
+        numeroOrden="001-002-000002336",
+        proveedor="DINACUAMAR",
+        cliente="INDUSTRIAL PESQUERA SANTA PRISCILA S.A.",
+        semana="36",
+        items=[
+            OrdenItemValidado(
+                fecha="2026-09-04",
+                numeroOrden="001-002-000002336",
+                finca="-",
+                producto=producto,
+                cantidad=Decimal(cantidad),
+                unidad="kg",
+                precioUnitario=Decimal("1"),
+                total=Decimal(cantidad),
+            )
+            for cantidad, producto in [
+                (20, "ECU-BACILLUS (AGUA)"),
+                (110, "ECU-BACILLUS (suelo)"),
+                (80, "PASTILLAS TH"),
+                (50, "PASTILLAS TH"),
+            ]
+        ],
+    )
+    asignar_fincas_desde_info_adicional(
+        "VENTA DE PRODUCTOS SEG. F/ # 2336 O/C # 99750 - SEMANA 36\n"
+        "DAULAR: 20 KG ECUBACILLUS AGUA -\n"
+        "GOL\n"
+        "FO: 110 KG SUELO PASTILLAS TH -\n"
+        "CORVI\n"
+        "NERO ADM A: 80 KG PASTILLAS TH -\n"
+        "CORVINERO ADM B: 50 KG PASTILLAS TH.\n"
+        "Formas de pago\n",
+        orden,
+        SECTORES,
+    )
+    assert [i.finca for i in orden.items] == [
+        "DAULAR",
+        "GOLFO",
+        "CORVINERO A",
+        "CORVINERO B",
+    ]
