@@ -129,16 +129,21 @@ Flujo JWT dual-token con refresh silencioso en el interceptor de axios (`src/lib
 ## Extracción de órdenes (PDF/imagen)
 
 - Backend usa PyMuPDF (PDF) y easyocr (imágenes). Endpoints: `POST /api/v1/upload/pdf` e `POST /api/v1/upload/imagen`.
-- IA opcional con OpenAI (`AI_EXTRACTION_ENABLED`, modelo gpt-4.1-mini por defecto).
+- IA opcional con OpenAI (`AI_EXTRACTION_ENABLED`, modelo gpt-4.1-mini por defecto). Requiere `OPENAI_API_KEY`: con el flag encendido y la key vacía el backend no arranca.
+- Las OC de DINACUAMAR se extraen con el parser posicional, no con IA: la IA confunde la columna PEDIDO con la cantidad. La IA se usa para formatos no reconocidos y como respaldo si el parser no encuentra ítems.
+- El cliente (comprador) de una OC se detecta desde el encabezado comparando contra el catálogo; el selector de la vista previa sigue mandando si se eligió uno.
 - **Nunca** registres en logs el contenido de archivos subidos ni el texto extraído.
 - El frontend conserva `src/lib/pdf-extractor.ts` (legacy cliente-side), pero las subidas reales van contra backend.
 
-## Seed de datos
+## Datos y migraciones
 
-- `POST /api/v1/admin/seed-real` (superusuario): limpia tablas y carga catálogos + tarifas desde `Copia de COMISIONES GENERAL.xlsx`.
-- `POST /api/v1/admin/seed-demo`: datos de prueba.
-- El archivo Excel es fuente de datos real; no mover ni renombrar sin actualizar `backend/app/commands/seed_tarifas_excel.py`.
-- Ojo: `seedDemo()` en `src/lib/api.ts` llama a `/admin/seed-real`, no a seed-demo.
+- **La configuración (catálogos + tarifas) vive en migraciones de Alembic**, no en seeds ni Excel. `alembic upgrade head` (lo corre `entrypoint.sh`) la aplica sin borrar órdenes ni liquidaciones.
+- Las 3 matrices vigentes están congeladas en `backend/alembic/versions/a7b8c9d0e1f2_datos_matrices_vigentes.py` y los PDFs originales quedan en `backend/matrices/` como respaldo.
+- Actualizar tarifas = **una migración nueva** con los cambios (como `retenciones`). No reseed destructivo.
+- En el monto fijo el producto define la unidad: `CALCINIT` y `NATUXTRACT` van como `fijo_unidad`; kg y litros como `fijo_kg`.
+- La migración desactiva las tarifas activas de esos clientes que ya no figuran en las matrices; CASTRO queda cerrado hasta 31/07/2026 y NARANJO JUNIOR mantiene el umbral de 1.000 kg.
+- `python -m app.commands.seed_demo` sigue existiendo solo para datos de demostración.
+- **Deuda conocida:** la cadena de migraciones no puede crear una base desde cero (la base original se creó con `metadata.create_all` y quedó estampada; faltan tablas base como `liquidacion_items` y los enums se crearon a mano). En bases existentes `alembic upgrade head` funciona; para instalaciones nuevas hay que hacer un squash/baseline antes.
 
 ## Agregar un nuevo campo
 
@@ -158,7 +163,7 @@ Registrados en `backend/app/main.py` con prefijo `/api/v1/`:
 - `pnpm build` hace type-checking (no existe `pnpm typecheck` separado).
 - Backend tests corren con SQLite — no necesitas PostgreSQL para tests unitarios.
 - E2E: `pnpm test:e2e` levanta frontend automáticamente pero el backend debe correr aparte.
-- Próximo paso después de `docker-compose up`: crear superusuario y hacer seed.
+- Próximo paso después de `docker-compose up`: crear superusuario (`python -m app.commands.create_superuser`). La configuración se carga sola con `alembic upgrade head`.
 - No modificar `backend/app/services/pdf_extractor.py` sin entender su impacto en órdenes reales.
 - Componentes en `src/components/ui/` son parte de shadcn/ui con primitivas `@base-ui/react`; no reescribir sin revisar su estructura.
 - Agregar dependencia Python → actualizar `backend/requirements.txt`.

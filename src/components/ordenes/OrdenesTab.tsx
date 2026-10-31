@@ -1082,17 +1082,24 @@ export function OrdenesTab() {
       setUploadType(isPdf ? 'pdf' : 'imagen');
       try {
         const result = isPdf ? await uploadPDF(file, pdfClienteId || undefined) : await uploadImage(file, pdfClienteId || undefined);
+        const itemsExtraidos = result.items as OrdenItemExtraido[];
         setPdfPreviews(prev => [...prev, {
           fileName: file.name,
           fecha: result.fecha,
           numeroOrden: result.numeroOrden,
           proveedor: result.proveedor,
           semana: result.semana,
-          items: (result.items as OrdenItemExtraido[]).map((item, idx) => ({
+          items: itemsExtraidos.map((item, idx) => ({
             ...item,
             id: item.id || `preview-${file.name}-${idx}`,
           })),
         }]);
+        // Avisar al subir, no recién al confirmar: sector sin registrar o
+        // tarifa faltante se ve en la fila, pero el toast lo hace notorio.
+        const bloqueados = itemsExtraidos.filter(item => (item.problemas?.length ?? 0) > 0);
+        if (bloqueados.length > 0) {
+          toast.warning(`${file.name}: ${bloqueados.length} ítem(s) no se podrán confirmar. ${bloqueados[0].problemas?.[0] ?? ''}`);
+        }
         okCount++;
         totalItems += result.items.length;
       } catch (err) {

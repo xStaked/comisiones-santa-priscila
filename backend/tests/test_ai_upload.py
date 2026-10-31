@@ -482,3 +482,44 @@ def test_factura_2081_de_punta_a_punta(monkeypatch, db_session):
     assert item["fincaId"] == str(golfo.id)
     assert item["comisionistas"] == [{"comisionistaId": str(comisionista.id)}]
     assert item["problemas"] == []
+
+
+def _pdf_oc_dinacuamar() -> bytes:
+    return (Path(__file__).resolve().parents[2] / "orden.pdf").read_bytes()
+
+
+def test_oc_dinacuamar_no_usa_ia_aunque_este_habilitada(monkeypatch):
+    # La IA lee la columna PEDIDO como cantidad y multiplica el total: para este
+    # layout el parser posicional es el correcto.
+    def no_llamar_a_la_ia():
+        raise AssertionError("La IA no debe extraer OC de DINACUAMAR")
+
+    monkeypatch.setattr("app.services.pdf_extractor.settings.AI_EXTRACTION_ENABLED", True)
+    monkeypatch.setattr(
+        "app.services.pdf_extractor.obtener_extractor_configurado",
+        no_llamar_a_la_ia,
+    )
+
+    resultado = extraer_orden_de_pdf(_pdf_oc_dinacuamar(), nombre_archivo="orden.pdf")
+
+    assert resultado["numeroOrden"] == "93489"
+    assert resultado["items"][0]["cantidad"] == Decimal("100.00")
+    assert resultado["items"][0]["unidad"] == "canecas"
+
+
+def test_oc_dinacuamar_detecta_el_cliente_del_encabezado(db_session):
+    cliente = Cliente(nombre="Santa Priscila", tipo="grupo")
+    db_session.add(cliente)
+    db_session.add(Finca(nombre="TAURA D", cliente=cliente))
+    db_session.commit()
+
+    resultado = extraer_orden_de_pdf(
+        _pdf_oc_dinacuamar(), nombre_archivo="orden.pdf", db=db_session
+    )
+
+    assert all(item["clienteId"] == str(cliente.id) for item in resultado["items"])
+    assert not any(
+        "identificar al cliente" in problema
+        for item in resultado["items"]
+        for problema in item["problemas"]
+    )

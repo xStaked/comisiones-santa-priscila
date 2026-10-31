@@ -489,7 +489,3 @@ export async function deleteGrupo(id: string) {
   await api.delete(`/api/v1/grupos/${id}`);
 }
 
-// Admin
-export async function seedDemo() {
-  await api.post('/api/v1/admin/seed-real');
-}

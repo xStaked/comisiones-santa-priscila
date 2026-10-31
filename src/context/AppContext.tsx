@@ -24,7 +24,6 @@ import {
   fetchLiquidaciones,
   createLiquidacion,
   deleteLiquidacion as apiDeleteLiquidacion,
-  seedDemo,
   fetchClientes,
   createCliente,
   updateCliente as apiUpdateCliente,
@@ -78,7 +77,6 @@ interface AppContextType {
   liquidaciones: Liquidacion[];
   saveLiquidacion: (nombre: string, mes: string, ordenItemIds?: string[], comisionistaIds?: string[]) => Promise<void>;
   deleteLiquidacion: (id: string) => void;
-  resetDemoData: () => void;
 
   clientes: Cliente[];
   addCliente: (c: Omit<Cliente, 'id' | 'createdAt'>) => Promise<void>;
@@ -109,7 +107,6 @@ const TOAST_ESTADO_ORDEN_ID = 'estado-orden';
 const TOAST_ASIGNAR_GLOBAL_ID = 'asignar-global';
 const TOAST_GUARDAR_LIQUIDACION_ID = 'guardar-liquidacion';
 const TOAST_ELIMINAR_LIQUIDACION_ID = 'eliminar-liquidacion';
-const TOAST_CARGAR_DATOS_ID = 'cargar-datos';
 const TOAST_TARIFAS_MASIVO_ID = 'tarifas-masivo';
 const TOAST_COMISIONISTA_ID = 'comisionista';
 const TOAST_CLIENTE_ID = 'cliente';
@@ -538,25 +535,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   });
 
 
-  const seedDemoMutation = useMutation({
-    mutationFn: seedDemo,
-    onMutate: () => {
-      toast.loading('Cargando datos reales…', { id: TOAST_CARGAR_DATOS_ID });
-      return queryClient.cancelQueries({ queryKey: ['ordenes'] });
-    },
-    onSuccess: () => {
-      toast.success('Datos reales cargados', { id: TOAST_CARGAR_DATOS_ID });
-    },
-    onSettled: () => {
-      queryClient.invalidateQueries();
-    },
-    onError: (err: any) => {
-      toast.error(err?.response?.data?.detail || 'Error al cargar datos reales', {
-        id: TOAST_CARGAR_DATOS_ID,
-      });
-    },
-  });
-
   // Mutations: Clientes
   const createClienteMutation = useMutation({
     mutationFn: createCliente,
@@ -829,10 +807,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   );
 
 
-  const resetDemoData = useCallback(() => {
-    seedDemoMutation.mutate();
-  }, [seedDemoMutation]);
-
   const addCliente = useCallback(
     (c: Omit<Cliente, 'id' | 'createdAt'>) => createClienteMutation.mutateAsync(c),
     [createClienteMutation]
@@ -923,7 +897,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         liquidaciones,
         saveLiquidacion,
         deleteLiquidacion,
-        resetDemoData,
         clientes,
         addCliente,
         updateCliente,

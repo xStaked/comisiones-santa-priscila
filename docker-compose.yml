@@ -21,6 +21,10 @@ services:
       ACCESS_TOKEN_EXPIRE_MINUTES: 15
       REFRESH_TOKEN_EXPIRE_DAYS: 7
       CORS_ORIGINS: http://localhost:3000
+      AI_EXTRACTION_PROVIDER: ${AI_EXTRACTION_PROVIDER:-openai}
+      AI_EXTRACTION_ENABLED: ${AI_EXTRACTION_ENABLED:-false}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_EXTRACTION_MODEL: ${OPENAI_EXTRACTION_MODEL:-gpt-4.1-mini}
     volumes:
       - ./backend:/app
     depends_on:

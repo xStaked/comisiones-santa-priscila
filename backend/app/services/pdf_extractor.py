@@ -6,7 +6,9 @@ from typing import Any
 import fitz
 
 from app.config import settings
+from app.models.cliente import Cliente
 from app.services.ai_extractor import obtener_extractor_ia
+from app.services.catalog_normalization import _normalizar_texto, normalizar_razon_social
 from app.services.catalogo_cache import nombres_de_fincas
 from app.services.info_adicional_fincas import asignar_fincas_desde_info_adicional
 from app.services.order_extraction_models import EntradaExtraccion, OrdenValidada
@@ -215,6 +217,25 @@ def _extraer_items_santa_priscila_desde_filas(
             finca_actual = texto_fila
 
     return items
+
+
+def _cliente_desde_encabezado(db, texto_pdf: str) -> str:
+    """El cliente (comprador) de una OC no viene en columna: está en el
+    encabezado. Sin resolverlo, la vista previa bloquea todos los ítems con
+    "No se pudo identificar al cliente" aunque el usuario no haya elegido uno."""
+    if db is None:
+        return ""
+    texto = f" {_normalizar_texto(texto_pdf)} "
+    coincidencias: list[tuple[int, str]] = []
+    for cliente in db.query(Cliente).all():
+        claves = [cliente.nombre] + [alias.alias for alias in cliente.alias]
+        for clave in claves:
+            normalizada = normalizar_razon_social(clave)
+            if len(normalizada) >= 4 and f" {normalizada} " in texto:
+                coincidencias.append((len(normalizada), cliente.nombre))
+    # La razón social más larga gana: un alias corto no debe pasar por encima
+    # de la empresa completa que contiene ese texto.
+    return max(coincidencias)[1] if coincidencias else ""
 
 
 def extraer_orden_de_pdf(
@@ -559,6 +580,7 @@ def extraer_orden_de_pdf(
         "fecha": date.fromisoformat(fecha),
         "numeroOrden": numero_orden or f"OC-{fecha}",
         "proveedor": proveedor or "",
+        "cliente": _cliente_desde_encabezado(db, texto_pdf),
         "semana": semana,
         "items": orden_items,
     }, cliente_id=cliente_id)
