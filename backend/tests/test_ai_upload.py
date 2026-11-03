@@ -503,7 +503,17 @@ def test_oc_dinacuamar_no_usa_ia_aunque_este_habilitada(monkeypatch):
     resultado = extraer_orden_de_pdf(_pdf_oc_dinacuamar(), nombre_archivo="orden.pdf")
 
     assert resultado["numeroOrden"] == "93489"
-    assert resultado["items"][0]["cantidad"] == Decimal("100.00")
+    # La OC va de arriba hacia abajo: CHANDUY primero y TAURA ADM D al final.
+    assert [item["finca"] for item in resultado["items"]] == [
+        "CHANDUY",
+        "GOLFO - ADMINISTRACION",
+        "GOLFO - ADMINISTRACION",
+        "PAÑAMAO",
+        "SABANA - JAMAICA",
+        "SABANA - SINGAPUR",
+        "TAURA ADM D",
+    ]
+    assert resultado["items"][0]["cantidad"] == Decimal("15.00")
     assert resultado["items"][0]["unidad"] == "canecas"
 
 

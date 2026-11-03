@@ -76,7 +76,9 @@ El documento puede tener VARIAS PAGINAS. Recorre todas, no solo la primera: la
 tabla de items puede continuar en la pagina 2 o siguiente. No ignores las filas
 de las paginas siguientes.
 
-Transcribe TODAS las filas de la tabla, una por una. No agrupes, no resumas y
+Transcribe TODAS las filas de la tabla, una por una. Devuelve los items en el
+mismo orden en que aparecen en el documento, de arriba hacia abajo: no los
+inviertas ni los reordenes. No agrupes, no resumas y
 no elimines filas repetidas: dos filas pueden tener el mismo producto y la
 misma cantidad y aun asi ser items distintos, porque corresponden a fincas
 distintas que solo se nombran en la glosa. Si la glosa nombra N fincas con la

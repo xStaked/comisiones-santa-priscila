@@ -281,3 +281,46 @@ def test_extrae_items_de_todas_las_paginas_santa_priscila():
         Decimal("1100.00"),
         Decimal("26500.00"),
     ]
+
+
+def _pdf_orden_compra_dinacuamar_dos_sectores() -> bytes:
+    """OC DINACUAMAR mínima: los sectores van arriba de sus ítems."""
+    doc = fitz.open()
+    pagina = doc.new_page()
+    pagina.insert_text((72, 30), "ORDEN DE COMPRA No. 12345", fontsize=8)
+    pagina.insert_text((72, 50), "PROVEEDOR : OCHOA RECALDE", fontsize=8)
+    pagina.insert_text((72, 70), "14 de abril de 2026", fontsize=8)
+    pagina.insert_text(
+        (72, 90), "DESCRIPCION CANTIDAD MEDIDA PREC. TOTAL", fontsize=8
+    )
+
+    pagina.insert_text((75, 110), "CHANDUY", fontsize=8)
+    pagina.insert_text((116, 130), "CITRIUS", fontsize=8)
+    pagina.insert_text((300, 130), "15.00", fontsize=8)
+    pagina.insert_text((330, 130), "CANECA", fontsize=8)
+    pagina.insert_text((420, 130), "40.00", fontsize=8)
+    pagina.insert_text((500, 130), "600.00", fontsize=8)
+
+    pagina.insert_text((75, 170), "GOLFO - ADMINISTRACION", fontsize=8)
+    pagina.insert_text((116, 190), "NITRATO DE CALCIO", fontsize=8)
+    pagina.insert_text((300, 190), "50.00", fontsize=8)
+    pagina.insert_text((330, 190), "SACOS 25 KG", fontsize=8)
+    pagina.insert_text((420, 190), "30.00", fontsize=8)
+    pagina.insert_text((500, 190), "1,500.00", fontsize=8)
+
+    pagina.insert_text((300, 260), "SUB-TOTAL", fontsize=8)
+    return doc.tobytes()
+
+
+def test_orden_compra_dinacuamar_respeta_el_orden_del_documento():
+    """La vista previa debe listar los sectores como en la OC (arriba primero),
+    no al revés: las filas internas se arman de abajo hacia arriba."""
+    respuesta = extraer_orden_de_pdf(
+        _pdf_orden_compra_dinacuamar_dos_sectores(),
+        nombre_archivo="orden_compra.pdf",
+    )
+
+    assert [(i["finca"], i["producto"]) for i in respuesta["items"]] == [
+        ("CHANDUY", "CITRIUS"),
+        ("GOLFO - ADMINISTRACION", "NITRATO DE CALCIO"),
+    ]

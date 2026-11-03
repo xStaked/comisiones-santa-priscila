@@ -433,7 +433,10 @@ def extraer_orden_de_pdf(
     fincas: list[dict[str, Any]] = []
     items_crudos: list[dict[str, Any]] = []
 
-    for fila in filas_tabla:
+    # `filas` viene de abajo hacia arriba (los ítems se ordenan por -Y para que
+    # el encabezado de la primera página gane). La vista previa debe salir en el
+    # mismo orden del documento, así que la tabla se recorre al revés.
+    for fila in reversed(filas_tabla):
         celdas = fila["cells"]
         if not celdas:
             continue
