@@ -1,12 +1,12 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { FileText, FileSpreadsheet, Save, Calculator, ChevronRight, Loader2 } from 'lucide-react';
+import { FileSpreadsheet, Save, Calculator, ChevronRight, Loader2 } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import * as XLSX from 'xlsx-js-style';
 import { useApp } from '@/context/AppContext';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
-import { exportarPDF, exportarExcel, calcularDetalleComision, getCantidadParaTarifaKg, sectorDeItem, unirTarifasLabel } from '@/lib/export-utils';
+import { exportarExcel, calcularDetalleComision, getCantidadParaTarifaKg, sectorDeItem, unirTarifasLabel } from '@/lib/export-utils';
 import { formatearFechaCarga, formatearFechaHoraCarga } from '@/lib/fechas';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -64,7 +64,8 @@ export function LiquidacionTab() {
   // exportación sale a nombre del grupo seleccionado.
   const [filterComisionistas, setFilterComisionistas] = useState<string[]>([]);
   const [filterFactura, setFilterFactura] = useState('');
-  const [filterSector, setFilterSector] = useState('');
+  // Vacío = todos los sectores.
+  const [filterSector, setFilterSector] = useState<string[]>([]);
   // Mes de PAGO de la factura, no el de emisión: una liquidación de junio puede
   // incluir facturas emitidas hace un año pero cobradas en junio.
   // La elección se recuerda entre sesiones; sin nada guardado arranca en el mes anterior.
@@ -98,10 +99,6 @@ export function LiquidacionTab() {
     () => comisionistas.filter((comisionista) => filterComisionistas.includes(comisionista.id)),
     [comisionistas, filterComisionistas]
   );
-  const nombresComisionistasFiltro = useMemo(
-    () => comisionistasFiltro.map((comisionista) => comisionista.nombre),
-    [comisionistasFiltro]
-  );
 
   // La liquidación es por persona: solo se muestran las asignaciones aún no liquidadas.
   // Un ítem puede reaparecer aquí si a otro comisionista todavía no se le ha pagado.
@@ -128,7 +125,7 @@ export function LiquidacionTab() {
   const sectoresDisponibles = useMemo(() => {
     const set = new Set<string>();
     ordenItemsPagados.forEach(i => {
-      const s = sectorDeItem(i as any);
+      const s = sectorDeItem(i);
       if (s && s !== '-' && s !== 'N/A') set.add(s);
     });
     return Array.from(set).sort((a, b) => a.localeCompare(b, 'es'));
@@ -147,7 +144,7 @@ export function LiquidacionTab() {
         const matchComisionista = filterComisionistas.length === 0 || i.comisionistas.some(a => filterComisionistas.includes(a.comisionistaId));
         const matchFactura = !filterFactura || i.numeroOrden.toLowerCase().includes(filterFactura.toLowerCase());
         const matchMes = !filterMes || mesDePago(i) === filterMes;
-        const matchSector = !filterSector || sectorDeItem(i as any) === filterSector;
+        const matchSector = filterSector.length === 0 || filterSector.includes(sectorDeItem(i));
         return matchComisionista && matchFactura && matchMes && matchSector;
       })
       // Con filtro por personas, los totales y el guardado deben cubrir solo a
@@ -237,20 +234,21 @@ export function LiquidacionTab() {
       const fa = a[0].fecha;
       const fb = b[0].fecha;
       if (fa !== fb) return fa.localeCompare(fb);
-      const sa = sectorDeItem(a[0] as any);
-      const sb = sectorDeItem(b[0] as any);
+      const sa = sectorDeItem(a[0]);
+      const sb = sectorDeItem(b[0]);
       if (sa !== sb) return sa.localeCompare(sb, 'es');
       return a[0].numeroOrden.localeCompare(b[0].numeroOrden, 'es', { numeric: true });
     });
   }, [itemsConComision]);
 
   const resumenPorComisionista = useMemo(() => {
-    const map = new Map<string, { id: string; nombre: string; tarifas: Set<string>; items: number; comision: number }>();
+    const map = new Map<string, { id: string; nombre: string; tarifas: Set<string>; items: number; cantidad: number; comision: number }>();
     selectedItemsConComision.forEach(item => {
       item.comisionesAsignadas.forEach(com => {
         const existente = map.get(com.id);
         if (existente) {
           existente.items += 1;
+          existente.cantidad += item.cantidad;
           existente.comision += com.comision;
           existente.tarifas.add(com.tarifasLabel);
         } else {
@@ -259,6 +257,7 @@ export function LiquidacionTab() {
             nombre: com.nombre,
             tarifas: new Set([com.tarifasLabel]),
             items: 1,
+            cantidad: item.cantidad,
             comision: com.comision,
           });
         }
@@ -291,15 +290,6 @@ export function LiquidacionTab() {
 
   const tituloExport = filterMes ? `Liquidacion ${filterMes}` : 'Liquidacion';
 
-  const handleExportPDF = () => {
-    if (selectedFiltered.length === 0) {
-      toast.error('No hay datos para exportar');
-      return;
-    }
-    exportarPDF(selectedFiltered, comisionistas, tituloExport, nombresComisionistasFiltro.join(' + ') || undefined, tarifasClienteProducto, undefined, kgPorComisionista);
-    toast.success('PDF generado');
-  };
-
   const handleExportExcel = () => {
     if (selectedFiltered.length === 0) {
       toast.error('No hay datos para exportar');
@@ -320,12 +310,14 @@ export function LiquidacionTab() {
         Comisionista: com.nombre,
         'Tarifa aplicada': com.tarifasLabel,
         Items: com.items,
+        Cantidad: Number(com.cantidad.toFixed(2)),
         'Comisión total': Number(com.comision.toFixed(2)),
       })),
       {
         Comisionista: 'Total Comisión',
         'Tarifa aplicada': '',
         Items: resumenPorComisionista.reduce((total, com) => total + com.items, 0),
+        Cantidad: Number(resumenPorComisionista.reduce((total, com) => total + com.cantidad, 0).toFixed(2)),
         'Comisión total': Number(totalComision.toFixed(2)),
       },
     ];
@@ -484,21 +476,19 @@ export function LiquidacionTab() {
 
         <div className="flex h-9 items-center gap-2.5 rounded-[9px] border border-[#E0E4E9] bg-white px-3">
           <span className="text-[11.5px] text-[#7A8798]">Sector</span>
-          <Select value={filterSector} onValueChange={(value) => setFilterSector(value ?? '')}>
-            <SelectTrigger className="h-7 border-0 bg-transparent px-0 text-[12.5px] font-medium text-[#0B1220] shadow-none focus-visible:ring-0">
-              <SelectValue placeholder="Todos">
-                {filterSector || 'Todos los sectores'}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="">Todos los sectores</SelectItem>
-              {sectoresDisponibles.map((s) => (
-                <SelectItem key={s} value={s}>
-                  {s}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <MultiSelect
+            options={sectoresDisponibles}
+            selected={filterSector}
+            onChange={setFilterSector}
+            placeholder="Todos los sectores"
+            resumenSeleccion={(seleccionadas) =>
+              seleccionadas.length === 1
+                ? seleccionadas[0].label
+                : `${seleccionadas.length} sectores`
+            }
+            triggerClassName="h-7 w-auto min-w-[120px] border-0 bg-transparent px-0 font-medium text-[#0B1220] shadow-none"
+            panelClassName="min-w-[240px]"
+          />
         </div>
 
         <div className="flex h-9 items-center gap-2.5 rounded-[9px] border border-[#E0E4E9] bg-white px-3 focus-within:border-primary">
@@ -513,9 +503,6 @@ export function LiquidacionTab() {
 
         <div className="flex-1" />
 
-        <BotonSecundario onClick={handleExportPDF}>
-          <FileText className="size-3.5 text-[#B91C1C]" /> PDF
-        </BotonSecundario>
         <BotonSecundario onClick={handleExportExcel}>
           <FileSpreadsheet className="size-3.5 text-primary" /> Excel
         </BotonSecundario>
