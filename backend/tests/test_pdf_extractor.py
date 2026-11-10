@@ -326,7 +326,7 @@ def test_orden_compra_dinacuamar_respeta_el_orden_del_documento():
     ]
 
 
-def _pdf_orden_compra_dinacuamar_dos_paginas() -> bytes:
+def _pdf_orden_compra_dinacuamar_dos_paginas(subtotal: str = "12,330.00") -> bytes:
     """OC DINACUAMAR de dos hojas: la segunda repite el encabezado y solo trae
     los totales (como la OC 100453)."""
     doc = fitz.open()
@@ -345,7 +345,7 @@ def _pdf_orden_compra_dinacuamar_dos_paginas() -> bytes:
     pagina.insert_text((420, 130), "685.00", fontsize=8)
     pagina.insert_text((500, 130), "12,330.00", fontsize=8)
     pagina.insert_text((300, 260), "SUB-TOTAL", fontsize=8)
-    pagina.insert_text((500, 260), "12,330.00", fontsize=8)
+    pagina.insert_text((500, 260), subtotal, fontsize=8)
 
     pagina_dos = doc.new_page()
     pagina_dos.insert_text(
@@ -369,3 +369,13 @@ def test_orden_compra_dinacuamar_no_pierde_items_con_encabezado_repetido():
     assert [(i["finca"], i["producto"], i["cantidad"]) for i in respuesta["items"]] == [
         ("AFRICA - ADMINISTRACION", "ECU-BACILLUS SUELO-PASTILLA TH", Decimal("18.00")),
     ]
+
+
+def test_orden_compra_dinacuamar_bloquea_si_no_cuadra_el_subtotal():
+    """Si el parser pierde filas, la suma de los ítems no cuadra con el
+    SUB-TOTAL impreso: la orden no se puede cargar."""
+    with pytest.raises(ValueError, match="no cuadra"):
+        extraer_orden_de_pdf(
+            _pdf_orden_compra_dinacuamar_dos_paginas(subtotal="99,999.00"),
+            nombre_archivo="orden_compra.pdf",
+        )

@@ -142,6 +142,53 @@ def _es_formato_santa_priscila(texto_pdf: str) -> bool:
     return True
 
 
+def _subtotal_documento(filas: list[dict[str, Any]]) -> Decimal | None:
+    """SUB-TOTAL impreso en el documento, sin IVA.
+
+    Es el cuadre contra la suma de los ítems extraídos: si el parser perdió
+    filas o leyó otra columna, la suma no coincide y la orden no se debe cargar.
+    """
+    subtotal = None
+    for fila in sorted(filas, key=lambda f: f["y"]):
+        texto = " ".join(c["text"] for c in fila["cells"]).upper()
+        if not (
+            "SUB-TOTAL" in texto
+            or "SUBTOTAL" in texto
+            or re.search(r"\bSUB\s+TOTAL\b", texto)
+        ):
+            continue
+        montos = [
+            c
+            for c in fila["cells"]
+            if re.match(r"^[\d,]+\.\d+$", c["text"].replace(",", ""))
+        ]
+        if montos:
+            subtotal = Decimal(
+                max(montos, key=lambda c: c["x"])["text"].replace(",", "")
+            )
+    return subtotal
+
+
+def _validar_cuadre_documento(
+    items: list[dict[str, Any]], subtotal: Decimal | None
+) -> None:
+    """Bloquea la extracción si la suma de los ítems no cuadra con el SUB-TOTAL.
+
+    Tolerancia 0,1%: absorbe redondeos del documento, pero no una fila perdida ni
+    una cantidad leída de la columna equivocada.
+    """
+    if subtotal is None or not items:
+        return
+    suma = sum((Decimal(str(item["total"])) for item in items), Decimal("0"))
+    tolerancia = max(Decimal("0.5"), subtotal * Decimal("0.001"))
+    if abs(suma - subtotal) > tolerancia:
+        raise ValueError(
+            f"La suma de los ítems (${suma:,.2f}) no cuadra con el SUB-TOTAL del "
+            f"documento (${subtotal:,.2f}). Revisá que el PDF se haya leído "
+            "completo antes de guardar."
+        )
+
+
 def _texto_en_rango(celdas: list[dict[str, Any]], x_min: int, x_max: int) -> str:
     return " ".join(c["text"] for c in celdas if x_min <= c["x"] <= x_max).strip()
 
@@ -315,6 +362,9 @@ def extraer_orden_de_pdf(
             y_actual = item["y"]
     if fila_actual:
         filas.append({"y": y_actual, "cells": sorted(fila_actual, key=lambda c: c["x"])})
+
+    # SUB-TOTAL del documento para cuadrar los ítems (None si no se imprime).
+    total_documento = _subtotal_documento(filas)
 
     # 3. Extraer encabezado
     fecha = ""
@@ -595,13 +645,17 @@ def extraer_orden_de_pdf(
     # Fallback: si el parser posicional no reconoció ningún ítem (plantilla o
     # escala inesperada) y hay IA configurada, reintentar con IA.
     if not orden_items and settings.AI_EXTRACTION_ENABLED:
-        return _extraer_con_ia(
+        respuesta = _extraer_con_ia(
             contenido,
             nombre_archivo=nombre_archivo,
             db=db,
             texto_override=texto_pdf,
             cliente_id=cliente_id,
         )
+        _validar_cuadre_documento(respuesta["items"], total_documento)
+        return respuesta
+
+    _validar_cuadre_documento(orden_items, total_documento)
 
     return _normalizar_respuesta_posicional(db, {
         "fecha": date.fromisoformat(fecha),

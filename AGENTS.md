@@ -133,6 +133,7 @@ Flujo JWT dual-token con refresh silencioso en el interceptor de axios (`src/lib
 - Backend usa PyMuPDF (PDF) y easyocr (imágenes). Endpoints: `POST /api/v1/upload/pdf` e `POST /api/v1/upload/imagen`.
 - IA opcional con OpenAI (`AI_EXTRACTION_ENABLED`, modelo gpt-4.1-mini por defecto). Requiere `OPENAI_API_KEY`: con el flag encendido y la key vacía el backend no arranca.
 - Las OC de DINACUAMAR se extraen con el parser posicional, no con IA: la IA confunde la columna PEDIDO con la cantidad. La IA se usa para formatos no reconocidos y como respaldo si el parser no encuentra ítems.
+- **Cuadre obligatorio:** la suma de los ítems extraídos debe coincidir con el `SUB-TOTAL` impreso (tolerancia 0,1%). Si no cuadra, `extraer_orden_de_pdf` lanza error y la orden no se carga; nunca se guarda un parseo parcial. Aplica también al respaldo de IA.
 - El cliente (comprador) de una OC se detecta desde el encabezado comparando contra el catálogo; el selector de la vista previa sigue mandando si se eligió uno.
 - **Nunca** registres en logs el contenido de archivos subidos ni el texto extraído.
 - El frontend conserva `src/lib/pdf-extractor.ts` (legacy cliente-side), pero las subidas reales van contra backend.
