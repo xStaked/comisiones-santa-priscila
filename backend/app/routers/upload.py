@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.models.user import User
+from app.services.extracciones import guardar_extraccion_pendiente
 from app.services.ocr_extractor import extraer_orden_de_imagen
 from app.services.pdf_extractor import extraer_orden_de_pdf
 
@@ -71,6 +72,11 @@ async def subir_pdf(
 
     try:
         resultado = extraer_orden_de_pdf(contenido, nombre_archivo=file.filename, db=db, cliente_id=str(cliente_id) if cliente_id else None)
+        entrada = resultado.pop("_entrada", None)
+        if entrada is not None:
+            guardar_extraccion_pendiente(
+                db, entrada, resultado["numeroOrden"], resultado["fecha"]
+            )
     except Exception as exc:
         mensaje = str(exc)
         if len(mensaje) > 160:

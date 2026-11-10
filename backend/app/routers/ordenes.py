@@ -18,6 +18,7 @@ from app.models.tarifa_cliente_producto import TarifaClienteProducto
 from app.schemas.orden import OrdenCreate, OrdenItemCreate, OrdenItemResponse, OrdenItemUpdate
 from app.dependencies import get_current_user
 from app.services.catalog_normalization import normalizar_razon_social
+from app.services.extracciones import vincular_extraccion
 from app.services.liquidacion import (
     _buscar_tarifa_especifica,
     _tiene_tarifas_especificas,
@@ -219,6 +220,7 @@ def crear_ordenes(
                     )
                     db.add(orden)
                     db.flush()
+                    vincular_extraccion(db, orden)
                     ordenes_por_clave[clave] = orden
                 oi = _crear_orden_item(db, item, orden.id)
                 resultados.append(oi)
@@ -243,6 +245,7 @@ def crear_ordenes(
         )
         db.add(orden)
         db.flush()
+        vincular_extraccion(db, orden)
 
         for linea in orden_data.items:
             item = OrdenItemCreate(

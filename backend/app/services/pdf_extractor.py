@@ -1,4 +1,6 @@
+import json
 import re
+import zlib
 from datetime import date
 from decimal import Decimal
 from typing import Any
@@ -14,6 +16,11 @@ from app.services.info_adicional_fincas import asignar_fincas_desde_info_adicion
 from app.services.order_extraction_models import EntradaExtraccion, OrdenValidada
 from app.services.order_extraction_normalizer import normalizar_orden_extraida
 from app.services.order_extraction_validator import validar_orden_extraida
+
+# Súbelo cuando cambie la extracción posicional. Las órdenes guardan la versión
+# con la que se generó su entrada, así que reextraer puede limitarse a las
+# anteriores (python -m app.commands.reextraer).
+PARSER_VERSION = 1
 
 
 def obtener_extractor_configurado():
@@ -285,12 +292,43 @@ def _cliente_desde_encabezado(db, texto_pdf: str) -> str:
     return max(coincidencias)[1] if coincidencias else ""
 
 
+def serializar_entrada(entrada: dict[str, Any]) -> bytes:
+    """JSON + zlib: unos 5 KB por OC en vez de los ~350 KB del PDF."""
+    return zlib.compress(
+        json.dumps(entrada, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    )
+
+
+def deserializar_entrada(blob: bytes) -> dict[str, Any]:
+    return json.loads(zlib.decompress(blob).decode("utf-8"))
+
+
+def extraer_orden_desde_entrada(
+    entrada: dict[str, Any],
+    nombre_archivo: str = "",
+    db=None,
+    cliente_id: str | None = None,
+) -> dict[str, Any]:
+    """Reejecuta el parser posicional sobre la entrada guardada, sin el PDF."""
+    return extraer_orden_de_pdf(
+        b"",
+        nombre_archivo=nombre_archivo,
+        db=db,
+        texto_override=entrada["texto"],
+        cliente_id=cliente_id,
+        _palabras=[tuple(p) for p in entrada["palabras"]],
+        _paginas=[tuple(p) for p in entrada["paginas"]],
+    )
+
+
 def extraer_orden_de_pdf(
     contenido: bytes,
     nombre_archivo: str = "",
     db=None,
     texto_override: str | None = None,
     cliente_id: str | None = None,
+    _palabras: list[tuple[Any, ...]] | None = None,
+    _paginas: list[tuple[float, float]] | None = None,
 ) -> dict[str, Any]:
     """Extrae ítems de una orden de compra en formato PDF específico de DINACUAMAR."""
     texto_pdf = texto_override if texto_override is not None else _extraer_texto_pdf(contenido)
@@ -298,6 +336,11 @@ def extraer_orden_de_pdf(
     es_santa_priscila = _es_formato_santa_priscila(texto_pdf)
 
     if usar_ia and not es_santa_priscila:
+        if _palabras is not None:
+            raise ValueError(
+                "La entrada guardada corresponde a una extracción con IA y no "
+                "se puede reejecutar"
+            )
         return _extraer_con_ia(
             contenido,
             nombre_archivo=nombre_archivo,
@@ -306,33 +349,54 @@ def extraer_orden_de_pdf(
             cliente_id=cliente_id,
         )
 
-    try:
-        with fitz.open(stream=contenido, filetype="pdf") as doc:
-            # Las facturas de Santa Priscila pueden repartir la tabla en varias
-            # páginas. Antes se leía solo doc[0] y se perdían los ítems de la
-            # segunda hoja. Se recorren todas las páginas y se desplaza la Y de
-            # cada una para que el agrupamiento por filas no mezcle páginas.
-            palabras: list[tuple[Any, ...]] = []
-            paginas: list[tuple[float, float]] = []
-            offset_y = 0.0
-            for pagina in doc:
-                for palabra in pagina.get_text("words"):
-                    x0, y0, x1, y1, texto, *resto = palabra
-                    palabras.append(
-                        (x0, y0 + offset_y, x1, y1 + offset_y, texto, *resto)
-                    )
-                paginas.append((offset_y, offset_y + pagina.rect.height))
-                offset_y += pagina.rect.height + 100
-    except Exception:
-        if usar_ia:
-            return _extraer_con_ia(
-                contenido,
-                nombre_archivo=nombre_archivo,
-                db=db,
-                texto_override=texto_pdf,
-                cliente_id=cliente_id,
-            )
-        raise
+    if _palabras is not None and _paginas is not None:
+        # Reejecución desde una entrada guardada: no hace falta el PDF.
+        palabras = _palabras
+        paginas = _paginas
+    else:
+        try:
+            with fitz.open(stream=contenido, filetype="pdf") as doc:
+                # Las facturas de Santa Priscila pueden repartir la tabla en varias
+                # páginas. Antes se leía solo doc[0] y se perdían los ítems de la
+                # segunda hoja. Se recorren todas las páginas y se desplaza la Y de
+                # cada una para que el agrupamiento por filas no mezcle páginas.
+                palabras = []
+                paginas = []
+                offset_y = 0.0
+                for pagina in doc:
+                    for palabra in pagina.get_text("words"):
+                        x0, y0, x1, y1, texto, *resto = palabra
+                        palabras.append(
+                            (x0, y0 + offset_y, x1, y1 + offset_y, texto, *resto)
+                        )
+                    paginas.append((offset_y, offset_y + pagina.rect.height))
+                    offset_y += pagina.rect.height + 100
+        except Exception:
+            if usar_ia:
+                return _extraer_con_ia(
+                    contenido,
+                    nombre_archivo=nombre_archivo,
+                    db=db,
+                    texto_override=texto_pdf,
+                    cliente_id=cliente_id,
+                )
+            raise
+
+    # Entrada reproducible para reejecutar el parser después de un fix. No se
+    # guarda al reejecutar: solo la extracción original la persiste.
+    entrada = None
+    if _palabras is None:
+        # Un decimal alcanza: el parser redondea X e Y al agrupar filas. Así la
+        # entrada comprimida baja a ~5 KB sin cambiar la extracción.
+        entrada = {
+            "version": PARSER_VERSION,
+            "texto": texto_pdf,
+            "paginas": [[round(v, 1) for v in p] for p in paginas],
+            "palabras": [
+                [round(x0, 1), round(y0, 1), round(x1, 1), round(y1, 1), texto]
+                for x0, y0, x1, y1, texto, *_ in palabras
+            ],
+        }
 
     # 1. Extraer palabras con posiciones (x, y)
     items: list[dict[str, Any]] = []
@@ -439,15 +503,23 @@ def extraer_orden_de_pdf(
                     }
                 )
 
-            return _normalizar_respuesta_posicional(db, {
+            respuesta = _normalizar_respuesta_posicional(db, {
                 "fecha": date.fromisoformat(fecha),
                 "numeroOrden": numero_orden or f"OC-{fecha}",
                 "proveedor": proveedor or "",
                 "semana": semana,
                 "items": orden_items,
             }, cliente_id=cliente_id)
+            if entrada is not None:
+                respuesta["_entrada"] = entrada
+            return respuesta
 
     if usar_ia:
+        if _palabras is not None:
+            raise ValueError(
+                "La entrada guardada corresponde a una extracción con IA y no "
+                "se puede reejecutar"
+            )
         return _extraer_con_ia(
             contenido,
             nombre_archivo=nombre_archivo,
@@ -644,7 +716,11 @@ def extraer_orden_de_pdf(
 
     # Fallback: si el parser posicional no reconoció ningún ítem (plantilla o
     # escala inesperada) y hay IA configurada, reintentar con IA.
-    if not orden_items and settings.AI_EXTRACTION_ENABLED:
+    if (
+        not orden_items
+        and settings.AI_EXTRACTION_ENABLED
+        and _palabras is None
+    ):
         respuesta = _extraer_con_ia(
             contenido,
             nombre_archivo=nombre_archivo,
@@ -657,7 +733,7 @@ def extraer_orden_de_pdf(
 
     _validar_cuadre_documento(orden_items, total_documento)
 
-    return _normalizar_respuesta_posicional(db, {
+    respuesta = _normalizar_respuesta_posicional(db, {
         "fecha": date.fromisoformat(fecha),
         "numeroOrden": numero_orden or f"OC-{fecha}",
         "proveedor": proveedor or "",
@@ -665,6 +741,9 @@ def extraer_orden_de_pdf(
         "semana": semana,
         "items": orden_items,
     }, cliente_id=cliente_id)
+    if entrada is not None:
+        respuesta["_entrada"] = entrada
+    return respuesta
 
 
 def inferir_unidad(descripcion: str) -> str:

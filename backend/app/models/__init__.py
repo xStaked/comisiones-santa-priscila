@@ -3,6 +3,7 @@ from app.models.user import User
 from app.models.refresh_token import RefreshToken
 from app.models.comisionista import Comisionista, Tarifa, TipoTarifa
 from app.models.orden import Orden, OrdenItem, Asignacion, EstadoOrden
+from app.models.extraccion import OrdenExtraccion
 from app.models.liquidacion import Liquidacion, LiquidacionItem, LiquidacionItemTarifa
 from app.models.cliente import Cliente, Finca
 from app.models.producto import Producto
@@ -22,6 +23,7 @@ __all__ = [
     "OrdenItem",
     "Asignacion",
     "EstadoOrden",
+    "OrdenExtraccion",
     "Liquidacion",
     "LiquidacionItem",
     "LiquidacionItemTarifa",
