@@ -324,3 +324,48 @@ def test_orden_compra_dinacuamar_respeta_el_orden_del_documento():
         ("CHANDUY", "CITRIUS"),
         ("GOLFO - ADMINISTRACION", "NITRATO DE CALCIO"),
     ]
+
+
+def _pdf_orden_compra_dinacuamar_dos_paginas() -> bytes:
+    """OC DINACUAMAR de dos hojas: la segunda repite el encabezado y solo trae
+    los totales (como la OC 100453)."""
+    doc = fitz.open()
+
+    pagina = doc.new_page()
+    pagina.insert_text((72, 30), "ORDEN DE COMPRA No. 100453", fontsize=8)
+    pagina.insert_text((72, 50), "PROVEEDOR : OCHOA RECALDE", fontsize=8)
+    pagina.insert_text((72, 70), "15 de septiembre de 2026", fontsize=8)
+    pagina.insert_text(
+        (72, 90), "DESCRIPCION CANTIDAD MEDIDA PREC. TOTAL", fontsize=8
+    )
+    pagina.insert_text((75, 110), "AFRICA - ADMINISTRACION", fontsize=8)
+    pagina.insert_text((116, 130), "ECU-BACILLUS SUELO-PASTILLA TH", fontsize=8)
+    pagina.insert_text((300, 130), "18.00", fontsize=8)
+    pagina.insert_text((330, 130), "TACHO 10 KG", fontsize=8)
+    pagina.insert_text((420, 130), "685.00", fontsize=8)
+    pagina.insert_text((500, 130), "12,330.00", fontsize=8)
+    pagina.insert_text((300, 260), "SUB-TOTAL", fontsize=8)
+    pagina.insert_text((500, 260), "12,330.00", fontsize=8)
+
+    pagina_dos = doc.new_page()
+    pagina_dos.insert_text(
+        (72, 90), "DESCRIPCION CANTIDAD MEDIDA PREC. TOTAL", fontsize=8
+    )
+    pagina_dos.insert_text((72, 130), "100453 Total", fontsize=8)
+    pagina_dos.insert_text((300, 130), "18.00", fontsize=8)
+    pagina_dos.insert_text((500, 130), "18.00", fontsize=8)
+
+    return doc.tobytes()
+
+
+def test_orden_compra_dinacuamar_no_pierde_items_con_encabezado_repetido():
+    """Regresión OC 100453: el encabezado de la segunda hoja tomaba la ventana
+    de la tabla y el SUB-TOTAL de la primera, dejando el rango invertido."""
+    respuesta = extraer_orden_de_pdf(
+        _pdf_orden_compra_dinacuamar_dos_paginas(),
+        nombre_archivo="orden_compra.pdf",
+    )
+
+    assert [(i["finca"], i["producto"], i["cantidad"]) for i in respuesta["items"]] == [
+        ("AFRICA - ADMINISTRACION", "ECU-BACILLUS SUELO-PASTILLA TH", Decimal("18.00")),
+    ]

@@ -266,6 +266,7 @@ def extraer_orden_de_pdf(
             # segunda hoja. Se recorren todas las páginas y se desplaza la Y de
             # cada una para que el agrupamiento por filas no mezcle páginas.
             palabras: list[tuple[Any, ...]] = []
+            paginas: list[tuple[float, float]] = []
             offset_y = 0.0
             for pagina in doc:
                 for palabra in pagina.get_text("words"):
@@ -273,6 +274,7 @@ def extraer_orden_de_pdf(
                     palabras.append(
                         (x0, y0 + offset_y, x1, y1 + offset_y, texto, *resto)
                     )
+                paginas.append((offset_y, offset_y + pagina.rect.height))
                 offset_y += pagina.rect.height + 100
     except Exception:
         if usar_ia:
@@ -405,38 +407,60 @@ def extraer_orden_de_pdf(
         )
 
     # 5. Extraer filas de tabla
-    # Detectar dinámicamente la zona de la tabla buscando el encabezado y el fin
-    y_encabezado = None
-    y_fin = None
-    for fila in filas:
-        texto_fila = " ".join(c["text"] for c in fila["cells"]).upper()
-        if (
-            y_encabezado is None
-            and ("DESCRIPCION" in texto_fila or "DESCRIPCIÓN" in texto_fila)
+    # La zona de la tabla (encabezado → SUB-TOTAL) se detecta POR PÁGINA: cada
+    # hoja repite el encabezado. Con una sola ventana global, una OC de dos
+    # páginas tomaba el encabezado de la última hoja y el SUB-TOTAL de la
+    # primera, dejando el rango invertido y cero ítems.
+    def texto_de_fila(fila: dict[str, Any]) -> str:
+        return " ".join(c["text"] for c in fila["cells"]).upper()
+
+    def es_encabezado(fila: dict[str, Any]) -> bool:
+        texto_fila = texto_de_fila(fila)
+        return (
+            ("DESCRIPCION" in texto_fila or "DESCRIPCIÓN" in texto_fila)
             and ("CANTIDAD" in texto_fila or "PREC." in texto_fila)
-        ):
-            y_encabezado = fila["y"]
-        if y_encabezado is not None and (
+        )
+
+    def es_fin_de_tabla(fila: dict[str, Any]) -> bool:
+        texto_fila = texto_de_fila(fila)
+        return (
             "SUB-TOTAL" in texto_fila
             or "SUBTOTAL" in texto_fila
             or ("TOTAL" in texto_fila and ("BASE" in texto_fila or "IVA" in texto_fila))
-        ):
-            y_fin = fila["y"]
-            break
+        )
 
-    if y_encabezado is not None and y_fin is not None:
-        filas_tabla = [f for f in filas if y_encabezado < f["y"] < y_fin]
-    else:
+    filas_tabla: list[dict[str, Any]] = []
+    for inicio_pagina, fin_pagina in paginas:
+        filas_pagina = sorted(
+            (f for f in filas if inicio_pagina <= f["y"] <= fin_pagina),
+            key=lambda f: f["y"],
+        )
+        y_encabezado = next((f["y"] for f in filas_pagina if es_encabezado(f)), None)
+        if y_encabezado is None:
+            continue
+        y_fin = next(
+            (
+                f["y"]
+                for f in filas_pagina
+                if f["y"] > y_encabezado and es_fin_de_tabla(f)
+            ),
+            fin_pagina,
+        )
+        filas_tabla.extend(f for f in filas_pagina if y_encabezado < f["y"] < y_fin)
+
+    if not filas_tabla:
         # Fallback al rango Y estándar para órdenes DINACUAMAR tradicionales
         filas_tabla = [f for f in filas if 100 < f["y"] < 700]
+
+    # Documento: arriba → abajo. Antes se recorrían al revés porque `filas`
+    # viene ordenado de abajo hacia arriba.
+    filas_tabla.sort(key=lambda f: f["y"])
 
     fincas: list[dict[str, Any]] = []
     items_crudos: list[dict[str, Any]] = []
 
-    # `filas` viene de abajo hacia arriba (los ítems se ordenan por -Y para que
-    # el encabezado de la primera página gane). La vista previa debe salir en el
-    # mismo orden del documento, así que la tabla se recorre al revés.
-    for fila in reversed(filas_tabla):
+    # La vista previa debe salir en el mismo orden del documento (arriba → abajo).
+    for fila in filas_tabla:
         celdas = fila["cells"]
         if not celdas:
             continue
