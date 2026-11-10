@@ -119,6 +119,8 @@ La conversión kg↔envases sale de `producto`: `tacho_kilos` (default 10), `sac
 
 Según la matriz de tarifas del cliente, el valor en $ es **por kg**, salvo: CITRIUS y MORTAL CONTROL/SHELL (por litro, ≈ kg), CALCINIT/NITRATO DE CALCIO (por saco de 25 kg) y NATUXTRACT (por tacho de 15 kg). Estos dos últimos van como `fijo_unidad`; cargarlos como `fijo_kg` paga 25x y 15x de más.
 
+En exportaciones (Excel/PDF), la vista de Liquidación y los reportes, la columna de cantidad muestra la **cantidad base** con la que se cobra la tarifa `fijo_kg` (`getCantidadMostrar` / `_cantidad_para_tarifa_kg`: envases → kg o litros; las facturas en kg/litros no cambian). El dato original de la OC se conserva en la columna `Envases` de la hoja principal. En liquidaciones guardadas se usa `cantidad_kg_snapshot`, congelado al liquidar, para que el histórico no dependa del tamaño de envase actual del producto.
+
 ## Autenticación
 
 Flujo JWT dual-token con refresh silencioso en el interceptor de axios (`src/lib/api.ts`):

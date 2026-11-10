@@ -42,6 +42,7 @@ def _serialize_liquidacion(liquidacion: Liquidacion) -> dict:
                 "finca_snapshot": li.finca_snapshot,
                 "producto_snapshot": li.producto_snapshot,
                 "cantidad_snapshot": li.cantidad_snapshot,
+                "cantidad_kg_snapshot": li.cantidad_kg_snapshot,
                 "unidad_snapshot": li.unidad_snapshot,
                 "precio_unitario_snapshot": li.precio_unitario_snapshot,
                 "total_snapshot": li.total_snapshot,

@@ -41,6 +41,10 @@ export interface OrdenItem {
   finca: string;
   producto: string;
   cantidad: number;
+  // Cantidad con la que se liquidó (base de las tarifas fijo_kg: kg, o litros
+  // tratados 1:1). No siempre coincide con `cantidad`: una OC de 10 tachos de
+  // 10 kg trae cantidad=10 y cantidadKgSnapshot=100.
+  cantidadKgSnapshot?: number | null;
   unidad: string;
   precioUnitario: number;
   total: number;

@@ -610,6 +610,7 @@ def crear_liquidacion(
             finca_snapshot=oi.finca,
             producto_snapshot=oi.producto,
             cantidad_snapshot=oi.cantidad,
+            cantidad_kg_snapshot=_cantidad_para_tarifa_kg(oi),
             unidad_snapshot=oi.unidad,
             precio_unitario_snapshot=oi.precio_unitario,
             total_snapshot=oi.total,

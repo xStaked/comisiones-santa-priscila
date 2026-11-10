@@ -29,6 +29,7 @@ class LiquidacionItemResponse(BaseModel):
     finca_snapshot: str
     producto_snapshot: str
     cantidad_snapshot: Decimal
+    cantidad_kg_snapshot: Optional[Decimal] = None
     unidad_snapshot: str
     precio_unitario_snapshot: Decimal
     total_snapshot: Decimal

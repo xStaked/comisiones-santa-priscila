@@ -483,6 +483,30 @@ def test_buscar_tarifa_especifica_encuentra_tarifa_en_producto_legado_equivalent
     assert encontrada.id == tarifa.id
 
 
+def test_crear_liquidacion_congela_cantidad_en_kg(db_session):
+    """La OC trae 10 sacos: el snapshot debe guardar 250 kg para que el reporte
+    histórico cuadre con la comisión fijo_kg aunque el producto cambie después."""
+    producto = _producto_saco(db_session)
+    orden = Orden(
+        fecha=date.today(),
+        numero_orden="ORD-KG-001",
+        estado=EstadoOrden.pagada,
+    )
+    db_session.add(orden)
+    db_session.flush()
+
+    item = _item_saco(producto, Decimal("10"), "sacos")
+    item.orden_id = orden.id
+    item.estado = EstadoOrden.pagada
+    db_session.add(item)
+    db_session.commit()
+
+    liquidacion, _ = crear_liquidacion(db_session, "Liq kg", [item.id])
+
+    assert liquidacion.items[0].cantidad_snapshot == Decimal("10")
+    assert liquidacion.items[0].cantidad_kg_snapshot == Decimal("250")
+
+
 def test_crear_liquidacion_aplica_cero_cuando_proveedor_excluido_en_global(db_session):
     comisionista = Comisionista(nombre="Comisionista Test")
     comisionista.tarifas = [

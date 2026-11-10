@@ -22,6 +22,7 @@ function camelToSnake(str: string): string {
 const NUMERIC_RESPONSE_KEYS = new Set([
   'cantidad',
   'cantidadSnapshot',
+  'cantidadKgSnapshot',
   'precioUnitario',
   'precioUnitarioSnapshot',
   'total',

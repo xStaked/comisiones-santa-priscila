@@ -6,7 +6,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import * as XLSX from 'xlsx-js-style';
 import { useApp } from '@/context/AppContext';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
-import { exportarExcel, calcularDetalleComision, getCantidadParaTarifaKg, sectorDeItem, unirTarifasLabel } from '@/lib/export-utils';
+import { exportarExcel, calcularDetalleComision, getCantidadParaTarifaKg, getCantidadMostrar, getEnvasesLabel, sectorDeItem, unirTarifasLabel } from '@/lib/export-utils';
 import { formatearFechaCarga, formatearFechaHoraCarga } from '@/lib/fechas';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -248,7 +248,7 @@ export function LiquidacionTab() {
         const existente = map.get(com.id);
         if (existente) {
           existente.items += 1;
-          existente.cantidad += item.cantidad;
+          existente.cantidad += getCantidadMostrar(item);
           existente.comision += com.comision;
           existente.tarifas.add(com.tarifasLabel);
         } else {
@@ -257,7 +257,7 @@ export function LiquidacionTab() {
             nombre: com.nombre,
             tarifas: new Set([com.tarifasLabel]),
             items: 1,
-            cantidad: item.cantidad,
+            cantidad: getCantidadMostrar(item),
             comision: com.comision,
           });
         }
@@ -280,7 +280,7 @@ export function LiquidacionTab() {
   }, [selectedItemsConComision]);
 
   const totalComision = selectedItemsConComision.reduce((s, i) => s + i.comisionTotal, 0);
-  const totalCantidad = selectedItemsConComision.reduce((s, i) => s + i.cantidad, 0);
+  const totalCantidad = selectedItemsConComision.reduce((s, i) => s + getCantidadMostrar(i), 0);
   const totalOrden = selectedItemsConComision.reduce((s, i) => s + i.total, 0);
 
   const selectedFiltered = useMemo(
@@ -541,7 +541,7 @@ export function LiquidacionTab() {
                 const seleccionado = !excludedIds.has(key);
                 const expandida = expandedOrdenIds.has(key);
                 const cab = grupo[0];
-                const cantOrden = grupo.reduce((s, i) => s + i.cantidad, 0);
+                const cantOrden = grupo.reduce((s, i) => s + getCantidadMostrar(i), 0);
                 const totOrden = grupo.reduce((s, i) => s + i.total, 0);
                 const comOrden = grupo.reduce((s, i) => s + i.comisionTotal, 0);
                 const sectores = new Set(grupo.map((i) => i.fincaRel?.nombre || i.finca).filter(Boolean));
@@ -609,7 +609,9 @@ export function LiquidacionTab() {
                     >
                       <div className="overflow-hidden">
                         <div className="flex flex-col gap-1.5 border-b border-[#F2F4F6] bg-[#FBFCFD] px-4 py-3 pl-[50px]">
-                          {grupo.map((item) => (
+                          {grupo.map((item) => {
+                            const envases = getEnvasesLabel(item);
+                            return (
                             <div
                               key={item.id}
                               className="grid grid-cols-[minmax(0,1.6fr)_100px_110px_minmax(0,1fr)] items-center gap-3 rounded-lg border border-[#EDEFF2] bg-white px-3 py-2.5"
@@ -617,8 +619,11 @@ export function LiquidacionTab() {
                               <div className="truncate text-[12.5px] text-[#0B1220]">
                                 {item.productoRel?.nombre || item.producto}
                               </div>
-                              <div className="cifra text-right text-xs text-[#6B7684]">
-                                {num(item.cantidad, 0)} {item.unidad}
+                              <div className="cifra text-right text-xs leading-tight text-[#6B7684]">
+                                {num(getCantidadMostrar(item), 0)} {!envases && item.unidad}
+                                {envases && (
+                                  <span className="block text-[10px] text-[#98A2B3]">{envases}</span>
+                                )}
                               </div>
                               <div className="cifra text-right text-xs text-[#344054]">
                                 {money(item.total)}
@@ -645,7 +650,8 @@ export function LiquidacionTab() {
                                 )}
                               </div>
                             </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       </div>
                     </div>

@@ -18,6 +18,7 @@ function snapshotItemToOrdenItem(item: any): OrdenItem {
     finca: item.fincaSnapshot,
     producto: item.productoSnapshot,
     cantidad: item.cantidadSnapshot,
+    cantidadKgSnapshot: item.cantidadKgSnapshot,
     unidad: item.unidadSnapshot,
     precioUnitario: item.precioUnitarioSnapshot,
     total: item.totalSnapshot,

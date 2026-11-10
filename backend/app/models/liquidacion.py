@@ -40,6 +40,11 @@ class LiquidacionItem(BaseModel):
     finca_snapshot = Column(String, nullable=False)
     producto_snapshot = Column(String, nullable=False)
     cantidad_snapshot = Column(Numeric(12, 2), nullable=False)
+    # Cantidad en la unidad base de la comisión fijo_kg (kg, o litros: 1 L ≈ 1
+    # kg), con la misma regla que _cantidad_para_tarifa_kg(). Se congela porque
+    # el producto (tamaño del envase) puede cambiar después y el snapshot tiene
+    # que seguir cuadrando con la comisión liquidada.
+    cantidad_kg_snapshot = Column(Numeric(12, 2), nullable=True)
     unidad_snapshot = Column(String, nullable=False)
     precio_unitario_snapshot = Column(Numeric(12, 2), nullable=False)
     total_snapshot = Column(Numeric(12, 2), nullable=False)

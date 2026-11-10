@@ -69,6 +69,25 @@ export function getCantidadParaTarifaKg(item: OrdenItem): number {
 }
 
 /**
+ * Cantidad que se muestra en pantallas y reportes: la base con la que se cobra
+ * una tarifa fijo_kg (kg, o litros: 1 L ≈ 1 kg). Las liquidaciones guardadas
+ * traen la cantidad congelada; los ítems vivos la derivan de la unidad y del
+ * producto.
+ */
+export function getCantidadMostrar(item: OrdenItem): number {
+  return item.cantidadKgSnapshot ?? getCantidadParaTarifaKg(item);
+}
+
+/**
+ * Envases del documento ("10 tachos") cuando la cantidad viene en envases.
+ * Vacío en facturas, que ya expresan la cantidad en kg/litros.
+ */
+export function getEnvasesLabel(item: OrdenItem): string {
+  if (!esEnvase(item.unidad?.toLowerCase() || '')) return '';
+  return `${item.cantidad.toLocaleString('es-ES')} ${item.unidad}`;
+}
+
+/**
  * Sector / finca canónico del ítem para ordenar y filtrar. `fincaRel.nombre`
  * es el catálogo normalizado; `sector`/`finca` son los textos crudos del
  * documento.
@@ -503,7 +522,7 @@ export function exportarPDF(
           item.fecha,
           item.numeroOrden,
           item.producto,
-          `${item.cantidad.toLocaleString('es-ES')}`,
+          `${getCantidadMostrar(item).toLocaleString('es-ES')}`,
           tarifasLabel,
           `$ ${comision.toFixed(2).replace('.', ',')}`,
           item.estado || 'pagada',
@@ -986,7 +1005,7 @@ export function exportarExcel(
   const resumen: CeldaResumen[][] = [
     ['RESUMEN GENERAL'],
     [],
-    ['Fecha', 'Factura', 'Producto', 'Cantidad', 'Tarifa', 'Valor Comisión', 'Estado', 'Sector', 'Comisionista', 'Grupo', 'Razón social'],
+    ['Fecha', 'Factura', 'Producto', 'Cantidad', 'Envases', 'Tarifa', 'Valor Comisión', 'Estado', 'Sector', 'Comisionista', 'Grupo', 'Razón social'],
   ];
   let totalGeneral = 0;
   const nombresHojaUsados = new Set<string>(['RESUMEN GENERAL']);
@@ -1005,7 +1024,7 @@ export function exportarExcel(
     // Estructura de la hoja: filas y celdas con estilos. Mantenemos las dos
     // listas en paralelo para poder resolver estilos al final y construir los
     // rangos de merge (cabeceras que abarcan todas las columnas).
-    const numCols = 8; // Fecha | Factura | Producto | Cant | Comisión | Valor a Comisionar | Estado | Sector
+    const numCols = 9; // Fecha | Factura | Producto | Cant | Envases | Comisión | Valor a Comisionar | Estado | Sector
     const filas: Fila[] = [];
     const merges: { s: { r: number; c: number }; e: { r: number; c: number } }[] = [];
 
@@ -1074,7 +1093,7 @@ export function exportarExcel(
         merges.push({ s: { r: filas.length - 1, c: 0 }, e: { r: filas.length - 1, c: numCols - 1 } });
 
         // Cabecera de columnas
-        const headerCols = ['Fecha', 'Factura', 'Producto', 'Cant', 'Comisión', 'Valor a Comisionar', 'Estado', 'Sector'];
+        const headerCols = ['Fecha', 'Factura', 'Producto', 'Cant', 'Envases', 'Comisión', 'Valor a Comisionar', 'Estado', 'Sector'];
         filas.push(headerCols.map(c => ({ v: c, s: estilos.columnaHeader })));
 
         // Filas de datos, ordenadas por fecha → sector → factura (mismo criterio
@@ -1106,7 +1125,8 @@ export function exportarExcel(
             { v: fechaCorta, s: estilos.celdaFecha, t: 's' },
             { v: item.numeroOrden, s: estilos.celdaTexto, t: 's' },
             { v: item.producto, s: estilos.celdaTexto, t: 's' },
-            { v: item.cantidad, s: estilos.celdaCantidad, t: 'n' },
+            { v: getCantidadMostrar(item), s: estilos.celdaCantidad, t: 'n' },
+            { v: getEnvasesLabel(item), s: estilos.celdaTexto, t: 's' },
             { v: tarifasLabel, s: estilos.celdaTarifa, t: 's' },
             { v: comision, s: estilos.celdaComision, t: 'n' },
             { v: item.estado || 'pagada', s: estilos.celdaEstado, t: 's' },
@@ -1118,7 +1138,8 @@ export function exportarExcel(
             item.fecha,
             item.numeroOrden,
             item.producto,
-            item.cantidad,
+            getCantidadMostrar(item),
+            getEnvasesLabel(item),
             tarifasLabel,
             comision,
             item.estado || 'pagada',
@@ -1130,12 +1151,13 @@ export function exportarExcel(
         });
 
         // Fila TOTAL por cliente (label en la columna Cant para alinearla con el
-        // formato histórico: "TOTAL" como cuarta columna, monto en la sexta).
+        // formato histórico: "TOTAL" como cuarta columna, monto bajo Valor a Comisionar).
         filas.push([
           { v: '', s: estilos.totalFilaLabel, t: 's' },
           { v: '', s: estilos.totalFilaLabel, t: 's' },
           { v: '', s: estilos.totalFilaLabel, t: 's' },
           { v: 'TOTAL', s: estilos.totalFilaLabel, t: 's' },
+          { v: '', s: estilos.totalFilaLabel, t: 's' },
           { v: '', s: estilos.totalFila, t: 's' },
           { v: totalCliente, s: estilos.totalFila, t: 'n' },
           { v: '', s: estilos.totalFilaLabel, t: 's' },
@@ -1158,11 +1180,12 @@ export function exportarExcel(
           { v: '', s: estilos.seccionTotalLabel, t: 's' },
           { v: '', s: estilos.seccionTotalLabel, t: 's' },
           { v: '', s: estilos.seccionTotalLabel, t: 's' },
+          { v: '', s: estilos.seccionTotalLabel, t: 's' },
           { v: totalSeccion, s: estilos.seccionTotal, t: 'n' },
           { v: '', s: estilos.seccionTotalLabel, t: 's' },
           { v: '', s: estilos.seccionTotalLabel, t: 's' },
         ]);
-        merges.push({ s: { r: filaTotal, c: 0 }, e: { r: filaTotal, c: 4 } });
+        merges.push({ s: { r: filaTotal, c: 0 }, e: { r: filaTotal, c: 5 } });
 
         // Separador entre comisionistas.
         filas.push(Array.from({ length: numCols }, () => ''));
@@ -1182,6 +1205,7 @@ export function exportarExcel(
       { v: '', s: estilos.granTotalLabel, t: 's' },
       { v: '', s: estilos.granTotalLabel, t: 's' },
       { v: '', s: estilos.granTotalLabel, t: 's' },
+      { v: '', s: estilos.granTotalLabel, t: 's' },
       { v: `Total ${nombreGrupo}`, s: estilos.granTotalLabel, t: 's' },
       { v: totalGrupo, s: estilos.granTotal, t: 'n' },
       { v: '', s: estilos.granTotalLabel, t: 's' },
@@ -1195,6 +1219,7 @@ export function exportarExcel(
       { wch: 22 },  // Factura
       { wch: 28 },  // Producto
       { wch: 10 },  // Cant
+      { wch: 12 },  // Envases
       { wch: 16 },  // Comisión
       { wch: 18 },  // Valor a Comisionar
       { wch: 12 },  // Estado
@@ -1214,7 +1239,7 @@ export function exportarExcel(
     filasDatos.sort(
       (a, b) =>
         String(a[0]).localeCompare(String(b[0])) ||
-        String(a[7]).localeCompare(String(b[7]), 'es') ||
+        String(a[8]).localeCompare(String(b[8]), 'es') ||
         String(a[1]).localeCompare(String(b[1]))
     );
     resumen.length = 0;
@@ -1223,21 +1248,21 @@ export function exportarExcel(
   const resumenEstilizado: CeldaResumen[][] = [
     [
       { v: 'RESUMEN GENERAL', s: estilos.resumenTitulo, t: 's' },
-      ...Array.from({ length: 10 }, () => ''),
+      ...Array.from({ length: 11 }, () => ''),
     ],
-    Array.from({ length: 11 }, () => ''),
+    Array.from({ length: 12 }, () => ''),
     resumen[2].map(valor => ({ v: String(valor), s: estilos.columnaHeader, t: 's' })),
     ...filasDatos.map(fila =>
       fila.map((valor, indice) => {
-        // Cantidad (3) y Valor Comisión (5) son las columnas numéricas del resumen.
-        const esColumnaNumerica = indice === 3 || indice === 5;
+        // Cantidad (3) y Valor Comisión (6) son las columnas numéricas del resumen.
+        const esColumnaNumerica = indice === 3 || indice === 6;
         return {
           v: typeof valor === 'object' ? valor.v : valor,
           s: indice === 0
             ? estilos.resumenFecha
             : indice === 3
               ? estilos.resumenCantidad
-              : indice === 5
+              : indice === 6
                 ? estilos.resumenComision
                 : estilos.resumenTexto,
           t: esColumnaNumerica ? 'n' as const : 's' as const,
@@ -1246,9 +1271,9 @@ export function exportarExcel(
     ),
   ];
   resumenEstilizado.push(
-    Array.from({ length: 11 }, () => ''),
+    Array.from({ length: 12 }, () => ''),
     [
-      ...Array.from({ length: 5 }, () => ({ v: '', s: estilos.resumenTotalLabel, t: 's' as const })),
+      ...Array.from({ length: 6 }, () => ({ v: '', s: estilos.resumenTotalLabel, t: 's' as const })),
       { v: totalGeneral, s: estilos.resumenTotal, t: 'n' as const },
       ...Array.from({ length: 3 }, () => ({ v: '', s: estilos.resumenTotalLabel, t: 's' as const })),
       { v: 'TOTAL GENERAL', s: estilos.resumenTotalLabel, t: 's' as const },
@@ -1256,12 +1281,13 @@ export function exportarExcel(
     ],
   );
   const wsResumen = XLSX.utils.aoa_to_sheet(resumenEstilizado);
-  wsResumen['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 10 } }];
+  wsResumen['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 11 } }];
   wsResumen['!cols'] = [
     { wch: 12 },
     { wch: 20 },
     { wch: 25 },
     { wch: 10 },
+    { wch: 12 },
     { wch: 16 },
     { wch: 16 },
     { wch: 10 },
@@ -1274,8 +1300,8 @@ export function exportarExcel(
   // para facilitar la auditoría sin reordenar manualmente.
   if (filasDatos.length > 0) {
     const lastDataRow = resumenEstilizado.length - 2; // sin contar fila vacía + total
-    // Fila 3 (índice 2) es la cabecera: A3:K<lastDataRow>
-    wsResumen['!autofilter'] = { ref: `A3:K${lastDataRow}` };
+    // Fila 3 (índice 2) es la cabecera: A3:L<lastDataRow>
+    wsResumen['!autofilter'] = { ref: `A3:L${lastDataRow}` };
   }
   // Congelar filas de título para que la cabecera quede visible al scrollear.
   // `!freeze` es una extensión oficiosa del tipo público WorkSheet (la firma
@@ -1371,11 +1397,11 @@ export function agruparPorFinca(
     const existente = map.get(finca);
     if (existente) {
       existente.ordenes += 1;
-      existente.cantidad += item.cantidad;
+      existente.cantidad += getCantidadMostrar(item);
       existente.total += item.total;
       existente.comision += comision;
     } else {
-      map.set(finca, { nombre: finca, ordenes: 1, cantidad: item.cantidad, total: item.total, comision });
+      map.set(finca, { nombre: finca, ordenes: 1, cantidad: getCantidadMostrar(item), total: item.total, comision });
     }
   });
   return Array.from(map.values()).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
@@ -1401,11 +1427,11 @@ export function agruparPorProducto(
     const existente = map.get(producto);
     if (existente) {
       existente.ordenes += 1;
-      existente.cantidad += item.cantidad;
+      existente.cantidad += getCantidadMostrar(item);
       existente.total += item.total;
       existente.comision += comision;
     } else {
-      map.set(producto, { nombre: producto, ordenes: 1, cantidad: item.cantidad, total: item.total, comision });
+      map.set(producto, { nombre: producto, ordenes: 1, cantidad: getCantidadMostrar(item), total: item.total, comision });
     }
   });
   return Array.from(map.values()).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
@@ -1476,11 +1502,11 @@ export function agruparPorCliente(
     const existente = map.get(cliente);
     if (existente) {
       existente.ordenes += 1;
-      existente.cantidad += item.cantidad;
+      existente.cantidad += getCantidadMostrar(item);
       existente.total += item.total;
       existente.comision += comision;
     } else {
-      map.set(cliente, { nombre: cliente, ordenes: 1, cantidad: item.cantidad, total: item.total, comision });
+      map.set(cliente, { nombre: cliente, ordenes: 1, cantidad: getCantidadMostrar(item), total: item.total, comision });
     }
   });
   return Array.from(map.values()).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));

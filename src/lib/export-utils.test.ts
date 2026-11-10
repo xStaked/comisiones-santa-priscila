@@ -2,7 +2,12 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import type { OrdenItem, TarifaClienteProducto } from '@/types';
-import { encontrarTarifaEspecifica, unirTarifasLabel } from './export-utils';
+import {
+  encontrarTarifaEspecifica,
+  getCantidadMostrar,
+  getEnvasesLabel,
+  unirTarifasLabel,
+} from './export-utils';
 import { esCoincidenciaSegura, UMBRAL_FINCA, UMBRAL_PRODUCTO } from './normalization';
 
 const COMISIONISTA = 'com-1';
@@ -237,4 +242,56 @@ test('PASTILLAS GRANDES no toma PASTILLAS TH', () => {
   );
 
   assert.equal(encontrada?.id, tarifaGrandes.id);
+});
+
+test('la cantidad mostrada convierte envases a la base de la comisión', () => {
+  const oc = item({
+    cantidad: 10,
+    unidad: 'tachos',
+    productoRel: {
+      id: PAST_TH,
+      nombre: 'ECU-BACILLUS SUELO PASTILLA TH',
+      unidadComision: 'tacho',
+      tachoKilos: 10,
+    },
+  });
+
+  assert.equal(getCantidadMostrar(oc), 100);
+  assert.equal(getEnvasesLabel(oc), '10 tachos');
+});
+
+test('la cantidad congelada manda sobre el envase actual del producto', () => {
+  const historica = item({
+    cantidad: 5,
+    unidad: 'tachos',
+    cantidadKgSnapshot: 75,
+    productoRel: {
+      id: 'prod-natu',
+      nombre: 'NATUXTRACT-ECUCITRIUS',
+      unidadComision: 'tacho',
+      tachoKilos: 10,
+    },
+  });
+
+  assert.equal(getCantidadMostrar(historica), 75);
+});
+
+test('las canecas se muestran como envase y su base en litros', () => {
+  const canecas = item({
+    cantidad: 5,
+    unidad: 'canecas',
+    productoRel: {
+      id: 'prod-citrius',
+      nombre: 'CITRIUS-011',
+      unidadComision: 'caneca',
+    },
+  });
+
+  assert.equal(getCantidadMostrar(canecas), 100);
+  assert.equal(getEnvasesLabel(canecas), '5 canecas');
+});
+
+test('una factura en kg no agrega envases', () => {
+  assert.equal(getCantidadMostrar(item()), 70);
+  assert.equal(getEnvasesLabel(item()), '');
 });

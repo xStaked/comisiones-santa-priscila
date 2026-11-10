@@ -28,7 +28,7 @@ import {
 } from 'recharts';
 import { useApp } from '@/context/AppContext';
 import { useAuth } from '@/context/AuthContext';
-import { exportarPDF, exportarExcel, getTarifaLabel, unirTarifasLabel } from '@/lib/export-utils';
+import { exportarPDF, exportarExcel, getCantidadMostrar, getEnvasesLabel, getTarifaLabel, unirTarifasLabel } from '@/lib/export-utils';
 import { fetchLiquidacion } from '@/lib/api';
 import { Comisionista, OrdenItem } from '@/types';
 import { Shell } from '@/components/Shell';
@@ -45,6 +45,7 @@ function snapshotItemToOrdenItem(item: any): OrdenItem {
     finca: item.fincaSnapshot,
     producto: item.productoSnapshot,
     cantidad: item.cantidadSnapshot,
+    cantidadKgSnapshot: item.cantidadKgSnapshot,
     unidad: item.unidadSnapshot,
     precioUnitario: item.precioUnitarioSnapshot,
     total: item.totalSnapshot,
@@ -122,14 +123,14 @@ export default function LiquidacionDetallePage() {
       const existente = map.get(finca);
       if (existente) {
         existente.ordenes += 1;
-        existente.cantidad += item.cantidad;
+        existente.cantidad += getCantidadMostrar(item);
         existente.total += item.total;
         existente.comision += comision;
       } else {
         map.set(finca, {
           nombre: finca,
           ordenes: 1,
-          cantidad: item.cantidad,
+          cantidad: getCantidadMostrar(item),
           total: item.total,
           comision,
         });
@@ -208,7 +209,7 @@ export default function LiquidacionDetallePage() {
         return s + (ri.tarifas || []).reduce((ss: number, t: any) => ss + (Number(t.comisionCalculada) || 0), 0);
       }, 0)
     : 0;
-  const totalCantidad = liquidacion.items.reduce((s, i) => s + i.cantidad, 0);
+  const totalCantidad = liquidacion.items.reduce((s, i) => s + getCantidadMostrar(i), 0);
   const comisionistasInvolucrados = new Set(
     liquidacion.items.flatMap((i) => i.comisionistas.map(a => a.comisionistaId)).filter(Boolean)
   ).size;
@@ -615,6 +616,7 @@ export default function LiquidacionDetallePage() {
                   {liquidacion.items.map((item) => {
                     const rawItem = (rawLiquidacion?.items || []).find((ri: any) => ri.id === item.id);
                     const comision = (rawItem?.tarifas || []).reduce((s: number, t: any) => s + (Number(t.comisionCalculada) || 0), 0);
+                    const envases = getEnvasesLabel(item);
                     return (
                       <tr
                         key={item.id}
@@ -633,8 +635,8 @@ export default function LiquidacionDetallePage() {
                           {item.producto}
                         </td>
                         <td className="px-4 py-3 text-right text-[#344054]">
-                          {item.cantidad.toLocaleString('es-ES')}{' '}
-                          {item.unidad}
+                          {getCantidadMostrar(item).toLocaleString('es-ES')}{' '}
+                          {envases ? `(${envases})` : item.unidad}
                         </td>
                         <td className="px-4 py-3 text-right text-[#7A8798]">
                           ${item.total.toFixed(2)}
