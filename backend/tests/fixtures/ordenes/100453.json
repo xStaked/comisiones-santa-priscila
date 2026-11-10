@@ -1,0 +1,208 @@
+{
+  "numeroOrden": "100453",
+  "fecha": "2026-09-15",
+  "semana": "38",
+  "proveedor": "INDUSTRIAL ACUICOLA OCHOA & BARCIA DINACUAMAR",
+  "items": [
+    {
+      "finca": "AFRICA - ADMINISTRACION",
+      "producto": "ECU-BACILLUS SUELO-PASTILLA TH",
+      "cantidad": "18.00",
+      "unidad": "tachos",
+      "precioUnitario": "685.00000",
+      "total": "12330.00"
+    },
+    {
+      "finca": "ASIA - ADMINISTRACION",
+      "producto": "ECU-BACILLUS SUELO-PASTILLA TH",
+      "cantidad": "35.00",
+      "unidad": "tachos",
+      "precioUnitario": "685.00000",
+      "total": "23975.00"
+    },
+    {
+      "finca": "BAJEN ADM A",
+      "producto": "ECU-BACILLUS SUELO-PASTILLA TH",
+      "cantidad": "20.00",
+      "unidad": "tachos",
+      "precioUnitario": "685.00000",
+      "total": "13700.00"
+    },
+    {
+      "finca": "BAJEN ADM B",
+      "producto": "ECU-BACILLUS SUELO-PASTILLA TH",
+      "cantidad": "20.00",
+      "unidad": "tachos",
+      "precioUnitario": "685.00000",
+      "total": "13700.00"
+    },
+    {
+      "finca": "CALIFORNIA ADM A",
+      "producto": "ECU-BACILLUS SUELO-PASTILLA TH",
+      "cantidad": "8.00",
+      "unidad": "tachos",
+      "precioUnitario": "685.00000",
+      "total": "5480.00"
+    },
+    {
+      "finca": "CALIFORNIA ADM B",
+      "producto": "ECU-BACILLUS SUELO-PASTILLA TH",
+      "cantidad": "22.00",
+      "unidad": "tachos",
+      "precioUnitario": "685.00000",
+      "total": "15070.00"
+    },
+    {
+      "finca": "CHANDUY",
+      "producto": "ECU-BACILLUS SUELO-PASTILLA TH",
+      "cantidad": "30.00",
+      "unidad": "tachos",
+      "precioUnitario": "685.00000",
+      "total": "20550.00"
+    },
+    {
+      "finca": "CORVINERO ADM A",
+      "producto": "ECU-BACILLUS SUELO-PASTILLA TH",
+      "cantidad": "15.00",
+      "unidad": "tachos",
+      "precioUnitario": "685.00000",
+      "total": "10275.00"
+    },
+    {
+      "finca": "CORVINERO ADM B",
+      "producto": "ECU-BACILLUS SUELO-PASTILLA TH",
+      "cantidad": "5.00",
+      "unidad": "tachos",
+      "precioUnitario": "685.00000",
+      "total": "3425.00"
+    },
+    {
+      "finca": "DAULAR - ADMINISTRACION",
+      "producto": "ECU-BACILLUS AGUA",
+      "cantidad": "10.00",
+      "unidad": "tachos",
+      "precioUnitario": "480.00000",
+      "total": "4800.00"
+    },
+    {
+      "finca": "DAULAR - ADMINISTRACION",
+      "producto": "ECU-BACILLUS SUELO-PASTILLA TH",
+      "cantidad": "5.00",
+      "unidad": "tachos",
+      "precioUnitario": "685.00000",
+      "total": "3425.00"
+    },
+    {
+      "finca": "DAULAR - CURAZAO",
+      "producto": "ECU-BACILLUS AGUA",
+      "cantidad": "2.00",
+      "unidad": "tachos",
+      "precioUnitario": "480.00000",
+      "total": "960.00"
+    },
+    {
+      "finca": "GOLFO - ADMINISTRACION",
+      "producto": "ECU-BACILLUS SUELO-PASTILLA",
+      "cantidad": "23.00",
+      "unidad": "tachos",
+      "precioUnitario": "595.00000",
+      "total": "13685.00"
+    },
+    {
+      "finca": "GOLFO - ADMINISTRACION",
+      "producto": "ECU-BACILLUS SALUD",
+      "cantidad": "35.00",
+      "unidad": "tachos",
+      "precioUnitario": "500.00000",
+      "total": "17500.00"
+    },
+    {
+      "finca": "KOREA - ADMINISTRACIÓN",
+      "producto": "ECU-BACILLUS SUELO-PASTILLA TH",
+      "cantidad": "30.00",
+      "unidad": "tachos",
+      "precioUnitario": "685.00000",
+      "total": "20550.00"
+    },
+    {
+      "finca": "PLAYAS - CABALA I",
+      "producto": "ECU-BACILLUS SUELO-PASTILLA TH",
+      "cantidad": "3.00",
+      "unidad": "tachos",
+      "precioUnitario": "685.00000",
+      "total": "2055.00"
+    },
+    {
+      "finca": "PLAYAS - CABALA II",
+      "producto": "ECU-BACILLUS SUELO-PASTILLA TH",
+      "cantidad": "2.00",
+      "unidad": "tachos",
+      "precioUnitario": "685.00000",
+      "total": "1370.00"
+    },
+    {
+      "finca": "SABANA - JAMAICA",
+      "producto": "ECU-BACILLUS SUELO-PASTILLA TH",
+      "cantidad": "3.00",
+      "unidad": "tachos",
+      "precioUnitario": "685.00000",
+      "total": "2055.00"
+    },
+    {
+      "finca": "SABANA - SINGAPUR",
+      "producto": "ECU-BACILLUS SUELO-PASTILLA TH",
+      "cantidad": "5.00",
+      "unidad": "tachos",
+      "precioUnitario": "685.00000",
+      "total": "3425.00"
+    },
+    {
+      "finca": "TAURA ADM A",
+      "producto": "ECU-BACILLUS SUELO-PASTILLA TH",
+      "cantidad": "40.00",
+      "unidad": "tachos",
+      "precioUnitario": "685.00000",
+      "total": "27400.00"
+    },
+    {
+      "finca": "TAURA ADM A",
+      "producto": "ECU-BACILLUS SALUD",
+      "cantidad": "10.00",
+      "unidad": "tachos",
+      "precioUnitario": "500.00000",
+      "total": "5000.00"
+    },
+    {
+      "finca": "TAURA ADM B",
+      "producto": "ECU-BACILLUS SUELO-PASTILLA TH",
+      "cantidad": "40.00",
+      "unidad": "tachos",
+      "precioUnitario": "685.00000",
+      "total": "27400.00"
+    },
+    {
+      "finca": "TAURA ADM C",
+      "producto": "ECU-BACILLUS SUELO-PASTILLA TH",
+      "cantidad": "30.00",
+      "unidad": "tachos",
+      "precioUnitario": "685.00000",
+      "total": "20550.00"
+    },
+    {
+      "finca": "TAURA ADM D",
+      "producto": "ECU-BACILLUS SUELO-PASTILLA TH",
+      "cantidad": "40.00",
+      "unidad": "tachos",
+      "precioUnitario": "685.00000",
+      "total": "27400.00"
+    },
+    {
+      "finca": "TAURA ADM D",
+      "producto": "ECU-BACILLUS SALUD",
+      "cantidad": "10.00",
+      "unidad": "tachos",
+      "precioUnitario": "500.00000",
+      "total": "5000.00"
+    }
+  ]
+}

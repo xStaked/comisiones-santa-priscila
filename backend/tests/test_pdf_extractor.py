@@ -1,3 +1,4 @@
+import json
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
@@ -11,7 +12,9 @@ from app.models.producto import Producto
 from app.models.tarifa_cliente_producto import TarifaClienteProducto
 from app.services.order_extraction_models import OrdenItemValidado, OrdenValidada
 from app.services.pdf_extractor import (
+    _es_orden_compra_dinacuamar,
     _extraer_items_santa_priscila_desde_filas,
+    _extraer_texto_pdf,
     _orden_validada_a_respuesta,
     extraer_orden_de_pdf,
 )
@@ -379,3 +382,42 @@ def test_orden_compra_dinacuamar_bloquea_si_no_cuadra_el_subtotal():
             _pdf_orden_compra_dinacuamar_dos_paginas(subtotal="99,999.00"),
             nombre_archivo="orden_compra.pdf",
         )
+
+
+CORPUS_ORDENES = Path(__file__).parent / "fixtures" / "ordenes"
+
+
+@pytest.mark.parametrize(
+    "ruta_pdf",
+    sorted(CORPUS_ORDENES.glob("*.pdf")),
+    ids=lambda ruta: ruta.stem,
+)
+def test_corpus_ordenes_reales(ruta_pdf):
+    """Cada PDF real que falló queda acá con su JSON esperado: si el parser
+    cambia, el caso se rompe en CI y no en la liquidación del cliente.
+
+    El JSON se genera desde la salida del parser, pero se revisa a mano contra
+    el PDF (líneas, cantidades y SUB-TOTAL) antes de commitear.
+    """
+    contenido = ruta_pdf.read_bytes()
+    if not _es_orden_compra_dinacuamar(_extraer_texto_pdf(contenido)):
+        pytest.skip("El corpus de OC solo cubre el formato DINACUAMAR")
+
+    esperado = json.loads(ruta_pdf.with_suffix(".json").read_text(encoding="utf-8"))
+    respuesta = extraer_orden_de_pdf(contenido, nombre_archivo=ruta_pdf.name)
+
+    assert respuesta["numeroOrden"] == esperado["numeroOrden"]
+    assert str(respuesta["fecha"]) == esperado["fecha"]
+    assert respuesta["semana"] == esperado["semana"]
+    assert respuesta["proveedor"] == esperado["proveedor"]
+    assert [
+        {
+            "finca": item["finca"],
+            "producto": item["producto"],
+            "cantidad": str(item["cantidad"]),
+            "unidad": item["unidad"],
+            "precioUnitario": str(item["precioUnitario"]),
+            "total": str(item["total"]),
+        }
+        for item in respuesta["items"]
+    ] == esperado["items"]

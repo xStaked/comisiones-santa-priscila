@@ -134,6 +134,7 @@ Flujo JWT dual-token con refresh silencioso en el interceptor de axios (`src/lib
 - IA opcional con OpenAI (`AI_EXTRACTION_ENABLED`, modelo gpt-4.1-mini por defecto). Requiere `OPENAI_API_KEY`: con el flag encendido y la key vacía el backend no arranca.
 - Las OC de DINACUAMAR se extraen con el parser posicional, no con IA: la IA confunde la columna PEDIDO con la cantidad. La IA se usa para formatos no reconocidos y como respaldo si el parser no encuentra ítems.
 - **Cuadre obligatorio:** la suma de los ítems extraídos debe coincidir con el `SUB-TOTAL` impreso (tolerancia 0,1%). Si no cuadra, `extraer_orden_de_pdf` lanza error y la orden no se carga; nunca se guarda un parseo parcial. Aplica también al respaldo de IA.
+- **Corpus de regresión:** toda OC real que falle se guarda en `backend/tests/fixtures/ordenes/` como `<caso>.pdf` + `<caso>.json` (salida esperada de `extraer_orden_de_pdf`). El JSON se genera desde el parser pero se revisa a mano contra el PDF (líneas, cantidades y SUB-TOTAL) antes de commitear. CI corre todos los casos; no borrar fixtures.
 - El cliente (comprador) de una OC se detecta desde el encabezado comparando contra el catálogo; el selector de la vista previa sigue mandando si se eligió uno.
 - **Nunca** registres en logs el contenido de archivos subidos ni el texto extraído.
 - El frontend conserva `src/lib/pdf-extractor.ts` (legacy cliente-side), pero las subidas reales van contra backend.
