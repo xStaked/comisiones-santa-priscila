@@ -543,7 +543,7 @@ export function exportarPDF(
       // Crear tabla
       autoTable(doc, {
         startY: yPos,
-        head: [['Fecha', 'Factura', 'Nombre', 'Cantidad', 'Tipo Comisión', 'Valor de Comisión', 'Estado', 'Sector']],
+        head: [['Fecha', 'Orden de compra', 'Nombre', 'Cantidad', 'Tipo Comisión', 'Valor de Comisión', 'Estado', 'Sector']],
         body,
         foot: [['', '', '', '', '', `$ ${totalComisionGrupo.toFixed(2).replace('.', ',')}`, '', '']],
         theme: 'grid',
@@ -1005,7 +1005,7 @@ export function exportarExcel(
   const resumen: CeldaResumen[][] = [
     ['RESUMEN GENERAL'],
     [],
-    ['Fecha', 'Factura', 'Producto', 'Cantidad', 'Envases', 'Tarifa', 'Valor Comisión', 'Estado', 'Sector', 'Comisionista', 'Grupo', 'Razón social'],
+    ['Fecha', 'Orden de compra', 'Producto', 'Cantidad', 'Medida', 'Tarifa', 'Valor Comisión', 'Estado', 'Sector', 'Comisionista', 'Grupo', 'Razón social'],
   ];
   let totalGeneral = 0;
   const nombresHojaUsados = new Set<string>(['RESUMEN GENERAL']);
@@ -1024,7 +1024,7 @@ export function exportarExcel(
     // Estructura de la hoja: filas y celdas con estilos. Mantenemos las dos
     // listas en paralelo para poder resolver estilos al final y construir los
     // rangos de merge (cabeceras que abarcan todas las columnas).
-    const numCols = 9; // Fecha | Factura | Producto | Cant | Envases | Comisión | Valor a Comisionar | Estado | Sector
+    const numCols = 9; // Fecha | Orden de compra | Producto | Cant | Medida | Comisión | Valor a Comisionar | Estado | Sector
     const filas: Fila[] = [];
     const merges: { s: { r: number; c: number }; e: { r: number; c: number } }[] = [];
 
@@ -1093,7 +1093,7 @@ export function exportarExcel(
         merges.push({ s: { r: filas.length - 1, c: 0 }, e: { r: filas.length - 1, c: numCols - 1 } });
 
         // Cabecera de columnas
-        const headerCols = ['Fecha', 'Factura', 'Producto', 'Cant', 'Envases', 'Comisión', 'Valor a Comisionar', 'Estado', 'Sector'];
+        const headerCols = ['Fecha', 'Orden de compra', 'Producto', 'Cant', 'Medida', 'Comisión', 'Valor a Comisionar', 'Estado', 'Sector'];
         filas.push(headerCols.map(c => ({ v: c, s: estilos.columnaHeader })));
 
         // Filas de datos, ordenadas por fecha → sector → factura (mismo criterio
@@ -1216,10 +1216,10 @@ export function exportarExcel(
     ws['!merges'] = merges;
     ws['!cols'] = [
       { wch: 10 },  // Fecha
-      { wch: 22 },  // Factura
+      { wch: 22 },  // Orden de compra
       { wch: 28 },  // Producto
       { wch: 10 },  // Cant
-      { wch: 12 },  // Envases
+      { wch: 12 },  // Medida
       { wch: 16 },  // Comisión
       { wch: 18 },  // Valor a Comisionar
       { wch: 12 },  // Estado
