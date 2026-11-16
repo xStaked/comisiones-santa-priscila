@@ -870,8 +870,12 @@ def _upsert_tarifa(bind, comisionista_id, cliente_id, producto_id, finca_id, tip
     if fila:
         bind.execute(
             sa.text(
+                # La matriz define la tarifa sin fecha de caducidad: si la fila
+                # venía cerrada de un periodo anterior, hay que limpiar
+                # vigente_hasta o queda inutilizable para las facturas nuevas.
                 "UPDATE tarifas_cliente_producto "
-                "SET tipo = CAST(:tipo AS tipo_tarifa), valor = :valor, activo = true "
+                "SET tipo = CAST(:tipo AS tipo_tarifa), valor = :valor, activo = true, "
+                "vigente_hasta = NULL "
                 "WHERE id = :id"
             ),
             {"id": _uuid(fila[0]), "tipo": tipo, "valor": Decimal(valor)},
